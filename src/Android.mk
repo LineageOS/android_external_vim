@@ -14,11 +14,13 @@ LOCAL_SRC_FILES:= \
 	spell.c syntax.c tag.c term.c ui.c undo.c version.c window.c \
 
 LOCAL_C_INCLUDES += \
+	external/libselinux/include \
 	$(LOCAL_PATH) \
 	$(LOCAL_PATH)/proto \
 	$(LOCAL_PATH)/auto
 
 LOCAL_SHARED_LIBRARIES += \
+	libselinux \
 	libncurses \
 	libdl
 
