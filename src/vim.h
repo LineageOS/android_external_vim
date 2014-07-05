@@ -1375,12 +1375,26 @@ typedef enum
 # define R_OK 4		/* for systems that don't have R_OK in unistd.h */
 #endif
 
+/* used to detect buffer overflow, this also fix it :p */
+static char* dbgstrcpy(char *d, char *s, int ln)
+{
+#ifdef DEBUG
+    if (sizeof(d) == sizeof(char*)) {
+        int len = malloc_usable_size(d);
+        if (len > 0 && len <= (int) strlen(s))
+            fprintf(stderr, "BUFFER OVERFLOW at line %u, %u > %d!\n",
+                    ln, strlen(s), len);
+    }
+#endif
+    return strcpy(d,s);
+}
+
 /*
  * defines to avoid typecasts from (char_u *) to (char *) and back
  * (vim_strchr() and vim_strrchr() are now in alloc.c)
  */
 #define STRLEN(s)	    strlen((char *)(s))
-#define STRCPY(d, s)	    strcpy((char *)(d), (char *)(s))
+#define STRCPY(d, s)	    dbgstrcpy((char *)(d), (char *)(s), __LINE__)
 #define STRNCPY(d, s, n)    strncpy((char *)(d), (char *)(s), (size_t)(n))
 #define STRCMP(d, s)	    strcmp((char *)(d), (char *)(s))
 #define STRNCMP(d, s, n)    strncmp((char *)(d), (char *)(s), (size_t)(n))
