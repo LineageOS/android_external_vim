@@ -1375,12 +1375,18 @@ typedef enum
 # define R_OK 4		/* for systems that don't have R_OK in unistd.h */
 #endif
 
+/* without this, vim segfault (buffer overflow) */
+static char* _strcpy(char *d, char *s)
+{
+    return strcpy(d,s);
+}
+
 /*
  * defines to avoid typecasts from (char_u *) to (char *) and back
  * (vim_strchr() and vim_strrchr() are now in alloc.c)
  */
 #define STRLEN(s)	    strlen((char *)(s))
-#define STRCPY(d, s)	    strcpy((char *)(d), (char *)(s))
+#define STRCPY(d, s)	    _strcpy((char *)(d), (char *)(s))
 #define STRNCPY(d, s, n)    strncpy((char *)(d), (char *)(s), (size_t)(n))
 #define STRCMP(d, s)	    strcmp((char *)(d), (char *)(s))
 #define STRNCMP(d, s, n)    strncmp((char *)(d), (char *)(s), (size_t)(n))
