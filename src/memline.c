@@ -858,7 +858,7 @@ ml_recover()
     off_t	size;
     int		called_from_main;
     int		serious_error = TRUE;
-    long	mtime;
+    uint32_t	mtime;
     int		attr;
 
     recoverymode = TRUE;

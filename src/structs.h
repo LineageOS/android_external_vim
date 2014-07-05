@@ -1204,9 +1204,10 @@ struct file_buffer
 
     wininfo_T	*b_wininfo;	/* list of last used info for each window */
 
-    long	b_mtime;	/* last change time of original file */
-    long	b_mtime_read;	/* last change time when reading */
-    size_t	b_orig_size;	/* size of original file in bytes */
+    uint32_t	b_mtime;	/* last change time of original file */
+    uint32_t	b_mtime_read;	/* last change time when reading */
+    off_t	b_orig_size;	/* size of original file in bytes */
+
     int		b_orig_mode;	/* mode of original file */
 
     pos_T	b_namedm[NMARKS]; /* current named marks (mark.c) */
