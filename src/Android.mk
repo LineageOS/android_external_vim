@@ -87,6 +87,7 @@ LOCAL_CFLAGS += \
 LOCAL_MODULE := vim
 LOCAL_MODULE_TAGS := eng
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
+LOCAL_ADDITIONAL_DEPENDENCIES := vimrc
 include $(BUILD_EXECUTABLE)
 
 # ========================================================
