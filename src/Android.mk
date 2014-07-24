@@ -5,12 +5,15 @@ LOCAL_PATH := $(call my-dir)
 # ========================================================
 include $(CLEAR_VARS)
 
-# vim variants: TINY SMALL NORMAL BIG HUGE
+# vim variants: TINY SMALL CM NORMAL BIG HUGE
 #
 # NORMAL, BIG and HUGE are almost the same (1.1M)
-# TINY and SMALL are similar to busybox vi (450K)
+# TINY and SMALL are similar to busybox vi (460K)
 #
-vim_variant := BIG
+# CM profile is between SMALL and NORMAL (780K)
+# with syntax and utf8 (mbyte) support
+#
+vim_variant := CM
 
 LOCAL_SRC_FILES := \
 	blowfish.c \
@@ -61,6 +64,15 @@ LOCAL_SRC_FILES := \
 	undo.c \
 	version.c \
 	window.c
+
+# to reduce vim size, manually define wanted features
+ifeq ($(vim_variant),CM)
+    LOCAL_SRC_FILES := $(filter-out blowfish.c sha256.c, $(LOCAL_SRC_FILES))
+    LOCAL_CFLAGS += -DFEAT_SMALL=1 -DFEAT_MBYTE=1 \
+	-DFEAT_SYN_HL=1 -DFEAT_CINDENT=1 -DFEAT_COMMENTS=1 -DFEAT_EVAL=1 -DFEAT_AUTOCMD=1 \
+	-DFEAT_USR_CMDS=1 -DFEAT_EX_EXTRA=1 -DFEAT_CMDL_COMPL=1 \
+	-DFEAT_LISTCMDS=1 -DFEAT_CMDL_INFO=1 -DFEAT_SEARCH_EXTRA=1
+endif
 
 # Unused in our config
 #LOCAL_SRC_FILES += \
