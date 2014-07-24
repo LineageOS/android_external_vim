@@ -15,6 +15,9 @@ set nocompatible
 " allow backspacing over everything in insert mode
 set backspace=indent,eol,start
 
+" swap directories
+set directory=.,/data/local/tmp,/tmp
+
 if has("vms")
   set nobackup		" do not keep a backup file, use versions instead
 else
