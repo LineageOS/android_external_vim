@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9a061dce_8b518665",
+        "filename": "Android.mk",
+        "patchSetId": 7
+      },
+      "lineNbr": 71,
+      "author": {
+        "id": 7060
+      },
+      "writtenOn": "2014-07-30T19:15:50Z",
+      "side": 1,
+      "message": "Not in alphabetical order?",
+      "revId": "dee02308a4da55351f645d7b0a944ed7fe943c3b",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "9a061dce_4b5f6e72",
+        "filename": "Android.mk",
+        "patchSetId": 7
+      },
+      "lineNbr": 103,
+      "author": {
+        "id": 7060
+      },
+      "writtenOn": "2014-07-30T19:15:50Z",
+      "side": 1,
+      "message": "$(LOCAL_PATH) is not necessary in LOCAL_C_INCLUDES since android build system adds it automatically.",
+      "revId": "dee02308a4da55351f645d7b0a944ed7fe943c3b",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": false
+    }
+  ]
+}
