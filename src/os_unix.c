@@ -388,9 +388,8 @@ mch_inchar(buf, maxlen, wtime, tb_change_cnt)
 {
     int		len;
 
-#ifdef FEAT_NETBEANS_INTG
-    /* Process the queued netbeans messages. */
-    netbeans_parse_messages();
+#ifdef MESSAGE_QUEUE
+    parse_queued_messages();
 #endif
 
     /* Check if window changed size while we were busy, perhaps the ":set
@@ -402,12 +401,17 @@ mch_inchar(buf, maxlen, wtime, tb_change_cnt)
     {
 	while (WaitForChar(wtime) == 0)		/* no character available */
 	{
-	    if (!do_resize)	/* return if not interrupted by resize */
+	    if (do_resize)
+		handle_resize();
+#ifdef FEAT_CLIENTSERVER
+	    else if (!server_waiting())
+#else
+	    else
+#endif
+		/* return if not interrupted by resize or server */
 		return 0;
-	    handle_resize();
-#ifdef FEAT_NETBEANS_INTG
-	    /* Process the queued netbeans messages. */
-	    netbeans_parse_messages();
+#ifdef MESSAGE_QUEUE
+	    parse_queued_messages();
 #endif
 	}
     }
@@ -439,9 +443,8 @@ mch_inchar(buf, maxlen, wtime, tb_change_cnt)
 	while (do_resize)    /* window changed size */
 	    handle_resize();
 
-#ifdef FEAT_NETBEANS_INTG
-	/* Process the queued netbeans messages. */
-	netbeans_parse_messages();
+#ifdef MESSAGE_QUEUE
+	parse_queued_messages();
 #endif
 	/*
 	 * We want to be interrupted by the winch signal
@@ -3104,22 +3107,27 @@ executable_file(name)
 
 /*
  * Return 1 if "name" can be found in $PATH and executed, 0 if not.
+ * If "use_path" is FALSE only check if "name" is executable.
  * Return -1 if unknown.
  */
     int
-mch_can_exe(name, path)
+mch_can_exe(name, path, use_path)
     char_u	*name;
     char_u	**path;
+    int		use_path;
 {
     char_u	*buf;
     char_u	*p, *e;
     int		retval;
 
-    /* If it's an absolute or relative path don't need to use $PATH. */
-    if (mch_isFullName(name) || (name[0] == '.' && (name[1] == '/'
-				      || (name[1] == '.' && name[2] == '/'))))
+    /* When "use_path" is false and if it's an absolute or relative path don't
+     * need to use $PATH. */
+    if (!use_path || mch_isFullName(name) || (name[0] == '.'
+		   && (name[1] == '/' || (name[1] == '.' && name[2] == '/'))))
     {
-	if (executable_file(name))
+	/* There must be a path separator, files in the current directory
+	 * can't be executed. */
+	if (gettail(name) != name && executable_file(name))
 	{
 	    if (path != NULL)
 	    {
@@ -4619,7 +4627,8 @@ mch_call_shell(cmd, options)
 				/* Finished a line, add a NL, unless this line
 				 * should not have one. */
 				if (lnum != curbuf->b_op_end.lnum
-					|| !curbuf->b_p_bin
+					|| (!curbuf->b_p_bin
+					    && curbuf->b_p_fixeol)
 					|| (lnum != curbuf->b_no_eol_lnum
 					    && (lnum !=
 						    curbuf->b_ml.ml_line_count
@@ -5202,6 +5211,7 @@ WaitForChar(msec)
  * When a GUI is being used, this will not be used for input -- webb
  * Returns also, when a request from Sniff is waiting -- toni.
  * Or when a Linux GPM mouse event is waiting.
+ * Or when a clientserver message is on the queue.
  */
 #if defined(__BEOS__)
     int
@@ -5595,6 +5605,11 @@ select_eintr:
 	if (finished || msec == 0)
 	    break;
 
+# ifdef FEAT_CLIENTSERVER
+	if (server_waiting())
+	    break;
+# endif
+
 	/* We're going to loop around again, find out for how long */
 	if (msec > 0)
 	{
@@ -5730,7 +5745,8 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
 		    continue;
 
 		/* Skip files that are not executable if we check for that. */
-		if (!dir && (flags & EW_EXEC) && !mch_can_exe(p, NULL))
+		if (!dir && (flags & EW_EXEC)
+			     && !mch_can_exe(p, NULL, !(flags & EW_SHELLCMD)))
 		    continue;
 
 		if (--files_free == 0)
@@ -5832,7 +5848,7 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
     /*
      * get a name for the temp file
      */
-    if ((tempname = vim_tempname('o')) == NULL)
+    if ((tempname = vim_tempname('o', FALSE)) == NULL)
     {
 	EMSG(_(e_notmp));
 	return FAIL;
@@ -6230,7 +6246,8 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
 	    continue;
 
 	/* Skip files that are not executable if we check for that. */
-	if (!dir && (flags & EW_EXEC) && !mch_can_exe((*file)[i], NULL))
+	if (!dir && (flags & EW_EXEC)
+		    && !mch_can_exe((*file)[i], NULL, !(flags & EW_SHELLCMD)))
 	    continue;
 
 	p = alloc((unsigned)(STRLEN((*file)[i]) + 1 + dir));
@@ -6993,7 +7010,7 @@ do_xterm_trace()
 	/* Rely on the same mouse code for the duration of this */
 	mouse_code = find_termcode(mouse_name);
 	prev_row = mouse_row;
-	prev_row = mouse_col;
+	prev_col = mouse_col;
 	xterm_trace = 2;
 
 	/* Find the offset of the chars, there might be a scrollbar on the
@@ -7096,19 +7113,33 @@ xterm_update()
 {
     XEvent event;
 
-    while (XtAppPending(app_context) && !vim_is_input_buf_full())
+    for (;;)
     {
-	XtAppNextEvent(app_context, &event);
-#ifdef FEAT_CLIENTSERVER
-	{
-	    XPropertyEvent *e = (XPropertyEvent *)&event;
+	XtInputMask mask = XtAppPending(app_context);
 
-	    if (e->type == PropertyNotify && e->window == commWindow
+	if (mask == 0 || vim_is_input_buf_full())
+	    break;
+
+	if (mask & XtIMXEvent)
+	{
+	    /* There is an event to process. */
+	    XtAppNextEvent(app_context, &event);
+#ifdef FEAT_CLIENTSERVER
+	    {
+		XPropertyEvent *e = (XPropertyEvent *)&event;
+
+		if (e->type == PropertyNotify && e->window == commWindow
 		   && e->atom == commProperty && e->state == PropertyNewValue)
-		serverEventProc(xterm_dpy, &event);
-	}
+		    serverEventProc(xterm_dpy, &event, 0);
+	    }
 #endif
-	XtDispatchEvent(&event);
+	    XtDispatchEvent(&event);
+	}
+	else
+	{
+	    /* There is something else than an event to process. */
+	    XtAppProcessEvent(app_context, mask);
+	}
     }
 }
 

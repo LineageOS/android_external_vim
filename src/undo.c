@@ -1614,8 +1614,8 @@ u_write_undo(name, forceit, buf, hash)
 #endif
     }
 
-    /* strip any s-bit */
-    perm = perm & 0777;
+    /* strip any s-bit and executable bit */
+    perm = perm & 0666;
 
     /* If the undo file already exists, verify that it actually is an undo
      * file, and delete it. */
@@ -2847,11 +2847,14 @@ u_undoredo(undo)
      * restore marks from before undo/redo
      */
     for (i = 0; i < NMARKS; ++i)
+    {
 	if (curhead->uh_namedm[i].lnum != 0)
-	{
 	    curbuf->b_namedm[i] = curhead->uh_namedm[i];
+	if (namedm[i].lnum != 0)
 	    curhead->uh_namedm[i] = namedm[i];
-	}
+	else
+	    curhead->uh_namedm[i].lnum = 0;
+    }
     if (curhead->uh_visual.vi_start.lnum != 0)
     {
 	curbuf->b_visual = curhead->uh_visual;

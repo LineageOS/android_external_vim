@@ -4,6 +4,8 @@
 # source files for all source archives
 SRC_ALL =	\
 		.hgignore \
+		.travis.yml \
+		appveyor.yml \
 		src/README.txt \
 		src/arabic.c \
 		src/arabic.h \
@@ -481,6 +483,8 @@ SRC_EXTRA =	\
 # runtime files for all distributions
 RT_ALL =	\
 		README.txt \
+		README.md \
+		CONTRIBUTING.md \
 		runtime/bugreport.vim \
 		runtime/doc/*.awk \
 		runtime/doc/*.pl \
@@ -580,6 +584,8 @@ RT_UNIX =	\
 		runtime/vim32x32.xpm \
 		runtime/vim48x48.png \
 		runtime/vim48x48.xpm \
+		runtime/gvim.desktop \
+		runtime/vim.desktop \
 
 # Unix and DOS runtime without CR-LF translation
 RT_UNIX_DOS_BIN =	\

@@ -37,8 +37,6 @@ char_u *vim_strsave_up __ARGS((char_u *string));
 char_u *vim_strnsave_up __ARGS((char_u *string, int len));
 void vim_strup __ARGS((char_u *p));
 char_u *strup_save __ARGS((char_u *orig));
-void copy_spaces __ARGS((char_u *ptr, size_t count));
-void copy_chars __ARGS((char_u *ptr, size_t count, int c));
 void del_trailing_spaces __ARGS((char_u *ptr));
 void vim_strncpy __ARGS((char_u *to, char_u *from, size_t len));
 void vim_strcat __ARGS((char_u *to, char_u *from, size_t tosize));
@@ -108,4 +106,5 @@ int put_bytes __ARGS((FILE *fd, long_u nr, int len));
 void put_time __ARGS((FILE *fd, time_t the_time));
 void time_to_bytes __ARGS((time_t the_time, char_u *buf));
 int has_non_ascii __ARGS((char_u *s));
+void parse_queued_messages __ARGS((void));
 /* vim: set ft=c : */

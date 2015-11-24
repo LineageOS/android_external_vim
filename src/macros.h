@@ -118,6 +118,9 @@
 # define ASCII_ISALNUM(c) (ASCII_ISALPHA(c) || VIM_ISDIGIT(c))
 #endif
 
+/* Returns empty string if it is NULL. */
+#define EMPTY_IF_NULL(x) ((x) ? (x) : (u_char *)"")
+
 /* macro version of chartab().
  * Only works with values 0-255!
  * Doesn't work for UTF-8 mode with chars >= 0x80. */
@@ -311,4 +314,14 @@
 #   define RESET_BINDING(wp)
 #  endif
 # endif
+#endif
+
+#ifdef FEAT_DIFF
+# define PLINES_NOFILL(x) plines_nofill(x)
+#else
+# define PLINES_NOFILL(x) plines(x)
+#endif
+
+#if defined(FEAT_NETBEANS_INTG) || defined(FEAT_CLIENTSERVER)
+# define MESSAGE_QUEUE
 #endif

@@ -96,10 +96,14 @@
 # define rb_num2int rb_num2int_stub
 #endif
 
-#if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER >= 21
+#if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER == 21
 /* Ruby 2.1 adds new GC called RGenGC and RARRAY_PTR uses
  * rb_gc_writebarrier_unprotect_promoted if USE_RGENGC  */
 # define rb_gc_writebarrier_unprotect_promoted rb_gc_writebarrier_unprotect_promoted_stub
+#endif
+#if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER >= 22
+# define rb_gc_writebarrier_unprotect rb_gc_writebarrier_unprotect_stub
+# define rb_check_type rb_check_type_stub
 #endif
 
 #include <ruby.h>
@@ -180,7 +184,9 @@ static void ruby_vim_init(void);
  */
 # define rb_assoc_new			dll_rb_assoc_new
 # define rb_cObject			(*dll_rb_cObject)
-# define rb_check_type			dll_rb_check_type
+# if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER < 22
+#  define rb_check_type			dll_rb_check_type
+# endif
 # define rb_class_path			dll_rb_class_path
 # define rb_data_object_alloc		dll_rb_data_object_alloc
 # define rb_define_class_under		dll_rb_define_class_under
@@ -274,7 +280,7 @@ static void ruby_vim_init(void);
 #  define rb_enc_str_new			dll_rb_enc_str_new
 #  define rb_sprintf			dll_rb_sprintf
 #  define rb_require			dll_rb_require
-#  define ruby_process_options		dll_ruby_process_options
+#  define ruby_options			dll_ruby_options
 # endif
 
 /*
@@ -378,15 +384,23 @@ static rb_encoding* (*dll_rb_enc_find) (const char*);
 static VALUE (*dll_rb_enc_str_new) (const char*, long, rb_encoding*);
 static VALUE (*dll_rb_sprintf) (const char*, ...);
 static VALUE (*dll_rb_require) (const char*);
-static void* (*ruby_process_options)(int, char**);
+static void* (*ruby_options)(int, char**);
 # endif
 
 # if defined(USE_RGENGC) && USE_RGENGC
+#  if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER == 21
 static void (*dll_rb_gc_writebarrier_unprotect_promoted)(VALUE);
+#  else
+static void (*dll_rb_gc_writebarrier_unprotect)(VALUE obj);
+#  endif
 # endif
 
 # if defined(RUBY19_OR_LATER) && !defined(PROTO)
+#  if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER >= 22
+long rb_num2long_stub(VALUE x)
+#  else
 SIGNED_VALUE rb_num2long_stub(VALUE x)
+#  endif
 {
     return dll_rb_num2long(x);
 }
@@ -411,7 +425,11 @@ rb_float_new_in_heap(double d)
 {
     return dll_rb_float_new(d);
 }
+#   if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER >= 22
+unsigned long rb_num2ulong(VALUE x)
+#   else
 VALUE rb_num2ulong(VALUE x)
+#   endif
 {
     return (long)RSHIFT((SIGNED_VALUE)(x),1);
 }
@@ -420,9 +438,23 @@ VALUE rb_num2ulong(VALUE x)
 
    /* Do not generate a prototype here, VALUE isn't always defined. */
 # if defined(USE_RGENGC) && USE_RGENGC && !defined(PROTO)
+#  if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER == 21
 void rb_gc_writebarrier_unprotect_promoted_stub(VALUE obj)
 {
     dll_rb_gc_writebarrier_unprotect_promoted(obj);
+}
+#  else
+void rb_gc_writebarrier_unprotect_stub(VALUE obj)
+{
+    dll_rb_gc_writebarrier_unprotect(obj);
+}
+#  endif
+# endif
+
+# if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER >= 22
+void rb_check_type_stub(VALUE v, int i)
+{
+    dll_rb_check_type(v, i);
 }
 # endif
 
@@ -533,7 +565,7 @@ static struct
     {"rb_enc_str_new", (RUBY_PROC*)&dll_rb_enc_str_new},
     {"rb_sprintf", (RUBY_PROC*)&dll_rb_sprintf},
     {"rb_require", (RUBY_PROC*)&dll_rb_require},
-    {"ruby_process_options", (RUBY_PROC*)&dll_ruby_process_options},
+    {"ruby_options", (RUBY_PROC*)&dll_ruby_options},
 # endif
 # if defined(RUBY19_OR_LATER) || defined(RUBY_INIT_STACK)
 #  ifdef __ia64
@@ -542,7 +574,11 @@ static struct
     {"ruby_init_stack", (RUBY_PROC*)&dll_ruby_init_stack},
 # endif
 # if defined(USE_RGENGC) && USE_RGENGC
+#  if defined(DYNAMIC_RUBY_VER) && DYNAMIC_RUBY_VER == 21
     {"rb_gc_writebarrier_unprotect_promoted", (RUBY_PROC*)&dll_rb_gc_writebarrier_unprotect_promoted},
+#  else
+    {"rb_gc_writebarrier_unprotect", (RUBY_PROC*)&dll_rb_gc_writebarrier_unprotect},
+#  endif
 # endif
     {"", NULL},
 };
@@ -603,7 +639,12 @@ ruby_runtime_link_init(char *libname, int verbose)
 ruby_enabled(verbose)
     int		verbose;
 {
-    return ruby_runtime_link_init(DYNAMIC_RUBY_DLL, verbose) == OK;
+#ifdef WIN3264
+    char *dll = DYNAMIC_RUBY_DLL;
+#else
+    char *dll = *p_rubydll ? (char *)p_rubydll : DYNAMIC_RUBY_DLL;
+#endif
+    return ruby_runtime_link_init(dll, verbose) == OK;
 }
 #endif /* defined(DYNAMIC_RUBY) || defined(PROTO) */
 
@@ -776,7 +817,7 @@ static int ensure_ruby_initialized(void)
 	    {
 		int dummy_argc = 2;
 		char *dummy_argv[] = {"vim-ruby", "-e0"};
-		ruby_process_options(dummy_argc, dummy_argv);
+		ruby_options(dummy_argc, dummy_argv);
 	    }
 	    ruby_script("vim-ruby");
 #else

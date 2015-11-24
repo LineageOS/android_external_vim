@@ -17,7 +17,7 @@
  * scrollbars, etc.
  *
  * Note: Clipboard stuff, for cutting and pasting text to other windows, is in
- * os_win32.c.	(It can also be done from the terminal version).
+ * winclip.c.	(It can also be done from the terminal version).
  *
  * TODO: Some of the function signatures ought to be updated for Win64;
  * e.g., replace LONG with LONG_PTR, etc.
@@ -76,7 +76,7 @@ gui_mch_set_rendering_options(char_u *s)
 	char_u  name[128];
 	char_u  value[128];
 
-	copy_option_part(&p, item, sizeof(item), ","); 
+	copy_option_part(&p, item, sizeof(item), ",");
 	if (p == NULL)
 	    break;
 	q = &item[0];
@@ -598,6 +598,14 @@ gui_mswin_get_menu_height(
 
     if (num == 0)
 	menu_height = 0;
+    else if (IsMinimized(s_hwnd))
+    {
+	/* The height of the menu cannot be determined while the window is
+	 * minimized.  Take the previous height if the menu is changed in that
+	 * state, to avoid that Vim's vertical window size accidentally
+	 * increases due to the unaccounted-for menu height. */
+	menu_height = old_menu_height == -1 ? 0 : old_menu_height;
+    }
     else
     {
 	if (is_winnt_3())	/* for NT 3.xx */
@@ -644,9 +652,9 @@ gui_mswin_get_menu_height(
 
     if (fix_window && menu_height != old_menu_height)
     {
-	old_menu_height = menu_height;
 	gui_set_shellsize(FALSE, FALSE, RESIZE_VERT);
     }
+    old_menu_height = menu_height;
 
     return menu_height;
 }
@@ -1219,7 +1227,7 @@ _WndProc(
 			return result;
 		}
 #endif
-		gui_mch_get_winpos(&x, &y);
+		(void)gui_mch_get_winpos(&x, &y);
 		xPos -= x;
 
 		if (xPos < 48) /* <VN> TODO should use system metric? */
@@ -1653,7 +1661,7 @@ gui_mch_init(void)
 	    return FAIL;
     }
     s_textArea = CreateWindowEx(
-	WS_EX_CLIENTEDGE,
+	0,
 	szTextAreaClass, "Vim text area",
 	WS_CHILD | WS_VISIBLE, 0, 0,
 	100,				/* Any value will do for now */
@@ -1708,9 +1716,9 @@ gui_mch_init(void)
     highlight_gui_started();
 
     /*
-     * Start out by adding the configured border width into the border offset
+     * Start out by adding the configured border width into the border offset.
      */
-    gui.border_offset = gui.border_width + 2;	/*CLIENT EDGE*/
+    gui.border_offset = gui.border_width;
 
     /*
      * Set up for Intellimouse processing
@@ -4828,7 +4836,7 @@ make_tooltip(beval, text, pt)
 delete_tooltip(beval)
     BalloonEval	*beval;
 {
-    DestroyWindow(beval->balloon);
+    PostMessage(beval->balloon, WM_CLOSE, 0, 0);
 }
 
 /*ARGSUSED*/

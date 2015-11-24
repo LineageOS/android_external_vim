@@ -2,14 +2,10 @@
 " Language:	sendmail
 " Maintainer:	Charles E. Campbell <NdrOchipS@PcampbellAfamily.Mbiz>
 " Last Change:	Oct 23, 2014
-" Version:	5
+" Version:	7
 " URL:	http://www.drchip.org/astronaut/vim/index.html#SYNTAX_SM
 
-" For version 5.x: Clear all syntax items
-" For version 6.x: Quit when a syntax file was already loaded
-if version < 600
-  syntax clear
-elseif exists("b:current_syntax")
+if exists("b:current_syntax")
   finish
 endif
 

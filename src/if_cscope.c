@@ -1076,8 +1076,8 @@ err_closing:
 /*
  * PRIVATE: cs_find
  *
- * query cscope using command line interface.  parse the output and use tselect
- * to allow choices.  like Nvi, creates a pipe to send to/from query/cscope.
+ * Query cscope using command line interface.  Parse the output and use tselect
+ * to allow choices.  Like Nvi, creates a pipe to send to/from query/cscope.
  *
  * returns TRUE if we jump to a tag or abort, FALSE if not.
  */
@@ -1214,7 +1214,10 @@ cs_find_common(opt, pat, forceit, verbose, use_ll, cmdline)
 
     nummatches = (int *)alloc(sizeof(int)*csinfo_size);
     if (nummatches == NULL)
+    {
+	vim_free(cmd);
 	return FALSE;
+    }
 
     /* Send query to all open connections, then count the total number
      * of matches so we can alloc all in one swell foop. */
@@ -1269,7 +1272,7 @@ cs_find_common(opt, pat, forceit, verbose, use_ll, cmdline)
     {
 	/* fill error list */
 	FILE	    *f;
-	char_u	    *tmp = vim_tempname('c');
+	char_u	    *tmp = vim_tempname('c', TRUE);
 	qf_info_T   *qi = NULL;
 	win_T	    *wp = NULL;
 
@@ -1289,7 +1292,7 @@ cs_find_common(opt, pat, forceit, verbose, use_ll, cmdline)
 # ifdef FEAT_WINDOWS
 		if (postponed_split != 0)
 		{
-		    win_split(postponed_split > 0 ? postponed_split : 0,
+		    (void)win_split(postponed_split > 0 ? postponed_split : 0,
 						       postponed_split_flags);
 		    RESET_BINDING(curwin);
 		    postponed_split = 0;
@@ -1507,9 +1510,16 @@ cs_insert_filelist(fname, ppath, flags, sb)
 	}
 	else
 	{
+	    csinfo_T *t_csinfo = csinfo;
+
 	    /* Reallocate space for more connections. */
 	    csinfo_size *= 2;
 	    csinfo = vim_realloc(csinfo, sizeof(csinfo_T)*csinfo_size);
+	    if (csinfo == NULL)
+	    {
+		vim_free(t_csinfo);
+		csinfo_size = 0;
+	    }
 	}
 	if (csinfo == NULL)
 	    return -1;
@@ -2059,6 +2069,7 @@ cs_print_tags_priv(matches, cntxts, num_matches)
     int num_matches;
 {
     char	*buf = NULL;
+    char	*t_buf;
     int		bufsize = 0; /* Track available bufsize */
     int		newsize = 0;
     char	*ptag;
@@ -2077,6 +2088,8 @@ cs_print_tags_priv(matches, cntxts, num_matches)
 
     strcpy(tbuf, matches[0]);
     ptag = strtok(tbuf, "\t");
+    if (ptag == NULL)
+	return;
 
     newsize = (int)(strlen(cstag_msg) + strlen(ptag));
     buf = (char *)alloc(newsize);
@@ -2120,9 +2133,13 @@ cs_print_tags_priv(matches, cntxts, num_matches)
 	newsize = (int)(strlen(csfmt_str) + 16 + strlen(lno));
 	if (bufsize < newsize)
 	{
+	    t_buf = buf;
 	    buf = (char *)vim_realloc(buf, newsize);
 	    if (buf == NULL)
+	    {
 		bufsize = 0;
+		vim_free(t_buf);
+	    }
 	    else
 		bufsize = newsize;
 	}
@@ -2143,9 +2160,13 @@ cs_print_tags_priv(matches, cntxts, num_matches)
 
 	if (bufsize < newsize)
 	{
+	    t_buf = buf;
 	    buf = (char *)vim_realloc(buf, newsize);
 	    if (buf == NULL)
+	    {
 		bufsize = 0;
+		vim_free(t_buf);
+	    }
 	    else
 		bufsize = newsize;
 	}

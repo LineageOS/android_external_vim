@@ -500,7 +500,7 @@ ex_sort(eap)
 		nrs[lnum - eap->line1].start_col_nr = -MAXLNUM;
 	    else
 		vim_str2nr(s, NULL, NULL, sort_oct, sort_hex,
-				  &nrs[lnum - eap->line1].start_col_nr, NULL);
+				  &nrs[lnum - eap->line1].start_col_nr, NULL, 0);
 	    *s2 = c;
 	}
 	else
@@ -741,6 +741,16 @@ do_move(line1, line2, dest)
     linenr_T	extra;	    /* Num lines added before line1 */
     linenr_T	num_lines;  /* Num lines moved */
     linenr_T	last_line;  /* Last line in file after adding new text */
+#ifdef FEAT_FOLDING
+    int		isFolded;
+
+    /* Moving lines seems to corrupt the folds, delete folding info now
+     * and recreate it when finished.  Don't do this for manual folding, it
+     * would delete all folds. */
+    isFolded = hasAnyFolding(curwin) && !foldmethodIsManual(curwin);
+    if (isFolded)
+	deleteFoldRecurse(&curwin->w_folds);
+#endif
 
     if (dest >= line1 && dest < line2)
     {
@@ -838,6 +848,12 @@ do_move(line1, line2, dest)
     }
     else
 	changed_lines(dest + 1, 0, line1 + num_lines, 0L);
+
+#ifdef FEAT_FOLDING
+	/* recreate folds */
+	if (isFolded)
+	    foldUpdateAll(curwin);
+#endif
 
     return OK;
 }
@@ -1158,8 +1174,8 @@ do_filter(line1, line2, eap, cmd, do_in, do_out)
     }
     else
 #endif
-	if ((do_in && (itmp = vim_tempname('i')) == NULL)
-		|| (do_out && (otmp = vim_tempname('o')) == NULL))
+	if ((do_in && (itmp = vim_tempname('i', FALSE)) == NULL)
+		|| (do_out && (otmp = vim_tempname('o', FALSE)) == NULL))
 	{
 	    EMSG(_(e_notmp));
 	    goto filterend;
@@ -1779,7 +1795,7 @@ write_viminfo(file, forceit)
     struct stat	st_old;		/* mch_stat() of existing viminfo file */
 #endif
 #ifdef WIN3264
-    long	perm = -1;
+    int		hidden = FALSE;
 #endif
 
     if (no_viminfo())
@@ -1842,7 +1858,7 @@ write_viminfo(file, forceit)
 #endif
 #ifdef WIN3264
 	/* Get the file attributes of the existing viminfo file. */
-	perm = mch_getperm(fname);
+	hidden = mch_ishidden(fname);
 #endif
 
 	/*
@@ -1963,7 +1979,7 @@ write_viminfo(file, forceit)
 	    if (fp_out == NULL)
 	    {
 		vim_free(tempname);
-		if ((tempname = vim_tempname('o')) != NULL)
+		if ((tempname = vim_tempname('o', TRUE)) != NULL)
 		    fp_out = mch_fopen((char *)tempname, WRITEBIN);
 	    }
 
@@ -2017,7 +2033,7 @@ write_viminfo(file, forceit)
 
 #ifdef WIN3264
 	/* If the viminfo file was hidden then also hide the new file. */
-	if (perm > 0 && (perm & FILE_ATTRIBUTE_HIDDEN))
+	if (hidden)
 	    mch_hide(fname);
 #endif
     }
@@ -3185,7 +3201,7 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 #endif
     int		retval = FAIL;
     long	n;
-    linenr_T	lnum;
+    pos_T	orig_pos;
     linenr_T	topline = 0;
     int		newcol = -1;
     int		solcol = -1;
@@ -3375,7 +3391,6 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 	if (buf->b_ml.ml_mfp == NULL)		/* no memfile yet */
 	{
 	    oldbuf = FALSE;
-	    buf->b_nwindows = 0;
 	}
 	else					/* existing memfile */
 	{
@@ -3408,7 +3423,7 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 	 * Make the (new) buffer the one used by the current window.
 	 * If the old buffer becomes unused, free it if ECMD_HIDE is FALSE.
 	 * If the current buffer was empty and has no file name, curbuf
-	 * is returned by buflist_new().
+	 * is returned by buflist_new(), nothing to do here.
 	 */
 	if (buf != curbuf)
 	{
@@ -3515,8 +3530,6 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 	    au_new_curbuf = NULL;
 #endif
 	}
-	else
-	    ++curbuf->b_nwindows;
 
 	curwin->w_pcmark.lnum = 1;
 	curwin->w_pcmark.col = 0;
@@ -3529,6 +3542,7 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 #endif
 		check_fname() == FAIL)
 	    goto theend;
+
 	oldbuf = (flags & ECMD_OLDBUF);
     }
 
@@ -3680,7 +3694,7 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 	 * Careful: open_buffer() and apply_autocmds() may change the current
 	 * buffer and window.
 	 */
-	lnum = curwin->w_cursor.lnum;
+	orig_pos = curwin->w_cursor;
 	topline = curwin->w_topline;
 	if (!oldbuf)			    /* need to read the file */
 	{
@@ -3721,11 +3735,9 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 	check_arg_idx(curwin);
 #endif
 
-	/*
-	 * If autocommands change the cursor position or topline, we should
-	 * keep it.
-	 */
-	if (curwin->w_cursor.lnum != lnum)
+	/* If autocommands change the cursor position or topline, we should
+	 * keep it.  Also when it moves within a line. */
+	if (!equalpos(curwin->w_cursor, orig_pos))
 	{
 	    newlnum = curwin->w_cursor.lnum;
 	    newcol = curwin->w_cursor.col;
@@ -4267,6 +4279,8 @@ do_sub(eap)
     static int	do_list = FALSE;	/* list last line with subs. */
     static int	do_number = FALSE;	/* list last line with line nr*/
     static int	do_ic = 0;		/* ignore case flag */
+    int		save_do_all;		/* remember user specified 'g' flag */
+    int		save_do_ask;		/* remember user specified 'c' flag */
     char_u	*pat = NULL, *sub = NULL;	/* init for GCC */
     int		delimiter;
     int		sublen;
@@ -4501,6 +4515,9 @@ do_sub(eap)
     }
     if (do_count)
 	do_ask = FALSE;
+
+    save_do_all = do_all;
+    save_do_ask = do_ask;
 
     /*
      * check for a trailing count
@@ -5315,6 +5332,10 @@ outofmem:
 #endif
 
     vim_regfree(regmatch.regprog);
+
+    /* Restore the flag values, they can be used for ":&&". */
+    do_all = save_do_all;
+    do_ask = save_do_ask;
 }
 
 /*
@@ -6553,6 +6574,7 @@ ex_helptags(eap)
     if (dirname == NULL || !mch_isdir(dirname))
     {
 	EMSG2(_("E150: Not a directory: %s"), eap->arg);
+	vim_free(dirname);
 	return;
     }
 
@@ -6835,7 +6857,8 @@ helptags_one(dir, ext, tagfname, add_help_tags)
 	/*
 	 * Sort the tags.
 	 */
-	sort_strings((char_u **)ga.ga_data, ga.ga_len);
+	if (ga.ga_data != NULL)
+	    sort_strings((char_u **)ga.ga_data, ga.ga_len);
 
 	/*
 	 * Check for duplicates.

@@ -1630,13 +1630,16 @@ vgetc()
       last_recorded_len = 0;
       for (;;)			/* this is done twice if there are modifiers */
       {
+	int did_inc = FALSE;
+
 	if (mod_mask)		/* no mapping after modifier has been read */
 	{
 	    ++no_mapping;
 	    ++allow_keys;
+	    did_inc = TRUE;	/* mod_mask may change value */
 	}
 	c = vgetorpeek(TRUE);
-	if (mod_mask)
+	if (did_inc)
 	{
 	    --no_mapping;
 	    --allow_keys;
@@ -2145,7 +2148,8 @@ vgetorpeek(advance)
 			    nolmaplen = 2;
 			else
 			{
-			    LANGMAP_ADJUST(c1, (State & INSERT) == 0);
+			    LANGMAP_ADJUST(c1,
+					   (State & (CMDLINE | INSERT)) == 0);
 			    nolmaplen = 0;
 			}
 #endif
@@ -3033,9 +3037,8 @@ inchar(buf, maxlen, wait_time, tb_change_cnt)
 	    )
     {
 
-#if defined(FEAT_NETBEANS_INTG)
-	/* Process the queued netbeans messages. */
-	netbeans_parse_messages();
+#ifdef MESSAGE_QUEUE
+	parse_queued_messages();
 #endif
 
 	if (got_int || (script_char = getc(scriptin[curscript])) < 0)
@@ -3708,8 +3711,15 @@ do_map(maptype, arg, mode, abbrev)
 	if (!did_it)
 	    retval = 2;			    /* no match */
 	else if (*keys == Ctrl_C)
+	{
 	    /* If CTRL-C has been unmapped, reuse it for Interrupting. */
-	    mapped_ctrl_c = FALSE;
+#ifdef FEAT_LOCALMAP
+	    if (map_table == curbuf->b_maphash)
+		curbuf->b_mapped_ctrl_c &= ~mode;
+	    else
+#endif
+		mapped_ctrl_c &= ~mode;
+	}
 	goto theend;
     }
 
@@ -3744,7 +3754,14 @@ do_map(maptype, arg, mode, abbrev)
 
     /* If CTRL-C has been mapped, don't always use it for Interrupting. */
     if (*keys == Ctrl_C)
-	mapped_ctrl_c = TRUE;
+    {
+#ifdef FEAT_LOCALMAP
+	if (map_table == curbuf->b_maphash)
+	    curbuf->b_mapped_ctrl_c |= mode;
+	else
+#endif
+	    mapped_ctrl_c |= mode;
+    }
 
     mp->m_keys = vim_strsave(keys);
     mp->m_str = vim_strsave(rhs);
