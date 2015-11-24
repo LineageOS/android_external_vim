@@ -639,7 +639,8 @@ mf_sync(mfp, flags)
 # endif
 	    /* OpenNT is strictly POSIX (Benzinger) */
 	    /* Tandem/Himalaya NSK-OSS doesn't have sync() */
-# if defined(__OPENNT) || defined(__TANDEM)
+	    /* No sync() on Stratus VOS */
+# if defined(__OPENNT) || defined(__TANDEM) || defined(__VOS__)
 	    fflush(NULL);
 # else
 	    sync();
@@ -810,6 +811,8 @@ mf_rem_used(mfp, hp)
  *
  * Return the block header to the caller, including the memory block, so
  * it can be re-used. Make sure the page_count is right.
+ *
+ * Returns NULL if no block is released.
  */
     static bhdr_T *
 mf_release(mfp, page_count)
@@ -1218,7 +1221,7 @@ mf_trans_add(mfp, hp)
 }
 
 /*
- * Lookup a translation from the trans lists and delete the entry
+ * Lookup a translation from the trans lists and delete the entry.
  *
  * Return the positive new number when found, the old number when not found
  */

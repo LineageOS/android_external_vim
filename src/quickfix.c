@@ -1373,7 +1373,7 @@ qf_clean_dir_stack(stackptr)
 /*
  * Check in which directory of the directory stack the given file can be
  * found.
- * Returns a pointer to the directory name or NULL if not found
+ * Returns a pointer to the directory name or NULL if not found.
  * Cleans up intermediate directory entries.
  *
  * TODO: How to solve the following problem?
@@ -1841,6 +1841,9 @@ win_found:
 	    if (qf_ptr->qf_col > 0)
 	    {
 		curwin->w_cursor.col = qf_ptr->qf_col - 1;
+#ifdef FEAT_VIRTUALEDIT
+		curwin->w_cursor.coladd = 0;
+#endif
 		if (qf_ptr->qf_viscol == TRUE)
 		{
 		    /*
@@ -2452,13 +2455,12 @@ ex_copen(eap)
 	    prevwin = win;
     }
 
+    qf_set_title_var(qi);
+
     /*
      * Fill the buffer with the quickfix list.
      */
     qf_fill_buffer(qi);
-
-    if (qi->qf_lists[qi->qf_curlist].qf_title != NULL)
-	qf_set_title_var(qi);
 
     curwin->w_cursor.lnum = qi->qf_lists[qi->qf_curlist].qf_index;
     curwin->w_cursor.col = 0;
@@ -2608,8 +2610,7 @@ qf_update_buffer(qi)
 
 	qf_fill_buffer(qi);
 
-	if (qi->qf_lists[qi->qf_curlist].qf_title != NULL
-	    && (win = qf_find_win(qi)) != NULL)
+	if ((win = qf_find_win(qi)) != NULL)
 	{
 	    curwin_save = curwin;
 	    curwin = win;
@@ -2625,11 +2626,15 @@ qf_update_buffer(qi)
     }
 }
 
+/*
+ * Set "w:quickfix_title" if "qi" has a title.
+ */
     static void
 qf_set_title_var(qi)
     qf_info_T	*qi;
 {
-    set_internal_string_var((char_u *)"w:quickfix_title",
+    if (qi->qf_lists[qi->qf_curlist].qf_title != NULL)
+	set_internal_string_var((char_u *)"w:quickfix_title",
 				    qi->qf_lists[qi->qf_curlist].qf_title);
 }
 
@@ -2945,7 +2950,7 @@ get_mef_name()
 
     if (*p_mef == NUL)
     {
-	name = vim_tempname('e');
+	name = vim_tempname('e', FALSE);
 	if (name == NULL)
 	    EMSG(_(e_notmp));
 	return name;
@@ -2985,19 +2990,183 @@ get_mef_name()
 }
 
 /*
+ * Returns the number of valid entries in the current quickfix/location list.
+ */
+    int
+qf_get_size(eap)
+    exarg_T	*eap;
+{
+    qf_info_T	*qi = &ql_info;
+    qfline_T	*qfp;
+    int		i, sz = 0;
+    int		prev_fnum = 0;
+
+    if (eap->cmdidx == CMD_ldo || eap->cmdidx == CMD_lfdo)
+    {
+	/* Location list */
+	qi = GET_LOC_LIST(curwin);
+	if (qi == NULL)
+	    return 0;
+    }
+
+    for (i = 0, qfp = qi->qf_lists[qi->qf_curlist].qf_start;
+	    (i < qi->qf_lists[qi->qf_curlist].qf_count) && (qfp != NULL);
+	    ++i, qfp = qfp->qf_next)
+    {
+	if (qfp->qf_valid)
+	{
+	    if (eap->cmdidx == CMD_cdo || eap->cmdidx == CMD_ldo)
+		sz++;	/* Count all valid entries */
+	    else if (qfp->qf_fnum > 0 && qfp->qf_fnum != prev_fnum)
+	    {
+		/* Count the number of files */
+		sz++;
+		prev_fnum = qfp->qf_fnum;
+	    }
+	}
+    }
+
+    return sz;
+}
+
+/*
+ * Returns the current index of the quickfix/location list.
+ * Returns 0 if there is an error.
+ */
+    int
+qf_get_cur_idx(eap)
+    exarg_T	*eap;
+{
+    qf_info_T	*qi = &ql_info;
+
+    if (eap->cmdidx == CMD_ldo || eap->cmdidx == CMD_lfdo)
+    {
+	/* Location list */
+	qi = GET_LOC_LIST(curwin);
+	if (qi == NULL)
+	    return 0;
+    }
+
+    return qi->qf_lists[qi->qf_curlist].qf_index;
+}
+
+/*
+ * Returns the current index in the quickfix/location list (counting only valid
+ * entries). If no valid entries are in the list, then returns 1.
+ */
+    int
+qf_get_cur_valid_idx(eap)
+    exarg_T	*eap;
+{
+    qf_info_T	*qi = &ql_info;
+    qf_list_T	*qfl;
+    qfline_T	*qfp;
+    int		i, eidx = 0;
+    int		prev_fnum = 0;
+
+    if (eap->cmdidx == CMD_ldo || eap->cmdidx == CMD_lfdo)
+    {
+	/* Location list */
+	qi = GET_LOC_LIST(curwin);
+	if (qi == NULL)
+	    return 1;
+    }
+
+    qfl = &qi->qf_lists[qi->qf_curlist];
+    qfp = qfl->qf_start;
+
+    /* check if the list has valid errors */
+    if (qfl->qf_count <= 0 || qfl->qf_nonevalid)
+	return 1;
+
+    for (i = 1; i <= qfl->qf_index && qfp!= NULL; i++, qfp = qfp->qf_next)
+    {
+	if (qfp->qf_valid)
+	{
+	    if (eap->cmdidx == CMD_cfdo || eap->cmdidx == CMD_lfdo)
+	    {
+		if (qfp->qf_fnum > 0 && qfp->qf_fnum != prev_fnum)
+		{
+		    /* Count the number of files */
+		    eidx++;
+		    prev_fnum = qfp->qf_fnum;
+		}
+	    }
+	    else
+		eidx++;
+	}
+    }
+
+    return eidx ? eidx : 1;
+}
+
+/*
+ * Get the 'n'th valid error entry in the quickfix or location list.
+ * Used by :cdo, :ldo, :cfdo and :lfdo commands.
+ * For :cdo and :ldo returns the 'n'th valid error entry.
+ * For :cfdo and :lfdo returns the 'n'th valid file entry.
+ */
+    static int
+qf_get_nth_valid_entry(qi, n, fdo)
+    qf_info_T	*qi;
+    int		n;
+    int		fdo;
+{
+    qf_list_T	*qfl = &qi->qf_lists[qi->qf_curlist];
+    qfline_T	*qfp = qfl->qf_start;
+    int		i, eidx;
+    int		prev_fnum = 0;
+
+    /* check if the list has valid errors */
+    if (qfl->qf_count <= 0 || qfl->qf_nonevalid)
+	return 1;
+
+    for (i = 1, eidx = 0; i <= qfl->qf_count && qfp!= NULL;
+	    i++, qfp = qfp->qf_next)
+    {
+	if (qfp->qf_valid)
+	{
+	    if (fdo)
+	    {
+		if (qfp->qf_fnum > 0 && qfp->qf_fnum != prev_fnum)
+		{
+		    /* Count the number of files */
+		    eidx++;
+		    prev_fnum = qfp->qf_fnum;
+		}
+	    }
+	    else
+		eidx++;
+	}
+
+	if (eidx == n)
+	    break;
+    }
+
+    if (i <= qfl->qf_count)
+	return i;
+    else
+	return 1;
+}
+
+/*
  * ":cc", ":crewind", ":cfirst" and ":clast".
  * ":ll", ":lrewind", ":lfirst" and ":llast".
+ * ":cdo", ":ldo", ":cfdo" and ":lfdo"
  */
     void
 ex_cc(eap)
     exarg_T	*eap;
 {
     qf_info_T	*qi = &ql_info;
+    int		errornr;
 
     if (eap->cmdidx == CMD_ll
 	    || eap->cmdidx == CMD_lrewind
 	    || eap->cmdidx == CMD_lfirst
-	    || eap->cmdidx == CMD_llast)
+	    || eap->cmdidx == CMD_llast
+	    || eap->cmdidx == CMD_ldo
+	    || eap->cmdidx == CMD_lfdo)
     {
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
@@ -3007,34 +3176,51 @@ ex_cc(eap)
 	}
     }
 
-    qf_jump(qi, 0,
-	    eap->addr_count > 0
-	    ? (int)eap->line2
-	    : (eap->cmdidx == CMD_cc || eap->cmdidx == CMD_ll)
-		? 0
-		: (eap->cmdidx == CMD_crewind || eap->cmdidx == CMD_lrewind
-		   || eap->cmdidx == CMD_cfirst || eap->cmdidx == CMD_lfirst)
-		    ? 1
-		    : 32767,
-	    eap->forceit);
+    if (eap->addr_count > 0)
+	errornr = (int)eap->line2;
+    else
+    {
+	if (eap->cmdidx == CMD_cc || eap->cmdidx == CMD_ll)
+	    errornr = 0;
+	else if (eap->cmdidx == CMD_crewind || eap->cmdidx == CMD_lrewind
+		|| eap->cmdidx == CMD_cfirst || eap->cmdidx == CMD_lfirst)
+	    errornr = 1;
+	else
+	    errornr = 32767;
+    }
+
+    /* For cdo and ldo commands, jump to the nth valid error.
+     * For cfdo and lfdo commands, jump to the nth valid file entry.
+     */
+    if (eap->cmdidx == CMD_cdo || eap->cmdidx == CMD_ldo ||
+	    eap->cmdidx == CMD_cfdo || eap->cmdidx == CMD_lfdo)
+	errornr = qf_get_nth_valid_entry(qi,
+		eap->addr_count > 0 ? (int)eap->line1 : 1,
+		eap->cmdidx == CMD_cfdo || eap->cmdidx == CMD_lfdo);
+
+    qf_jump(qi, 0, errornr, eap->forceit);
 }
 
 /*
  * ":cnext", ":cnfile", ":cNext" and ":cprevious".
  * ":lnext", ":lNext", ":lprevious", ":lnfile", ":lNfile" and ":lpfile".
+ * Also, used by ":cdo", ":ldo", ":cfdo" and ":lfdo" commands.
  */
     void
 ex_cnext(eap)
     exarg_T	*eap;
 {
     qf_info_T	*qi = &ql_info;
+    int		errornr;
 
     if (eap->cmdidx == CMD_lnext
 	    || eap->cmdidx == CMD_lNext
 	    || eap->cmdidx == CMD_lprevious
 	    || eap->cmdidx == CMD_lnfile
 	    || eap->cmdidx == CMD_lNfile
-	    || eap->cmdidx == CMD_lpfile)
+	    || eap->cmdidx == CMD_lpfile
+	    || eap->cmdidx == CMD_ldo
+	    || eap->cmdidx == CMD_lfdo)
     {
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
@@ -3044,15 +3230,24 @@ ex_cnext(eap)
 	}
     }
 
-    qf_jump(qi, (eap->cmdidx == CMD_cnext || eap->cmdidx == CMD_lnext)
+    if (eap->addr_count > 0 &&
+	    (eap->cmdidx != CMD_cdo && eap->cmdidx != CMD_ldo &&
+	     eap->cmdidx != CMD_cfdo && eap->cmdidx != CMD_lfdo))
+	errornr = (int)eap->line2;
+    else
+	errornr = 1;
+
+    qf_jump(qi, (eap->cmdidx == CMD_cnext || eap->cmdidx == CMD_lnext
+		|| eap->cmdidx == CMD_cdo || eap->cmdidx == CMD_ldo)
 	    ? FORWARD
-	    : (eap->cmdidx == CMD_cnfile || eap->cmdidx == CMD_lnfile)
+	    : (eap->cmdidx == CMD_cnfile || eap->cmdidx == CMD_lnfile
+		|| eap->cmdidx == CMD_cfdo || eap->cmdidx == CMD_lfdo)
 		? FORWARD_FILE
 		: (eap->cmdidx == CMD_cpfile || eap->cmdidx == CMD_lpfile
 		   || eap->cmdidx == CMD_cNfile || eap->cmdidx == CMD_lNfile)
 		    ? BACKWARD_FILE
 		    : BACKWARD,
-	    eap->addr_count > 0 ? (int)eap->line2 : 1, eap->forceit);
+	    errornr, eap->forceit);
 }
 
 /*

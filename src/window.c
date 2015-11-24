@@ -141,7 +141,7 @@ do_window(nchar, Prenum, xchar)
 #ifdef FEAT_GUI
 		need_mouse_correct = TRUE;
 #endif
-		win_split((int)Prenum, 0);
+		(void)win_split((int)Prenum, 0);
 		break;
 
 #ifdef FEAT_VERTSPLIT
@@ -159,7 +159,7 @@ do_window(nchar, Prenum, xchar)
 # ifdef FEAT_GUI
 		need_mouse_correct = TRUE;
 # endif
-		win_split((int)Prenum, WSP_VERT);
+		(void)win_split((int)Prenum, WSP_VERT);
 		break;
 #endif
 
@@ -620,6 +620,110 @@ wingotofile:
 		break;
 
     default:	beep_flush();
+		break;
+    }
+}
+
+/*
+ * Figure out the address type for ":wnncmd".
+ */
+    void
+get_wincmd_addr_type(arg, eap)
+    char_u	*arg;
+    exarg_T	*eap;
+{
+    switch (*arg)
+    {
+    case 'S':
+    case Ctrl_S:
+    case 's':
+    case Ctrl_N:
+    case 'n':
+    case 'j':
+    case Ctrl_J:
+    case 'k':
+    case Ctrl_K:
+    case 'T':
+    case Ctrl_R:
+    case 'r':
+    case 'R':
+    case 'K':
+    case 'J':
+    case '+':
+    case '-':
+    case Ctrl__:
+    case '_':
+    case '|':
+    case ']':
+    case Ctrl_RSB:
+    case 'g':
+    case Ctrl_G:
+#ifdef FEAT_VERTSPLIT
+    case Ctrl_V:
+    case 'v':
+    case 'h':
+    case Ctrl_H:
+    case 'l':
+    case Ctrl_L:
+    case 'H':
+    case 'L':
+    case '>':
+    case '<':
+#endif
+#if defined(FEAT_QUICKFIX)
+    case '}':
+#endif
+#ifdef FEAT_SEARCHPATH
+    case 'f':
+    case 'F':
+    case Ctrl_F:
+#endif
+#ifdef FEAT_FIND_ID
+    case 'i':
+    case Ctrl_I:
+    case 'd':
+    case Ctrl_D:
+#endif
+		/* window size or any count */
+		eap->addr_type = ADDR_LINES;
+		break;
+
+    case Ctrl_HAT:
+    case '^':
+		/* buffer number */
+		eap->addr_type = ADDR_BUFFERS;
+		break;
+
+    case Ctrl_Q:
+    case 'q':
+    case Ctrl_C:
+    case 'c':
+    case Ctrl_O:
+    case 'o':
+    case Ctrl_W:
+    case 'w':
+    case 'W':
+    case 'x':
+    case Ctrl_X:
+		/* window number */
+		eap->addr_type = ADDR_WINDOWS;
+		break;
+
+#if defined(FEAT_QUICKFIX)
+    case Ctrl_Z:
+    case 'z':
+    case 'P':
+#endif
+    case 't':
+    case Ctrl_T:
+    case 'b':
+    case Ctrl_B:
+    case 'p':
+    case Ctrl_P:
+    case '=':
+    case CAR:
+		/* no count */
+		eap->addr_type = 0;
 		break;
     }
 }
@@ -1132,7 +1236,8 @@ win_split_ins(size, flags, new_wp, dir)
 	{
 	    wp->w_winrow = oldwin->w_winrow + oldwin->w_height + STATUS_HEIGHT;
 	    wp->w_status_height = oldwin->w_status_height;
-	    oldwin->w_status_height = STATUS_HEIGHT;
+	    /* Don't set the status_height for oldwin yet, this might break
+	     * frame_fix_height(oldwin), therefore will be set below. */
 	}
 #ifdef FEAT_VERTSPLIT
 	if (flags & WSP_BOT)
@@ -1140,6 +1245,11 @@ win_split_ins(size, flags, new_wp, dir)
 #endif
 	frame_fix_height(wp);
 	frame_fix_height(oldwin);
+
+	if (!before)
+	    /* new window above current one, set the status_height after
+	     * frame_fix_height(oldwin) */
+	    oldwin->w_status_height = STATUS_HEIGHT;
     }
 
     if (flags & (WSP_TOP | WSP_BOT))
@@ -2476,7 +2586,7 @@ win_close_othertab(win, free_buf, tp)
 	return;
 
     /* When closing the last window in a tab page remove the tab page. */
-    if (tp == NULL ? firstwin == lastwin : tp->tp_firstwin == tp->tp_lastwin)
+    if (tp->tp_firstwin == tp->tp_lastwin)
     {
 	if (tp == first_tabpage)
 	    first_tabpage = tp->tp_next;
@@ -4010,17 +4120,26 @@ goto_tabpage_win(tp, wp)
 }
 
 /*
- * Move the current tab page to before tab page "nr".
+ * Move the current tab page to after tab page "nr".
  */
     void
 tabpage_move(nr)
     int		nr;
 {
-    int		n = nr;
-    tabpage_T	*tp;
+    int		n = 1;
+    tabpage_T	*tp, *tp_dst;
 
     if (first_tabpage->tp_next == NULL)
 	return;
+
+    for (tp = first_tabpage; tp->tp_next != NULL && n < nr; tp = tp->tp_next)
+	++n;
+
+    if (tp == curtab || (nr > 0 && tp->tp_next != NULL
+						    && tp->tp_next == curtab))
+	return;
+
+    tp_dst = tp;
 
     /* Remove the current tab page from the list of tab pages. */
     if (curtab == first_tabpage)
@@ -4036,17 +4155,15 @@ tabpage_move(nr)
     }
 
     /* Re-insert it at the specified position. */
-    if (n <= 0)
+    if (nr <= 0)
     {
 	curtab->tp_next = first_tabpage;
 	first_tabpage = curtab;
     }
     else
     {
-	for (tp = first_tabpage; tp->tp_next != NULL && n > 1; tp = tp->tp_next)
-	    --n;
-	curtab->tp_next = tp->tp_next;
-	tp->tp_next = curtab;
+	curtab->tp_next = tp_dst->tp_next;
+	tp_dst->tp_next = curtab;
     }
 
     /* Need to redraw the tabline.  Tab page contents doesn't change. */
@@ -5463,7 +5580,7 @@ win_setminheight()
     }
 }
 
-#ifdef FEAT_MOUSE
+#if defined(FEAT_MOUSE) || defined(PROTO)
 
 /*
  * Status line of dragwin is dragged "offset" lines down (negative is up).
@@ -5596,7 +5713,7 @@ win_drag_status_line(dragwin, offset)
     showmode();
 }
 
-#ifdef FEAT_VERTSPLIT
+# if defined(FEAT_VERTSPLIT) || defined(PROTO)
 /*
  * Separator line of dragwin is dragged "offset" lines right (negative is left).
  */
@@ -5668,6 +5785,8 @@ win_drag_vsep_line(dragwin, offset)
 	offset = room;		/* Move as far as we can */
     if (offset <= 0)		/* No room at all, quit. */
 	return;
+    if (fr == NULL)
+	return;			/* Safety check, should not happen. */
 
     /* grow frame fr by offset lines */
     frame_new_width(fr, fr->fr_width + offset, left, FALSE);
@@ -5699,7 +5818,7 @@ win_drag_vsep_line(dragwin, offset)
     (void)win_comp_pos();
     redraw_all_later(NOT_VALID);
 }
-#endif /* FEAT_VERTSPLIT */
+# endif /* FEAT_VERTSPLIT */
 #endif /* FEAT_MOUSE */
 
 #endif /* FEAT_WINDOWS */
@@ -6115,6 +6234,8 @@ grab_file_name(count, file_lnum)
     long	count;
     linenr_T	*file_lnum;
 {
+    int options = FNAME_MESS|FNAME_EXP|FNAME_REL|FNAME_UNESC;
+
     if (VIsual_active)
     {
 	int	len;
@@ -6122,11 +6243,10 @@ grab_file_name(count, file_lnum)
 
 	if (get_visual_text(NULL, &ptr, &len) == FAIL)
 	    return NULL;
-	return find_file_name_in_path(ptr, len,
-		     FNAME_MESS|FNAME_EXP|FNAME_REL, count, curbuf->b_ffname);
+	return find_file_name_in_path(ptr, len, options,
+						     count, curbuf->b_ffname);
     }
-    return file_name_at_cursor(FNAME_MESS|FNAME_HYP|FNAME_EXP|FNAME_REL, count,
-			       file_lnum);
+    return file_name_at_cursor(options | FNAME_HYP, count, file_lnum);
 
 }
 
@@ -6206,14 +6326,19 @@ file_name_in_line(line, col, options, count, rel_fname, file_lnum)
      * Also allow "://" when ':' is not in 'isfname'.
      */
     len = 0;
-    while (vim_isfilec(ptr[len])
+    while (vim_isfilec(ptr[len]) || (ptr[len] == '\\' && ptr[len + 1] == ' ')
 			 || ((options & FNAME_HYP) && path_is_url(ptr + len)))
+    {
+	if (ptr[len] == '\\')
+	    /* Skip over the "\" in "\ ". */
+	    ++len;
 #ifdef FEAT_MBYTE
 	if (has_mbyte)
 	    len += (*mb_ptr2len)(ptr + len);
 	else
 #endif
 	    ++len;
+    }
 
     /*
      * If there is trailing punctuation, remove it.
@@ -6820,13 +6945,14 @@ win_hasvertsplit()
  * Return ID of added match, -1 on failure.
  */
     int
-match_add(wp, grp, pat, prio, id, pos_list)
+match_add(wp, grp, pat, prio, id, pos_list, conceal_char)
     win_T	*wp;
     char_u	*grp;
     char_u	*pat;
     int		prio;
     int		id;
     list_T	*pos_list;
+    char_u      *conceal_char UNUSED; /* pointer to conceal replacement char */
 {
     matchitem_T	*cur;
     matchitem_T	*prev;
@@ -6886,6 +7012,11 @@ match_add(wp, grp, pat, prio, id, pos_list)
     m->match.regprog = regprog;
     m->match.rmm_ic = FALSE;
     m->match.rmm_maxcol = 0;
+#ifdef FEAT_CONCEAL
+    m->conceal_char = 0;
+    if (conceal_char != NULL)
+	m->conceal_char = (*mb_ptr2char)(conceal_char);
+#endif
 
     /* Set up position matches */
     if (pos_list != NULL)
@@ -7139,7 +7270,7 @@ get_tab_number(tabpage_T *tp UNUSED)
 }
 #endif
 
-#ifdef FEAT_WINDOWS
+#if defined(FEAT_WINDOWS) || defined(PROTO)
 /*
  * Return TRUE if "topfrp" and its children are at the right height.
  */
@@ -7162,7 +7293,7 @@ frame_check_height(topfrp, height)
 }
 #endif
 
-#ifdef FEAT_VERTSPLIT
+#if defined(FEAT_VERTSPLIT) || defined(PROTO)
 /*
  * Return TRUE if "topfrp" and its children are at the right width.
  */

@@ -952,9 +952,6 @@ lalloc(size, message)
 
 	clear_sb_text();	      /* free any scrollback text */
 	try_again = mf_release_all(); /* release as many blocks as possible */
-#ifdef FEAT_EVAL
-	try_again |= garbage_collect(); /* cleanup recursive lists/dicts */
-#endif
 
 	releasing = FALSE;
 	if (!try_again)
@@ -1600,40 +1597,6 @@ strup_save(orig)
 #endif
 
 /*
- * copy a space a number of times
- */
-    void
-copy_spaces(ptr, count)
-    char_u	*ptr;
-    size_t	count;
-{
-    size_t	i = count;
-    char_u	*p = ptr;
-
-    while (i--)
-	*p++ = ' ';
-}
-
-#if defined(FEAT_VISUALEXTRA) || defined(PROTO)
-/*
- * Copy a character a number of times.
- * Does not work for multi-byte characters!
- */
-    void
-copy_chars(ptr, count, c)
-    char_u	*ptr;
-    size_t	count;
-    int		c;
-{
-    size_t	i = count;
-    char_u	*p = ptr;
-
-    while (i--)
-	*p++ = c;
-}
-#endif
-
-/*
  * delete spaces at the end of a string
  */
     void
@@ -1885,9 +1848,12 @@ vim_strchr(string, c)
     {
 	while (*p != NUL)
 	{
-	    if (utf_ptr2char(p) == c)
+	    int l = (*mb_ptr2len)(p);
+
+	    /* Avoid matching an illegal byte here. */
+	    if (utf_ptr2char(p) == c && l > 1)
 		return p;
-	    p += (*mb_ptr2len)(p);
+	    p += l;
 	}
 	return NULL;
     }
@@ -2810,7 +2776,7 @@ find_special_key(srcp, modp, keycode, keep_x_key)
 	    bp += 3;	/* skip t_xx, xx may be '-' or '>' */
 	else if (STRNICMP(bp, "char-", 5) == 0)
 	{
-	    vim_str2nr(bp + 5, NULL, &l, TRUE, TRUE, NULL, NULL);
+	    vim_str2nr(bp + 5, NULL, &l, TRUE, TRUE, NULL, NULL, 0);
 	    bp += l + 5;
 	    break;
 	}
@@ -2842,7 +2808,7 @@ find_special_key(srcp, modp, keycode, keep_x_key)
 						 && VIM_ISDIGIT(last_dash[6]))
 	    {
 		/* <Char-123> or <Char-033> or <Char-0x33> */
-		vim_str2nr(last_dash + 6, NULL, NULL, TRUE, TRUE, NULL, &n);
+		vim_str2nr(last_dash + 6, NULL, NULL, TRUE, TRUE, NULL, &n, 0);
 		key = (int)n;
 	    }
 	    else
@@ -4400,21 +4366,20 @@ vim_findfile_init(path, filename, stopdirs, level, free_visited, find_what,
 		temp = alloc((int)(STRLEN(search_ctx->ffsc_wc_path)
 				 + STRLEN(search_ctx->ffsc_fix_path + len)
 				 + 1));
-	    }
+		if (temp == NULL || wc_path == NULL)
+		{
+		    vim_free(buf);
+		    vim_free(temp);
+		    vim_free(wc_path);
+		    goto error_return;
+		}
 
-	    if (temp == NULL || wc_path == NULL)
-	    {
-		vim_free(buf);
-		vim_free(temp);
+		STRCPY(temp, search_ctx->ffsc_fix_path + len);
+		STRCAT(temp, search_ctx->ffsc_wc_path);
+		vim_free(search_ctx->ffsc_wc_path);
 		vim_free(wc_path);
-		goto error_return;
+		search_ctx->ffsc_wc_path = temp;
 	    }
-
-	    STRCPY(temp, search_ctx->ffsc_fix_path + len);
-	    STRCAT(temp, search_ctx->ffsc_wc_path);
-	    vim_free(search_ctx->ffsc_wc_path);
-	    vim_free(wc_path);
-	    search_ctx->ffsc_wc_path = temp;
 	}
 #endif
 	vim_free(buf);
@@ -5089,7 +5054,9 @@ ff_wc_equal(s1, s2)
     char_u	*s1;
     char_u	*s2;
 {
-    int		i;
+    int		i, j;
+    int		c1 = NUL;
+    int		c2 = NUL;
     int		prev1 = NUL;
     int		prev2 = NUL;
 
@@ -5099,21 +5066,21 @@ ff_wc_equal(s1, s2)
     if (s1 == NULL || s2 == NULL)
 	return FALSE;
 
-    if (STRLEN(s1) != STRLEN(s2))
-	return FAIL;
-
-    for (i = 0; s1[i] != NUL && s2[i] != NUL; i += MB_PTR2LEN(s1 + i))
+    for (i = 0, j = 0; s1[i] != NUL && s2[j] != NUL;)
     {
-	int c1 = PTR2CHAR(s1 + i);
-	int c2 = PTR2CHAR(s2 + i);
+	c1 = PTR2CHAR(s1 + i);
+	c2 = PTR2CHAR(s2 + j);
 
 	if ((p_fic ? MB_TOLOWER(c1) != MB_TOLOWER(c2) : c1 != c2)
 		&& (prev1 != '*' || prev2 != '*'))
-	    return FAIL;
+	    return FALSE;
 	prev2 = prev1;
 	prev1 = c1;
+
+        i += MB_PTR2LEN(s1 + i);
+        j += MB_PTR2LEN(s2 + j);
     }
-    return TRUE;
+    return s1[i] == s2[j];
 }
 #endif
 
@@ -5474,6 +5441,7 @@ free_findfile()
  *
  * options:
  * FNAME_MESS	    give error message when not found
+ * FNAME_UNESC	    unescape backslashes.
  *
  * Uses NameBuff[]!
  *
@@ -5491,7 +5459,8 @@ find_directory_in_path(ptr, len, options, rel_fname)
 }
 
     char_u *
-find_file_in_path_option(ptr, len, options, first, path_option, find_what, rel_fname, suffixes)
+find_file_in_path_option(ptr, len, options, first, path_option,
+			 find_what, rel_fname, suffixes)
     char_u	*ptr;		/* file name */
     int		len;		/* length of file name */
     int		options;
@@ -5529,6 +5498,13 @@ find_file_in_path_option(ptr, len, options, first, path_option, find_what, rel_f
 	{
 	    file_name = NULL;
 	    goto theend;
+	}
+	if (options & FNAME_UNESC)
+	{
+	    /* Change all "\ " to " ". */
+	    for (ptr = ff_file_to_find; *ptr != NUL; ++ptr)
+		if (ptr[0] == '\\' && ptr[1] == ' ')
+		    mch_memmove(ptr, ptr + 1, STRLEN(ptr));
 	}
     }
 
@@ -5836,14 +5812,14 @@ pathcmp(p, q, maxlen)
     const char *p, *q;
     int maxlen;
 {
-    int		i;
+    int		i, j;
     int		c1, c2;
     const char	*s = NULL;
 
-    for (i = 0; maxlen < 0 || i < maxlen; i += MB_PTR2LEN((char_u *)p + i))
+    for (i = 0, j = 0; maxlen < 0 || (i < maxlen && j < maxlen);)
     {
 	c1 = PTR2CHAR((char_u *)p + i);
-	c2 = PTR2CHAR((char_u *)q + i);
+	c2 = PTR2CHAR((char_u *)q + j);
 
 	/* End of "p": check if "q" also ends or just has a slash. */
 	if (c1 == NUL)
@@ -5851,6 +5827,7 @@ pathcmp(p, q, maxlen)
 	    if (c2 == NUL)  /* full match */
 		return 0;
 	    s = q;
+            i = j;
 	    break;
 	}
 
@@ -5876,8 +5853,11 @@ pathcmp(p, q, maxlen)
 	    return p_fic ? MB_TOUPPER(c1) - MB_TOUPPER(c2)
 		    : c1 - c2;  /* no match */
 	}
+
+	i += MB_PTR2LEN((char_u *)p + i);
+	j += MB_PTR2LEN((char_u *)q + j);
     }
-    if (s == NULL)	/* "i" ran into "maxlen" */
+    if (s == NULL)	/* "i" or "j" ran into "maxlen" */
 	return 0;
 
     c1 = PTR2CHAR((char_u *)s + i);
@@ -6277,7 +6257,7 @@ put_time(fd, the_time)
     char_u	buf[8];
 
     time_to_bytes(the_time, buf);
-    fwrite(buf, (size_t)8, (size_t)1, fd);
+    (void)fwrite(buf, (size_t)8, (size_t)1, fd);
 }
 
 /*
@@ -6342,5 +6322,25 @@ has_non_ascii(s)
 	    if (*p >= 128)
 		return TRUE;
     return FALSE;
+}
+#endif
+
+#if defined(MESSAGE_QUEUE) || defined(PROTO)
+/*
+ * Process messages that have been queued for netbeans or clientserver.
+ * These functions can call arbitrary vimscript and should only be called when
+ * it is safe to do so.
+ */
+    void
+parse_queued_messages()
+{
+# ifdef FEAT_NETBEANS_INTG
+    /* Process the queued netbeans messages. */
+    netbeans_parse_messages();
+# endif
+# if defined(FEAT_CLIENTSERVER) && defined(FEAT_X11)
+    /* Process the queued clientserver messages. */
+    server_parse_messages();
+# endif
 }
 #endif

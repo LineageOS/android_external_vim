@@ -635,7 +635,7 @@ typedef struct memline
     int		ml_flags;
 
     infoptr_T	*ml_stack;	/* stack of pointer blocks (array of IPTRs) */
-    int		ml_stack_top;	/* current top if ml_stack */
+    int		ml_stack_top;	/* current top of ml_stack */
     int		ml_stack_size;	/* total number of entries in ml_stack */
 
     linenr_T	ml_line_lnum;	/* line number of cached line, 0 if not valid */
@@ -1203,10 +1203,11 @@ struct dictitem_S
 
 typedef struct dictitem_S dictitem_T;
 
-#define DI_FLAGS_RO	1 /* "di_flags" value: read-only variable */
-#define DI_FLAGS_RO_SBX 2 /* "di_flags" value: read-only in the sandbox */
-#define DI_FLAGS_FIX	4 /* "di_flags" value: fixed variable, not allocated */
-#define DI_FLAGS_LOCK	8 /* "di_flags" value: locked variable */
+#define DI_FLAGS_RO	1  /* "di_flags" value: read-only variable */
+#define DI_FLAGS_RO_SBX 2  /* "di_flags" value: read-only in the sandbox */
+#define DI_FLAGS_FIX	4  /* "di_flags" value: fixed: no :unlet or remove() */
+#define DI_FLAGS_LOCK	8  /* "di_flags" value: locked variable */
+#define DI_FLAGS_ALLOC	16 /* "di_flags" value: separately allocated */
 
 /*
  * Structure to hold info about a Dictionary.
@@ -1222,6 +1223,20 @@ struct dictvar_S
     dict_T	*dv_used_next;	/* next dict in used dicts list */
     dict_T	*dv_used_prev;	/* previous dict in used dicts list */
 };
+
+/* structure used for explicit stack while garbage collecting hash tables */
+typedef struct ht_stack_S
+{
+    hashtab_T		*ht;
+    struct ht_stack_S	*prev;
+} ht_stack_T;
+
+/* structure used for explicit stack while garbage collecting lists */
+typedef struct list_stack_S
+{
+    list_T		*list;
+    struct list_stack_S	*prev;
+} list_stack_T;
 
 /* values for b_syn_spell: what to do with toplevel text */
 #define SYNSPL_DEFAULT	0	/* spell check if @Spell not defined */
@@ -1572,8 +1587,10 @@ struct file_buffer
     char_u	*b_p_ofu;	/* 'omnifunc' */
 #endif
     int		b_p_eol;	/* 'endofline' */
+    int		b_p_fixeol;	/* 'fixendofline' */
     int		b_p_et;		/* 'expandtab' */
     int		b_p_et_nobin;	/* b_p_et saved for binary mode */
+    int	        b_p_et_nopaste; /* b_p_et saved for paste mode */
 #ifdef FEAT_MBYTE
     char_u	*b_p_fenc;	/* 'fileencoding' */
 #endif
@@ -1792,6 +1809,11 @@ struct file_buffer
 
 #ifdef FEAT_SIGNS
     signlist_T	*b_signlist;	/* list of signs to draw */
+# ifdef FEAT_NETBEANS_INTG
+    int		b_has_sign_column; /* Flag that is set when a first sign is
+				    * added and remains set until the end of
+				    * the netbeans session. */
+# endif
 #endif
 
 #ifdef FEAT_NETBEANS_INTG
@@ -1803,6 +1825,7 @@ struct file_buffer
     cryptstate_T *b_cryptstate;	/* Encryption state while reading or writing
 				 * the file. NULL when not using encryption. */
 #endif
+    int		b_mapped_ctrl_c; /* modes where CTRL-C is mapped */
 
 }; /* file_buffer */
 
@@ -2000,6 +2023,9 @@ struct matchitem
     regmmatch_T	match;	    /* regexp program for pattern */
     posmatch_T	pos;	    /* position matches */
     match_T	hl;	    /* struct for doing the actual highlighting */
+#ifdef FEAT_CONCEAL
+    int		conceal_char; /* cchar for Conceal highlighting */
+#endif
 };
 
 /*
@@ -2292,6 +2318,7 @@ struct window_S
 #ifdef FEAT_LINEBREAK
     linenr_T	w_nrwidth_line_count;	/* line count when ml_nrwidth_width
 					 * was computed. */
+    long	w_nuw_cached;		/* 'numberwidth' option cached */
     int		w_nrwidth_width;	/* nr of chars to print line count. */
 #endif
 

@@ -650,7 +650,7 @@ property_event(GtkWidget *widget,
 	xev.xproperty.atom = commProperty;
 	xev.xproperty.window = commWindow;
 	xev.xproperty.state = PropertyNewValue;
-	serverEventProc(GDK_WINDOW_XDISPLAY(widget->window), &xev);
+	serverEventProc(GDK_WINDOW_XDISPLAY(widget->window), &xev, 0);
     }
     return FALSE;
 }
@@ -1680,17 +1680,15 @@ button_press_event(GtkWidget *widget,
 
     switch (event->button)
     {
-    case 1:
-	button = MOUSE_LEFT;
-	break;
-    case 2:
-	button = MOUSE_MIDDLE;
-	break;
-    case 3:
-	button = MOUSE_RIGHT;
-	break;
-    default:
-	return FALSE;		/* Unknown button */
+	/* Keep in sync with gui_x11.c.
+	 * Buttons 4-7 are handled in scroll_event() */
+	case 1: button = MOUSE_LEFT; break;
+	case 2: button = MOUSE_MIDDLE; break;
+	case 3: button = MOUSE_RIGHT; break;
+	case 8: button = MOUSE_X1; break;
+	case 9: button = MOUSE_X2; break;
+	default:
+	    return FALSE;		/* Unknown button */
     }
 
 #ifdef FEAT_XIM
@@ -2873,7 +2871,9 @@ create_tabline_menu(void)
     GtkWidget *menu;
 
     menu = gtk_menu_new();
-    add_tabline_menu_item(menu, (char_u *)_("Close"), TABLINE_MENU_CLOSE);
+    if (first_tabpage->tp_next != NULL)
+	add_tabline_menu_item(menu, (char_u *)_("Close tab"),
+							  TABLINE_MENU_CLOSE);
     add_tabline_menu_item(menu, (char_u *)_("New tab"), TABLINE_MENU_NEW);
     add_tabline_menu_item(menu, (char_u *)_("Open Tab..."), TABLINE_MENU_OPEN);
 
@@ -5061,8 +5061,13 @@ not_ascii:
 	     * done, because drawing the cursor would change the display. */
 	    item->analysis.shape_engine = default_shape_engine;
 
+#ifdef HAVE_PANGO_SHAPE_FULL
+	    pango_shape_full((const char *)s + item->offset, item->length,
+		    (const char *)s, len, &item->analysis, glyphs);
+#else
 	    pango_shape((const char *)s + item->offset, item->length,
 			&item->analysis, glyphs);
+#endif
 	    /*
 	     * Fixed-width hack: iterate over the array and assign a fixed
 	     * width to each glyph, thus overriding the choice made by the
@@ -5469,9 +5474,8 @@ gui_mch_wait_for_chars(long wtime)
 	    focus = gui.in_focus;
 	}
 
-#if defined(FEAT_NETBEANS_INTG)
-	/* Process any queued netbeans messages. */
-	netbeans_parse_messages();
+#ifdef MESSAGE_QUEUE
+	parse_queued_messages();
 #endif
 
 	/*

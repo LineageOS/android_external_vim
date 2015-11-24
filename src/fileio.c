@@ -2099,6 +2099,10 @@ rewind_retry:
 		/* First try finding a NL, for Dos and Unix */
 		if (try_dos || try_unix)
 		{
+		    /* Reset the carriage return counter. */
+		    if (try_mac)
+			try_mac = 1;
+
 		    for (p = ptr; p < ptr + size; ++p)
 		    {
 			if (*p == NL)
@@ -2110,6 +2114,8 @@ rewind_retry:
 				fileformat = EOL_UNIX;
 			    break;
 			}
+			else if (*p == CAR && try_mac)
+			    try_mac++;
 		    }
 
 		    /* Don't give in to EOL_UNIX if EOL_MAC is more likely */
@@ -2133,6 +2139,10 @@ rewind_retry:
 				fileformat = EOL_MAC;
 			}
 		    }
+		    else if (fileformat == EOL_UNKNOWN && try_mac == 1)
+			/* Looking for CR but found no end-of-line markers at
+			 * all: use the default format. */
+			fileformat = default_fileformat();
 		}
 
 		/* No NL found: may use Mac format */
@@ -2613,10 +2623,10 @@ failed:
 #endif
 
     /*
-     * Trick: We remember if the last line of the read didn't have
-     * an eol even when 'binary' is off, for when writing it again with
-     * 'binary' on.  This is required for
-     * ":autocmd FileReadPost *.gz set bin|'[,']!gunzip" to work.
+     * We remember if the last line of the read didn't have
+     * an eol even when 'binary' is off, to support turning 'fixeol' off,
+     * or writing the read again with 'binary' on.  The latter is required
+     * for ":autocmd FileReadPost *.gz set bin|'[,']!gunzip" to work.
      */
     curbuf->b_no_eol_lnum = read_no_eol_lnum;
 
@@ -2862,7 +2872,7 @@ readfile_charconvert(fname, fenc, fdp)
     char_u	*tmpname;
     char_u	*errmsg = NULL;
 
-    tmpname = vim_tempname('r');
+    tmpname = vim_tempname('r', FALSE);
     if (tmpname == NULL)
 	errmsg = (char_u *)_("Can't find temp file for conversion");
     else
@@ -4278,7 +4288,7 @@ buf_write(buf, fname, sfname, start, end, eap, append, forceit,
 	     */
 	    if (*p_ccv != NUL)
 	    {
-		wfname = vim_tempname('w');
+		wfname = vim_tempname('w', FALSE);
 		if (wfname == NULL)	/* Can't write without a tempfile! */
 		{
 		    errmsg = (char_u *)_("E214: Can't find temp file for writing");
@@ -4537,7 +4547,7 @@ restore_backup:
 	/* write failed or last line has no EOL: stop here */
 	if (end == 0
 		|| (lnum == end
-		    && write_bin
+		    && (write_bin || !buf->b_p_fixeol)
 		    && (lnum == buf->b_no_eol_lnum
 			|| (lnum == buf->b_ml.ml_line_count && !buf->b_p_eol))))
 	{
@@ -7334,14 +7344,16 @@ vim_settempdir(tempdir)
 /*
  * vim_tempname(): Return a unique name that can be used for a temp file.
  *
- * The temp file is NOT created.
+ * The temp file is NOT garanteed to be created.  If "keep" is FALSE it is
+ * garanteed to NOT be created.
  *
  * The returned pointer is to allocated memory.
  * The returned pointer is NULL if no valid name was found.
  */
     char_u  *
-vim_tempname(extra_char)
+vim_tempname(extra_char, keep)
     int	    extra_char UNUSED;  /* char to use in the name instead of '?' */
+    int	    keep UNUSED;
 {
 #ifdef USE_TMPNAM
     char_u	itmp[L_tmpnam];	/* use tmpnam() */
@@ -7477,8 +7489,9 @@ vim_tempname(extra_char)
     buf4[2] = extra_char;   /* make it "VIa", "VIb", etc. */
     if (GetTempFileName(szTempFile, buf4, 0, itmp) == 0)
 	return NULL;
-    /* GetTempFileName() will create the file, we don't want that */
-    (void)DeleteFile(itmp);
+    if (!keep)
+	/* GetTempFileName() will create the file, we don't want that */
+	(void)DeleteFile(itmp);
 
     /* Backslashes in a temp file name cause problems when filtering with
      * "sh".  NOTE: This also checks 'shellcmdflag' to help those people who
@@ -7534,7 +7547,8 @@ vim_tempname(extra_char)
 
 #if defined(BACKSLASH_IN_FILENAME) || defined(PROTO)
 /*
- * Convert all backslashes in fname to forward slashes in-place.
+ * Convert all backslashes in fname to forward slashes in-place, unless when
+ * it looks like a URL.
  */
     void
 forward_slash(fname)
@@ -7542,6 +7556,8 @@ forward_slash(fname)
 {
     char_u	*p;
 
+    if (path_with_url(fname))
+	return;
     for (p = fname; *p != NUL; ++p)
 # ifdef  FEAT_MBYTE
 	/* The Big5 encoding can have '\' in the trail byte. */
@@ -7686,6 +7702,7 @@ static struct event_name
     {"InsertLeave",	EVENT_INSERTLEAVE},
     {"InsertCharPre",	EVENT_INSERTCHARPRE},
     {"MenuPopup",	EVENT_MENUPOPUP},
+    {"OptionSet",	EVENT_OPTIONSET},
     {"QuickFixCmdPost",	EVENT_QUICKFIXCMDPOST},
     {"QuickFixCmdPre",	EVENT_QUICKFIXCMDPRE},
     {"QuitPre",		EVENT_QUITPRE},
@@ -7723,7 +7740,7 @@ static AutoPat *first_autopat[NUM_EVENTS] =
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
 /*
@@ -8500,7 +8517,7 @@ do_autocmd_event(event, pat, nested, cmd, forceit, group)
 	 */
 	brace_level = 0;
 	for (endpat = pat; *endpat && (*endpat != ',' || brace_level
-					     || endpat[-1] == '\\'); ++endpat)
+			   || (endpat > pat && endpat[-1] == '\\')); ++endpat)
 	{
 	    if (*endpat == '{')
 		brace_level++;
@@ -8517,21 +8534,22 @@ do_autocmd_event(event, pat, nested, cmd, forceit, group)
 	is_buflocal = FALSE;
 	buflocal_nr = 0;
 
-	if (patlen >= 7 && STRNCMP(pat, "<buffer", 7) == 0
+	if (patlen >= 8 && STRNCMP(pat, "<buffer", 7) == 0
 						    && pat[patlen - 1] == '>')
 	{
-	    /* Error will be printed only for addition. printing and removing
-	     * will proceed silently. */
+	    /* "<buffer...>": Error will be printed only for addition.
+	     * printing and removing will proceed silently. */
 	    is_buflocal = TRUE;
 	    if (patlen == 8)
+		/* "<buffer>" */
 		buflocal_nr = curbuf->b_fnum;
 	    else if (patlen > 9 && pat[7] == '=')
 	    {
-		/* <buffer=abuf> */
-		if (patlen == 13 && STRNICMP(pat, "<buffer=abuf>", 13))
+		if (patlen == 13 && STRNICMP(pat, "<buffer=abuf>", 13) == 0)
+		    /* "<buffer=abuf>" */
 		    buflocal_nr = autocmd_bufnr;
-		/* <buffer=123> */
 		else if (skipdigits(pat + 8) == pat + patlen - 1)
+		    /* "<buffer=123>" */
 		    buflocal_nr = atoi((char *)pat + 8);
 	    }
 	}
@@ -9230,6 +9248,7 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
 #ifdef FEAT_PROFILE
     proftime_T	wait_time;
 #endif
+    int		did_save_redobuff = FALSE;
 
     /*
      * Quickly return if there are no autocommands for this event or
@@ -9306,7 +9325,7 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
      */
     if (fname_io == NULL)
     {
-	if (event == EVENT_COLORSCHEME)
+	if (event == EVENT_COLORSCHEME || event == EVENT_OPTIONSET)
 	    autocmd_fname = NULL;
 	else if (fname != NULL && *fname != NUL)
 	    autocmd_fname = fname;
@@ -9370,6 +9389,7 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
 		|| event == EVENT_SPELLFILEMISSING
 		|| event == EVENT_QUICKFIXCMDPRE
 		|| event == EVENT_COLORSCHEME
+		|| event == EVENT_OPTIONSET
 		|| event == EVENT_QUICKFIXCMDPOST)
 	    fname = vim_strsave(fname);
 	else
@@ -9430,7 +9450,15 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
     if (!autocmd_busy)
     {
 	save_search_patterns();
-	saveRedobuff();
+#ifdef FEAT_INS_EXPAND
+	if (!ins_compl_active())
+	{
+#endif
+	    saveRedobuff();
+	    did_save_redobuff = TRUE;
+#ifdef FEAT_INS_EXPAND
+	}
+#endif
 	did_filetype = keep_filetype;
     }
 
@@ -9530,7 +9558,8 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
     if (!autocmd_busy)
     {
 	restore_search_patterns();
-	restoreRedobuff();
+	if (did_save_redobuff)
+	    restoreRedobuff();
 	did_filetype = FALSE;
 	while (au_pending_free_buf != NULL)
 	{
@@ -10166,7 +10195,7 @@ file_pat_to_reg_pat(pat, pat_end, allow_dirs, no_bslash)
 #endif
 	    default:
 		size++;
-# ifdef  FEAT_MBYTE
+# ifdef FEAT_MBYTE
 		if (enc_dbcs != 0 && (*mb_ptr2len)(p) > 1)
 		{
 		    ++p;
@@ -10188,7 +10217,7 @@ file_pat_to_reg_pat(pat, pat_end, allow_dirs, no_bslash)
     else
 	reg_pat[i++] = '^';
     endp = pat_end - 1;
-    if (*endp == '*')
+    if (endp >= pat && *endp == '*')
     {
 	while (endp - pat > 0 && *endp == '*')
 	    endp--;
@@ -10255,7 +10284,7 @@ file_pat_to_reg_pat(pat, pat_end, allow_dirs, no_bslash)
 		    reg_pat[i++] = '?';
 		else
 		    if (*p == ',' || *p == '%' || *p == '#'
-				       || *p == ' ' || *p == '{' || *p == '}')
+			       || vim_isspace(*p) || *p == '{' || *p == '}')
 			reg_pat[i++] = *p;
 		    else if (*p == '\\' && p[1] == '\\' && p[2] == '{')
 		    {

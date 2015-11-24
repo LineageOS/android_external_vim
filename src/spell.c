@@ -311,9 +311,10 @@
 # include <time.h>	/* for time_t */
 #endif
 
-#define MAXWLEN 250		/* Assume max. word len is this many bytes.
+#define MAXWLEN 254		/* Assume max. word len is this many bytes.
 				   Some places assume a word length fits in a
-				   byte, thus it can't be above 255. */
+				   byte, thus it can't be above 255.
+				   Must be >= PFD_NOTSPECIAL. */
 
 /* Type used for indexes in the word tree need to be at least 4 bytes.  If int
  * is 8 bytes we could use something smaller, but what? */
@@ -9425,7 +9426,7 @@ spell_add_word(word, len, bad, idx, undo)
     {
 	if (int_wordlist == NULL)
 	{
-	    int_wordlist = vim_tempname('s');
+	    int_wordlist = vim_tempname('s', FALSE);
 	    if (int_wordlist == NULL)
 		return;
 	}
@@ -10200,7 +10201,7 @@ spell_suggest(count)
 	 * a multi-line selection. */
 	if (curwin->w_cursor.lnum != VIsual.lnum)
 	{
-	    vim_beep();
+	    vim_beep(BO_SPELL);
 	    return;
 	}
 	badlen = (int)curwin->w_cursor.col - (int)VIsual.col;

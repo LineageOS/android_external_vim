@@ -1150,7 +1150,7 @@ do_buffer(action, start, dir, count, forceit)
 	{
 	    /* don't warn when deleting */
 	    if (!unload)
-		EMSGN(_("E86: Buffer %ld does not exist"), count);
+		EMSGN(_(e_nobufnr), count);
 	}
 	else if (dir == FORWARD)
 	    EMSG(_("E87: Cannot go beyond last buffer"));
@@ -1794,7 +1794,6 @@ buflist_new(ffname, sfname, lnum, flags)
 	if (aborting())		/* autocmds may abort script processing */
 	    return NULL;
 #endif
-	/* buf->b_nwindows = 0; why was this here? */
 	free_buffer_stuff(buf, FALSE);	/* delete local variables et al. */
 
 	/* Init the options. */
@@ -1872,6 +1871,9 @@ buflist_new(ffname, sfname, lnum, flags)
 #ifdef FEAT_AUTOCMD
     if (!(flags & BLN_DUMMY))
     {
+	/* Tricky: these autocommands may change the buffer list.  They could
+	 * also split the window with re-using the one empty buffer. This may
+	 * result in unexpectedly losing the empty buffer. */
 	apply_autocmds(EVENT_BUFNEW, NULL, NULL, FALSE, buf);
 	if (!buf_valid(buf))
 	    return NULL;
@@ -2069,17 +2071,21 @@ buflist_getfile(n, lnum, options, forceit)
 	 * "buf" if one exists */
 	if (swb_flags & SWB_USEOPEN)
 	    wp = buf_jump_open_win(buf);
+
 	/* If 'switchbuf' contains "usetab": jump to first window in any tab
 	 * page containing "buf" if one exists */
 	if (wp == NULL && (swb_flags & SWB_USETAB))
 	    wp = buf_jump_open_tab(buf);
-	/* If 'switchbuf' contains "split" or "newtab" and the current buffer
-	 * isn't empty: open new window */
-	if (wp == NULL && (swb_flags & (SWB_SPLIT | SWB_NEWTAB)) && !bufempty())
+
+	/* If 'switchbuf' contains "split", "vsplit" or "newtab" and the
+	 * current buffer isn't empty: open new tab or window */
+	if (wp == NULL && (swb_flags & (SWB_VSPLIT | SWB_SPLIT | SWB_NEWTAB))
+							       && !bufempty())
 	{
-	    if (swb_flags & SWB_NEWTAB)		/* Open in a new tab */
+	    if (swb_flags & SWB_NEWTAB)
 		tabpage_new();
-	    else if (win_split(0, 0) == FAIL)	/* Open in a new window */
+	    else if (win_split(0, (swb_flags & SWB_VSPLIT) ? WSP_VERT : 0)
+								      == FAIL)
 		return FAIL;
 	    RESET_BINDING(curwin);
 	}
@@ -2754,7 +2760,20 @@ buflist_list(eap)
     for (buf = firstbuf; buf != NULL && !got_int; buf = buf->b_next)
     {
 	/* skip unlisted buffers, unless ! was used */
-	if (!buf->b_p_bl && !eap->forceit)
+	if ((!buf->b_p_bl && !eap->forceit && !vim_strchr(eap->arg, 'u'))
+		|| (vim_strchr(eap->arg, 'u') && buf->b_p_bl)
+		|| (vim_strchr(eap->arg, '+')
+			&& ((buf->b_flags & BF_READERR) || !bufIsChanged(buf)))
+		|| (vim_strchr(eap->arg, 'a')
+			 && (buf->b_ml.ml_mfp == NULL || buf->b_nwindows == 0))
+		|| (vim_strchr(eap->arg, 'h')
+			 && (buf->b_ml.ml_mfp == NULL || buf->b_nwindows != 0))
+		|| (vim_strchr(eap->arg, '-') && buf->b_p_ma)
+		|| (vim_strchr(eap->arg, '=') && !buf->b_p_ro)
+		|| (vim_strchr(eap->arg, 'x') && !(buf->b_flags & BF_READERR))
+		|| (vim_strchr(eap->arg, '%') && buf != curbuf)
+		|| (vim_strchr(eap->arg, '#')
+		      && (buf == curbuf || curwin->w_alt_fnum != buf->b_fnum)))
 	    continue;
 	msg_putchar('\n');
 	if (buf_spname(buf) != NULL)
@@ -4414,6 +4433,10 @@ get_rel_pos(wp, buf, buflen)
     above = wp->w_topline - 1;
 #ifdef FEAT_DIFF
     above += diff_check_fill(wp, wp->w_topline) - wp->w_topfill;
+    if (wp->w_topline == 1 && wp->w_topfill >= 1)
+	above = 0;  /* All buffer lines are displayed and there is an
+		     * indication of filler lines, that can be considered
+		     * seeing all lines. */
 #endif
     below = wp->w_buffer->b_ml.ml_line_count - wp->w_botline + 1;
     if (below <= 0)
@@ -5471,6 +5494,10 @@ insert_sign(buf, prev, next, id, lnum, typenr)
 
 	    /* first sign in signlist */
 	    buf->b_signlist = newsign;
+#ifdef FEAT_NETBEANS_INTG
+	    if (netbeans_active())
+		buf->b_has_sign_column = TRUE;
+#endif
 	}
 	else
 	    prev->next = newsign;

@@ -1,7 +1,7 @@
 README.txt for version 7.4 of Vim: Vi IMproved.
 
 
-WHAT IS VIM
+WHAT IS VIM?
 
 Vim is an almost compatible version of the UNIX editor Vi.  Many new features
 have been added: multi-level undo, syntax highlighting, command line history,
@@ -20,6 +20,10 @@ UNIX.  Porting to other systems should not be very difficult.
 
 
 DISTRIBUTION
+
+You can often use your favorite package manager to install Vim.  On Mac and
+Linux a small version of Vim is pre-installed, you still need to install Vim
+if you want more features.
 
 There are separate distributions for Unix, PC, Amiga and some other systems.
 This README.txt file comes with the runtime archive.  It includes the
@@ -94,8 +98,9 @@ INFORMATION
 The latest news about Vim can be found on the Vim home page:
 	http://www.vim.org/
 
-If you have problems, have a look at the Vim FAQ:
-	http://vimdoc.sf.net/vimfaq.html
+If you have problems, have a look at the Vim documentation or tips:
+	http://www.vim.org/docs.php
+	http://vim.wikia.com/wiki/Vim_Tips_Wiki
 
 If you still have problems or any other questions, use one of the mailing
 lists to discuss them with Vim users and developers:
@@ -110,6 +115,3 @@ MAIN AUTHOR
 Send any other comments, patches, flowers and suggestions to:
 
 	Bram Moolenaar		E-mail:	Bram@vim.org
-	Finsterruetihof 1
-	8134 Adliswil
-	Switzerland

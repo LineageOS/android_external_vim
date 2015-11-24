@@ -1108,7 +1108,7 @@ ex_profile(eap)
     if (len == 5 && STRNCMP(eap->arg, "start", 5) == 0 && *e != NUL)
     {
 	vim_free(profile_fname);
-	profile_fname = vim_strsave(e);
+	profile_fname = expand_env_save_opt(e, TRUE);
 	do_profiling = PROF_YES;
 	profile_zero(&prof_wait_time);
 	set_vim_var_nr(VV_PROFILING, 1L);
@@ -2429,7 +2429,7 @@ ex_argdelete(eap)
 }
 
 /*
- * ":argdo", ":windo", ":bufdo", ":tabdo"
+ * ":argdo", ":windo", ":bufdo", ":tabdo", ":cdo", ":ldo", ":cfdo" and ":lfdo"
  */
     void
 ex_listdo(eap)
@@ -2440,12 +2440,16 @@ ex_listdo(eap)
     win_T	*wp;
     tabpage_T	*tp;
 #endif
-    buf_T	*buf;
+    buf_T	*buf = curbuf;
     int		next_fnum = 0;
 #if defined(FEAT_AUTOCMD) && defined(FEAT_SYN_HL)
     char_u	*save_ei = NULL;
 #endif
     char_u	*p_shm_save;
+#ifdef FEAT_QUICKFIX
+    int		qf_size = 0;
+    int		qf_idx;
+#endif
 
 #ifndef FEAT_WINDOWS
     if (eap->cmdidx == CMD_windo)
@@ -2493,20 +2497,47 @@ ex_listdo(eap)
 	    case CMD_argdo:
 		i = eap->line1 - 1;
 		break;
-	    case CMD_bufdo:
-		i = eap->line1;
-		break;
 	    default:
 		break;
 	}
 	/* set pcmark now */
 	if (eap->cmdidx == CMD_bufdo)
-	    goto_buffer(eap, DOBUF_FIRST, FORWARD, i);
+	{
+	    /* Advance to the first listed buffer after "eap->line1". */
+	    for (buf = firstbuf; buf != NULL && (buf->b_fnum < eap->line1
+					  || !buf->b_p_bl); buf = buf->b_next)
+		if (buf->b_fnum > eap->line2)
+		{
+		    buf = NULL;
+		    break;
+		}
+	    if (buf != NULL)
+		goto_buffer(eap, DOBUF_FIRST, FORWARD, buf->b_fnum);
+	}
+#ifdef FEAT_QUICKFIX
+	else if (eap->cmdidx == CMD_cdo || eap->cmdidx == CMD_ldo
+		|| eap->cmdidx == CMD_cfdo || eap->cmdidx == CMD_lfdo)
+	{
+	    qf_size = qf_get_size(eap);
+	    if (qf_size <= 0 || eap->line1 > qf_size)
+		buf = NULL;
+	    else
+	    {
+		ex_cc(eap);
+
+		buf = curbuf;
+		i = eap->line1 - 1;
+		if (eap->addr_count <= 0)
+		    /* default is all the quickfix/location list entries */
+		    eap->line2 = qf_size;
+	    }
+	}
+#endif
 	else
 	    setpcmark();
 	listcmd_busy = TRUE;	    /* avoids setting pcmark below */
 
-	while (!got_int)
+	while (!got_int && buf != NULL)
 	{
 	    if (eap->cmdidx == CMD_argdo)
 	    {
@@ -2587,10 +2618,27 @@ ex_listdo(eap)
 		set_option_value((char_u *)"shm", 0L, p_shm_save, 0);
 		vim_free(p_shm_save);
 
-		/* If autocommands took us elsewhere, quit here */
+		/* If autocommands took us elsewhere, quit here. */
 		if (curbuf->b_fnum != next_fnum)
 		    break;
 	    }
+
+#ifdef FEAT_QUICKFIX
+	    if (eap->cmdidx == CMD_cdo || eap->cmdidx == CMD_ldo
+		    || eap->cmdidx == CMD_cfdo || eap->cmdidx == CMD_lfdo)
+	    {
+		if (i >= qf_size || i >= eap->line2)
+		    break;
+
+		qf_idx = qf_get_cur_idx(eap);
+
+		ex_cnext(eap);
+
+		/* If jumping to the next quickfix entry fails, quit here */
+		if (qf_get_cur_idx(eap) == qf_idx)
+		    break;
+	    }
+#endif
 
 	    if (eap->cmdidx == CMD_windo)
 	    {
@@ -3043,7 +3091,7 @@ fopen_noinh_readbin(filename)
     {
 	int fdflags = fcntl(fd_tmp, F_GETFD);
 	if (fdflags >= 0 && (fdflags & FD_CLOEXEC) == 0)
-	    fcntl(fd_tmp, F_SETFD, fdflags | FD_CLOEXEC);
+	    (void)fcntl(fd_tmp, F_SETFD, fdflags | FD_CLOEXEC);
     }
 # endif
 
@@ -3833,7 +3881,7 @@ script_line_start()
     {
 	/* Grow the array before starting the timer, so that the time spent
 	 * here isn't counted. */
-	ga_grow(&si->sn_prl_ga, (int)(sourcing_lnum - si->sn_prl_ga.ga_len));
+	(void)ga_grow(&si->sn_prl_ga, (int)(sourcing_lnum - si->sn_prl_ga.ga_len));
 	si->sn_prl_idx = sourcing_lnum - 1;
 	while (si->sn_prl_ga.ga_len <= si->sn_prl_idx
 		&& si->sn_prl_ga.ga_len < si->sn_prl_ga.ga_maxlen)

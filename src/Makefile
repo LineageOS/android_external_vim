@@ -616,6 +616,14 @@ LINT_OPTIONS = -beprxzF
 #PROFILE_LIBS = -pg
 #PROFILE_LIBS = -pg -lc
 
+# Uncomment one of the next two lines to compile Vim with the
+# address sanitizer or with the undefined sanitizer.  Works with gcc and
+# clang.  May make Vim twice as slow.  Errors reported on stderr.
+# More at: https://code.google.com/p/address-sanitizer/
+#SANITIZER_CFLAGS = -g -O0 -fsanitize=address -fno-omit-frame-pointer
+#SANITIZER_CFLAGS = -g -O0 -fsanitize=undefined -fno-omit-frame-pointer
+SANITIZER_LIBS = $(SANITIZER_CFLAGS)
+
 # MEMORY LEAK DETECTION
 # Requires installing the ccmalloc library.
 # Configuration is in the .ccmalloc or ~/.ccmalloc file.
@@ -1342,7 +1350,7 @@ SHELL = /bin/sh
 PRE_DEFS = -Iproto $(DEFS) $(GUI_DEFS) $(GUI_IPATH) $(CPPFLAGS) $(EXTRA_IPATHS)
 POST_DEFS = $(X_CFLAGS) $(MZSCHEME_CFLAGS) $(TCL_CFLAGS) $(EXTRA_DEFS)
 
-ALL_CFLAGS = $(PRE_DEFS) $(CFLAGS) $(PROFILE_CFLAGS) $(LEAK_CFLAGS) $(POST_DEFS)
+ALL_CFLAGS = $(PRE_DEFS) $(CFLAGS) $(PROFILE_CFLAGS) $(SANITIZER_CFLAGS) $(LEAK_CFLAGS) $(POST_DEFS)
 
 # Exclude $CFLAGS for osdef.sh, for Mac 10.4 some flags don't work together
 # with "-E".
@@ -1374,6 +1382,7 @@ ALL_LIBS = \
 	   $(TCL_LIBS) \
 	   $(RUBY_LIBS) \
 	   $(PROFILE_LIBS) \
+	   $(SANITIZER_LIBS) \
 	   $(LEAK_LIBS)
 
 # abbreviations
@@ -1891,20 +1900,37 @@ unittest unittests: $(UNITTEST_TARGETS)
 
 # Run individual test, assuming that Vim was already compiled.
 test1 \
+	test_argument_0count \
 	test_argument_count \
+	test_autocmd_option \
 	test_autoformat_join \
 	test_breakindent \
+	test_cdo \
 	test_changelist \
+	test_charsearch \
 	test_close_count \
 	test_command_count \
+	test_comparators \
+	test_erasebackword \
 	test_eval \
+	test_fixeol \
+	test_increment \
 	test_insertcount \
+	test_listchars \
 	test_listlbr \
 	test_listlbr_utf8 \
 	test_mapping \
+	test_marks \
+	test_match_conceal \
+	test_nested_function \
 	test_options \
+	test_perl \
 	test_qf_title \
+	test_ruby \
+	test_search_mbyte \
+	test_set \
 	test_signs \
+	test_textobjects \
 	test_utf8 \
 	test_writefile \
 	test2 test3 test4 test5 test6 test7 test8 test9 \
@@ -2187,6 +2213,7 @@ install-languages: languages $(DEST_LANG) $(DEST_KMAP)
 ICON48PATH = $(DESTDIR)$(DATADIR)/icons/hicolor/48x48/apps
 ICON32PATH = $(DESTDIR)$(DATADIR)/icons/locolor/32x32/apps
 ICON16PATH = $(DESTDIR)$(DATADIR)/icons/locolor/16x16/apps
+DESKTOPPATH = $(DESTDIR)$(DATADIR)/applications
 KDEPATH = $(HOME)/.kde/share/icons
 install-icons:
 	if test -d $(ICON48PATH) -a -w $(ICON48PATH) \
@@ -2201,7 +2228,11 @@ install-icons:
 		-a ! -f $(ICON16PATH)/gvim.png; then \
 	   $(INSTALL_DATA) $(SCRIPTSOURCE)/vim16x16.png $(ICON16PATH)/gvim.png; \
 	fi
-
+	if test -d $(DESKTOPPATH) -a -w $(DESKTOPPATH); then \
+	   $(INSTALL_DATA) $(SCRIPTSOURCE)/vim.desktop \
+		$(SCRIPTSOURCE)/gvim.desktop \
+		$(DESKTOPPATH); \
+	fi
 
 $(HELPSOURCE)/vim.1 $(MACROSOURCE) $(TOOLSSOURCE):
 	@echo Runtime files not found.

@@ -135,7 +135,7 @@ static int	getargopt __ARGS((exarg_T *eap));
 #endif
 
 static int	check_more __ARGS((int, int));
-static linenr_T get_address __ARGS((char_u **, int addr_type, int skip, int to_other_file));
+static linenr_T get_address __ARGS((exarg_T *, char_u **, int addr_type, int skip, int to_other_file));
 static void	get_flags __ARGS((exarg_T *eap));
 #if !defined(FEAT_PERL) \
 	|| !defined(FEAT_PYTHON) || !defined(FEAT_PYTHON3) \
@@ -871,7 +871,7 @@ do_cmdline(cmdline, fgetline, cookie, flags)
     if (flags & DOCMD_EXCRESET)
 	save_dbg_stuff(&debug_saved);
     else
-	vim_memset(&debug_saved, 0, 1);
+	vim_memset(&debug_saved, 0, sizeof(debug_saved));
 
     initial_trylevel = trylevel;
 
@@ -2130,22 +2130,23 @@ do_one_cmd(cmdlinep, sourcing,
  * is equal to the lower.
  */
 
-    if (ea.cmdidx != CMD_SIZE
-#ifdef FEAT_USR_CMDS
-	&& ea.cmdidx != CMD_USER
-	&& ea.cmdidx != CMD_USER_BUF
-#endif
-       )
-	ea.addr_type = cmdnames[(int)ea.cmdidx].cmd_addr_type;
-    else
-#ifdef FEAT_USR_CMDS
-	if (ea.cmdidx != CMD_USER && ea.cmdidx != CMD_USER_BUF)
-#endif
-	ea.addr_type = ADDR_LINES;
     /* ea.addr_type for user commands is set by find_ucmd */
-    ea.cmd = cmd;
+    if (!IS_USER_CMDIDX(ea.cmdidx))
+    {
+	if (ea.cmdidx != CMD_SIZE)
+	    ea.addr_type = cmdnames[(int)ea.cmdidx].cmd_addr_type;
+	else
+	    ea.addr_type = ADDR_LINES;
+
+#ifdef FEAT_WINDOWS
+	/* :wincmd range depends on the argument. */
+	if (ea.cmdidx == CMD_wincmd && p != NULL)
+	    get_wincmd_addr_type(skipwhite(p), &ea);
+#endif
+    }
 
     /* repeat for all ',' or ';' separated addresses */
+    ea.cmd = cmd;
     for (;;)
     {
 	ea.line1 = ea.line2;
@@ -2172,16 +2173,20 @@ do_one_cmd(cmdlinep, sourcing,
 		lnum = CURRENT_TAB_NR;
 		ea.line2 = lnum;
 		break;
+#ifdef FEAT_QUICKFIX
+	    case ADDR_QUICKFIX:
+		ea.line2 = qf_get_cur_valid_idx(&ea);
+		break;
+#endif
 	}
 	ea.cmd = skipwhite(ea.cmd);
-	lnum = get_address(&ea.cmd, ea.addr_type, ea.skip, ea.addr_count == 0);
+	lnum = get_address(&ea, &ea.cmd, ea.addr_type, ea.skip, ea.addr_count == 0);
 	if (ea.cmd == NULL)		    /* error detected */
 	    goto doend;
 	if (lnum == MAXLNUM)
 	{
 	    if (*ea.cmd == '%')		    /* '%' - all lines */
 	    {
-		buf_T	*buf;
 		++ea.cmd;
 		switch (ea.addr_type)
 		{
@@ -2190,15 +2195,20 @@ do_one_cmd(cmdlinep, sourcing,
 			ea.line2 = curbuf->b_ml.ml_line_count;
 			break;
 		    case ADDR_LOADED_BUFFERS:
-			buf = firstbuf;
-			while (buf->b_next != NULL && buf->b_ml.ml_mfp == NULL)
-			    buf = buf->b_next;
-			ea.line1 = buf->b_fnum;
-			buf = lastbuf;
-			while (buf->b_prev != NULL && buf->b_ml.ml_mfp == NULL)
-			    buf = buf->b_prev;
-			ea.line2 = buf->b_fnum;
-			break;
+			{
+			    buf_T	*buf = firstbuf;
+
+			    while (buf->b_next != NULL
+						  && buf->b_ml.ml_mfp == NULL)
+				buf = buf->b_next;
+			    ea.line1 = buf->b_fnum;
+			    buf = lastbuf;
+			    while (buf->b_prev != NULL
+						  && buf->b_ml.ml_mfp == NULL)
+				buf = buf->b_prev;
+			    ea.line2 = buf->b_fnum;
+			    break;
+			}
 		    case ADDR_BUFFERS:
 			ea.line1 = firstbuf->b_fnum;
 			ea.line2 = lastbuf->b_fnum;
@@ -2228,6 +2238,14 @@ do_one_cmd(cmdlinep, sourcing,
 			    ea.line2 = ARGCOUNT;
 			}
 			break;
+#ifdef FEAT_QUICKFIX
+		    case ADDR_QUICKFIX:
+			ea.line1 = 1;
+			ea.line2 = qf_get_size(&ea);
+			if (ea.line2 == 0)
+			    ea.line2 = 1;
+			break;
+#endif
 		}
 		++ea.addr_count;
 	    }
@@ -2360,8 +2378,9 @@ do_one_cmd(cmdlinep, sourcing,
 	p = vim_strnsave(ea.cmd, (int)(p - ea.cmd));
 	ret = apply_autocmds(EVENT_CMDUNDEFINED, p, p, TRUE, NULL);
 	vim_free(p);
-	if (ret && !aborting())
-	    p = find_command(&ea, NULL);
+	/* If the autocommands did something and didn't cause an error, try
+	 * finding the command again. */
+	p = (ret && !aborting()) ? find_command(&ea, NULL) : NULL;
     }
 #endif
 
@@ -2687,6 +2706,13 @@ do_one_cmd(cmdlinep, sourcing,
 		else
 		    ea.line2 = ARGCOUNT;
 		break;
+#ifdef FEAT_QUICKFIX
+	    case ADDR_QUICKFIX:
+		ea.line2 = qf_get_size(&ea);
+		if (ea.line2 == 0)
+		    ea.line2 = 1;
+		break;
+#endif
 	}
     }
 
@@ -3123,8 +3149,8 @@ find_command(eap, full)
 	++p;
     }
     else if (p[0] == 's'
-	    && ((p[1] == 'c' && p[2] != 's' && p[2] != 'r'
-						&& p[3] != 'i' && p[4] != 'p')
+	    && ((p[1] == 'c' && (p[2] == NUL || (p[2] != 's' && p[2] != 'r'
+			&& (p[3] == NUL || (p[3] != 'i' && p[4] != 'p')))))
 		|| p[1] == 'g'
 		|| (p[1] == 'i' && p[2] != 'm' && p[2] != 'l' && p[2] != 'g')
 		|| p[1] == 'I'
@@ -3491,9 +3517,10 @@ set_one_cmd_context(xp, buff)
 	p = cmd;
 	while (ASCII_ISALPHA(*p) || *p == '*')    /* Allow * wild card */
 	    ++p;
-	/* check for non-alpha command */
-	if (p == cmd && vim_strchr((char_u *)"@*!=><&~#", *p) != NULL)
-	    ++p;
+	/* a user command may contain digits */
+	if (ASCII_ISUPPER(cmd[0]))
+	    while (ASCII_ISALNUM(*p) || *p == '*')
+		++p;
 	/* for python 3.x: ":py3*" commands completion */
 	if (cmd[0] == 'p' && cmd[1] == 'y' && p == cmd + 2 && *p == '3')
 	{
@@ -3501,6 +3528,9 @@ set_one_cmd_context(xp, buff)
 	    while (ASCII_ISALPHA(*p) || *p == '*')
 		++p;
 	}
+	/* check for non-alpha command */
+	if (p == cmd && vim_strchr((char_u *)"@*!=><&~#", *p) != NULL)
+	    ++p;
 	len = (int)(p - cmd);
 
 	if (len == 0)
@@ -3833,6 +3863,8 @@ set_one_cmd_context(xp, buff)
 	case CMD_botright:
 	case CMD_browse:
 	case CMD_bufdo:
+	case CMD_cdo:
+	case CMD_cfdo:
 	case CMD_confirm:
 	case CMD_debug:
 	case CMD_folddoclosed:
@@ -3842,7 +3874,9 @@ set_one_cmd_context(xp, buff)
 	case CMD_keepjumps:
 	case CMD_keepmarks:
 	case CMD_keeppatterns:
+	case CMD_ldo:
 	case CMD_leftabove:
+	case CMD_lfdo:
 	case CMD_lockmarks:
 	case CMD_noautocmd:
 	case CMD_noswapfile:
@@ -4315,7 +4349,8 @@ skip_range(cmd, ctx)
  * Return MAXLNUM when no Ex address was found.
  */
     static linenr_T
-get_address(ptr, addr_type, skip, to_other_file)
+get_address(eap, ptr, addr_type, skip, to_other_file)
+    exarg_T	*eap UNUSED;
     char_u	**ptr;
     int		addr_type;  /* flag: one of ADDR_LINES, ... */
     int		skip;	    /* only skip the address, don't use it */
@@ -4356,6 +4391,11 @@ get_address(ptr, addr_type, skip, to_other_file)
 		    case ADDR_TABS:
 			lnum = CURRENT_TAB_NR;
 			break;
+#ifdef FEAT_QUICKFIX
+		    case ADDR_QUICKFIX:
+			lnum = qf_get_cur_valid_idx(eap);
+			break;
+#endif
 		}
 		break;
 
@@ -4388,6 +4428,13 @@ get_address(ptr, addr_type, skip, to_other_file)
 		    case ADDR_TABS:
 			lnum = LAST_TAB_NR;
 			break;
+#ifdef FEAT_QUICKFIX
+		    case ADDR_QUICKFIX:
+			lnum = qf_get_size(eap);
+			if (lnum == 0)
+			    lnum = 1;
+			break;
+#endif
 		}
 		break;
 
@@ -4400,6 +4447,7 @@ get_address(ptr, addr_type, skip, to_other_file)
 		if (addr_type != ADDR_LINES)
 		{
 		    EMSG(_(e_invaddr));
+		    cmd = NULL;
 		    goto error;
 		}
 		if (skip)
@@ -4431,6 +4479,7 @@ get_address(ptr, addr_type, skip, to_other_file)
 		if (addr_type != ADDR_LINES)
 		{
 		    EMSG(_(e_invaddr));
+		    cmd = NULL;
 		    goto error;
 		}
 		if (skip)	/* skip "/pat/" */
@@ -4479,6 +4528,7 @@ get_address(ptr, addr_type, skip, to_other_file)
 		if (addr_type != ADDR_LINES)
 		{
 		    EMSG(_(e_invaddr));
+		    cmd = NULL;
 		    goto error;
 		}
 		if (*cmd == '&')
@@ -4511,6 +4561,9 @@ get_address(ptr, addr_type, skip, to_other_file)
 			pos.col = MAXCOL;
 		    else
 			pos.col = 0;
+#ifdef FEAT_VIRTUALEDIT
+		    pos.coladd = 0;
+#endif
 		    if (searchit(curwin, curbuf, &pos,
 				*cmd == '?' ? BACKWARD : FORWARD,
 				(char_u *)"", 1L, SEARCH_MSG,
@@ -4557,6 +4610,11 @@ get_address(ptr, addr_type, skip, to_other_file)
 		    case ADDR_TABS:
 			lnum = CURRENT_TAB_NR;
 			break;
+#ifdef FEAT_QUICKFIX
+		    case ADDR_QUICKFIX:
+			lnum = qf_get_cur_valid_idx(eap);
+			break;
+#endif
 		}
 	    }
 
@@ -4570,7 +4628,8 @@ get_address(ptr, addr_type, skip, to_other_file)
 		n = getdigits(&cmd);
 	    if (addr_type == ADDR_LOADED_BUFFERS
 		    || addr_type == ADDR_BUFFERS)
-		lnum = compute_buffer_local_count(addr_type, lnum, (i == '-') ? -1 * n : n);
+		lnum = compute_buffer_local_count(
+				    addr_type, lnum, (i == '-') ? -1 * n : n);
 	    else if (i == '-')
 		lnum -= n;
 	    else
@@ -4657,7 +4716,8 @@ invalid_range(eap)
 		    return (char_u *)_(e_invrange);
 		break;
 	    case ADDR_ARGUMENTS:
-		if (eap->line2 > ARGCOUNT + (!ARGCOUNT))    // add 1 if ARCOUNT is 0
+		/* add 1 if ARGCOUNT is 0 */
+		if (eap->line2 > ARGCOUNT + (!ARGCOUNT))
 		    return (char_u *)_(e_invrange);
 		break;
 	    case ADDR_BUFFERS:
@@ -4693,6 +4753,12 @@ invalid_range(eap)
 		if (eap->line2 > LAST_TAB_NR)
 		    return (char_u *)_(e_invrange);
 		break;
+#ifdef FEAT_QUICKFIX
+	    case ADDR_QUICKFIX:
+		if (eap->line2 != 1 && eap->line2 > qf_get_size(eap))
+		    return (char_u *)_(e_invrange);
+		break;
+#endif
 	}
     }
     return NULL;
@@ -5803,6 +5869,7 @@ static struct
     {ADDR_TABS, "tabs"},
     {ADDR_BUFFERS, "buffers"},
     {ADDR_WINDOWS, "windows"},
+    {ADDR_QUICKFIX, "quickfix"},
     {-1, NULL}
 };
 #endif
@@ -7082,7 +7149,14 @@ ex_quit(eap)
     else
     {
 #ifdef FEAT_WINDOWS
-	if (only_one_window())	    /* quit last window */
+	/* quit last window
+	 * Note: only_one_window() returns true, even so a help window is
+	 * still open. In that case only quit, if no address has been
+	 * specified. Example:
+	 * :h|wincmd w|1q     - don't quit
+	 * :h|wincmd w|q      - quit
+	 */
+	if (only_one_window() && (firstwin == lastwin || eap->addr_count == 0))
 #endif
 	    getout(0);
 #ifdef FEAT_WINDOWS
@@ -8135,7 +8209,7 @@ ex_tabnext(eap)
 ex_tabmove(eap)
     exarg_T	*eap;
 {
-    int tab_number = 9999;
+    int tab_number;
 
     if (eap->arg && *eap->arg != NUL)
     {
@@ -8156,19 +8230,38 @@ ex_tabmove(eap)
 	else
 	    p = eap->arg;
 
-	if (p == skipdigits(p))
+	if (relative == 0)
 	{
-	    /* No numbers as argument. */
-	    eap->errmsg = e_invarg;
-	    return;
+	    if (STRCMP(p, "$") == 0)
+		tab_number = LAST_TAB_NR;
+	    else if (p == skipdigits(p))
+	    {
+		/* No numbers as argument. */
+		eap->errmsg = e_invarg;
+		return;
+	    }
+	    else
+		tab_number = getdigits(&p);
 	}
-
-	tab_number = getdigits(&p);
-	if (relative != 0)
-	    tab_number = tab_number * relative + tabpage_index(curtab) - 1;;
+	else
+	{
+	    if (*p != NUL)
+		tab_number = getdigits(&p);
+	    else
+		tab_number = 1;
+	    tab_number = tab_number * relative + tabpage_index(curtab);
+	    if (relative == -1)
+		--tab_number;
+	}
     }
     else if (eap->addr_count != 0)
+    {
 	tab_number = eap->line2;
+	if (**eap->cmdlinep == '-')
+	    --tab_number;
+    }
+    else
+	tab_number = LAST_TAB_NR;
 
     tabpage_move(tab_number);
 }
@@ -8944,11 +9037,11 @@ do_sleep(msec)
     {
 	ui_delay(msec - done > 1000L ? 1000L : msec - done, TRUE);
 	ui_breakcheck();
-#ifdef FEAT_NETBEANS_INTG
-	/* Process the netbeans messages that may have been received in the
-	 * call to ui_breakcheck() when the GUI is in use. This may occur when
-	 * running a test case. */
-	netbeans_parse_messages();
+#ifdef MESSAGE_QUEUE
+	/* Process the netbeans and clientserver messages that may have been
+	 * received in the call to ui_breakcheck() when the GUI is in use. This
+	 * may occur when running a test case. */
+	parse_queued_messages();
 #endif
     }
 }
@@ -9184,7 +9277,7 @@ ex_copymove(eap)
 {
     long	n;
 
-    n = get_address(&eap->arg, eap->addr_type, FALSE, FALSE);
+    n = get_address(eap, &eap->arg, eap->addr_type, FALSE, FALSE);
     if (eap->arg == NULL)	    /* error detected */
     {
 	eap->nextcmd = NULL;
@@ -10717,7 +10810,11 @@ arg_all()
 		}
 		for ( ; *p != NUL; ++p)
 		{
-		    if (*p == ' ' || *p == '\\')
+		    if (*p == ' '
+#ifndef BACKSLASH_IN_FILENAME
+			    || *p == '\\'
+#endif
+			    )
 		    {
 			/* insert a backslash */
 			if (retval != NULL)
@@ -10835,7 +10932,6 @@ makeopens(fd, dirnow)
     buf_T	*buf;
     int		only_save_windows = TRUE;
     int		nr;
-    int		cnr = 1;
     int		restore_size = TRUE;
     win_T	*wp;
     char_u	*sname;
@@ -10973,7 +11069,8 @@ makeopens(fd, dirnow)
     tab_topframe = topframe;
     for (tabnr = 1; ; ++tabnr)
     {
-	int  need_tabnew = FALSE;
+	int	need_tabnew = FALSE;
+	int	cnr = 1;
 
 	if ((ssop_flags & SSOP_TABPAGES))
 	{
@@ -12020,6 +12117,7 @@ ex_match(eap)
 	if (*p == NUL)
 	{
 	    /* There must be two arguments. */
+	    vim_free(g);
 	    EMSG2(_(e_invarg2), eap->arg);
 	    return;
 	}
@@ -12028,18 +12126,20 @@ ex_match(eap)
 	{
 	    if (*end != NUL && !ends_excmd(*skipwhite(end + 1)))
 	    {
+		vim_free(g);
 		eap->errmsg = e_trailing;
 		return;
 	    }
 	    if (*end != *p)
 	    {
+		vim_free(g);
 		EMSG2(_(e_invarg2), p);
 		return;
 	    }
 
 	    c = *end;
 	    *end = NUL;
-	    match_add(curwin, g, p + 1, 10, id, NULL);
+	    match_add(curwin, g, p + 1, 10, id, NULL, NULL);
 	    vim_free(g);
 	    *end = c;
 	}

@@ -250,7 +250,7 @@ getcmdline(firstc, count, indent)
     /* autoindent for :insert and :append */
     if (firstc <= 0)
     {
-	copy_spaces(ccline.cmdbuff, indent);
+	vim_memset(ccline.cmdbuff, ' ', indent);
 	ccline.cmdbuff[indent] = NUL;
 	ccline.cmdpos = indent;
 	ccline.cmdspos = indent;
@@ -900,7 +900,7 @@ getcmdline(firstc, count, indent)
 							       firstc != '@');
 		    }
 		    else
-			vim_beep();
+			vim_beep(BO_WILD);
 		}
 #ifdef FEAT_WILDMENU
 		else if (xpc.xp_numfiles == -1)
@@ -2245,6 +2245,9 @@ getexmodeline(promptc, cookie, indent)
     got_int = FALSE;
     while (!got_int)
     {
+	long    sw;
+	char_u *s;
+
 	if (ga_grow(&line_ga, 40) == FAIL)
 	    break;
 
@@ -2296,13 +2299,12 @@ getexmodeline(promptc, cookie, indent)
 		msg_col = startcol;
 		msg_clr_eos();
 		line_ga.ga_len = 0;
-		continue;
+		goto redraw;
 	    }
 
 	    if (c1 == Ctrl_T)
 	    {
-		long	    sw = get_sw_value(curbuf);
-
+		sw = get_sw_value(curbuf);
 		p = (char_u *)line_ga.ga_data;
 		p[line_ga.ga_len] = NUL;
 		indent = get_indent_str(p, 8, FALSE);
@@ -2310,9 +2312,9 @@ getexmodeline(promptc, cookie, indent)
 add_indent:
 		while (get_indent_str(p, 8, FALSE) < indent)
 		{
-		    char_u *s = skipwhite(p);
-
-		    ga_grow(&line_ga, 1);
+		    (void)ga_grow(&line_ga, 2);  /* one more for the NUL */
+		    p = (char_u *)line_ga.ga_data;
+		    s = skipwhite(p);
 		    mch_memmove(s + 1, s, line_ga.ga_len - (s - p) + 1);
 		    *s = ' ';
 		    ++line_ga.ga_len;
@@ -2361,13 +2363,15 @@ redraw:
 		{
 		    p[line_ga.ga_len] = NUL;
 		    indent = get_indent_str(p, 8, FALSE);
-		    --indent;
-		    indent -= indent % get_sw_value(curbuf);
+		    if (indent > 0)
+		    {
+			--indent;
+			indent -= indent % get_sw_value(curbuf);
+		    }
 		}
 		while (get_indent_str(p, 8, FALSE) > indent)
 		{
-		    char_u *s = skipwhite(p);
-
+		    s = skipwhite(p);
 		    mch_memmove(s - 1, s, line_ga.ga_len - (s - p) + 1);
 		    --line_ga.ga_len;
 		}
@@ -3687,29 +3691,47 @@ ExpandOne(xp, str, orig, options, mode)
     /* Find longest common part */
     if (mode == WILD_LONGEST && xp->xp_numfiles > 0)
     {
-	for (len = 0; xp->xp_files[0][len]; ++len)
+	int mb_len = 1;
+	int c0, ci;
+
+	for (len = 0; xp->xp_files[0][len]; len += mb_len)
 	{
-	    for (i = 0; i < xp->xp_numfiles; ++i)
+#ifdef FEAT_MBYTE
+	    if (has_mbyte)
 	    {
+		mb_len = (*mb_ptr2len)(&xp->xp_files[0][len]);
+		c0 =(* mb_ptr2char)(&xp->xp_files[0][len]);
+	    }
+	    else
+#endif
+		c0 = xp->xp_files[0][len];
+	    for (i = 1; i < xp->xp_numfiles; ++i)
+	    {
+#ifdef FEAT_MBYTE
+		if (has_mbyte)
+		    ci =(* mb_ptr2char)(&xp->xp_files[i][len]);
+		else
+#endif
+		    ci = xp->xp_files[i][len];
 		if (p_fic && (xp->xp_context == EXPAND_DIRECTORIES
 			|| xp->xp_context == EXPAND_FILES
 			|| xp->xp_context == EXPAND_SHELLCMD
 			|| xp->xp_context == EXPAND_BUFFERS))
 		{
-		    if (TOLOWER_LOC(xp->xp_files[i][len]) !=
-					    TOLOWER_LOC(xp->xp_files[0][len]))
+		    if (MB_TOLOWER(c0) != MB_TOLOWER(ci))
 			break;
 		}
-		else if (xp->xp_files[i][len] != xp->xp_files[0][len])
+		else if (c0 != ci)
 		    break;
 	    }
 	    if (i < xp->xp_numfiles)
 	    {
 		if (!(options & WILD_NO_BEEP))
-		    vim_beep();
+		    vim_beep(BO_WILD);
 		break;
 	    }
 	}
+
 	ss = alloc((unsigned)len + 1);
 	if (ss)
 	    vim_strncpy(ss, xp->xp_files[0], (size_t)len);
@@ -4563,6 +4585,8 @@ ExpandFromContext(xp, pat, num_file, file, options)
 	flags |= EW_KEEPALL;
     if (options & WILD_SILENT)
 	flags |= EW_SILENT;
+    if (options & WILD_ALLLINKS)
+	flags |= EW_ALLLINKS;
 
     if (xp->xp_context == EXPAND_FILES
 	    || xp->xp_context == EXPAND_DIRECTORIES
@@ -4883,6 +4907,7 @@ expand_shellcmd(filepat, num_file, file, flagsarg)
     char_u	*s, *e;
     int		flags = flagsarg;
     int		ret;
+    int		did_curdir = FALSE;
 
     if (buf == NULL)
 	return FAIL;
@@ -4894,7 +4919,7 @@ expand_shellcmd(filepat, num_file, file, flagsarg)
 	if (pat[i] == '\\' && pat[i + 1] == ' ')
 	    STRMOVE(pat + i, pat + i + 1);
 
-    flags |= EW_FILE | EW_EXEC;
+    flags |= EW_FILE | EW_EXEC | EW_SHELLCMD;
 
     /* For an absolute name we don't use $PATH. */
     if (mch_isFullName(pat))
@@ -4911,11 +4936,22 @@ expand_shellcmd(filepat, num_file, file, flagsarg)
 
     /*
      * Go over all directories in $PATH.  Expand matches in that directory and
-     * collect them in "ga".
+     * collect them in "ga".  When "." is not in $PATH also expand for the
+     * current directory, to find "subdir/cmd".
      */
     ga_init2(&ga, (int)sizeof(char *), 10);
-    for (s = path; *s != NUL; s = e)
+    for (s = path; ; s = e)
     {
+	if (*s == NUL)
+	{
+	    if (did_curdir)
+		break;
+	    /* Find directories in the current directory, path is empty. */
+	    did_curdir = TRUE;
+	}
+	else if (*s == '.')
+	    did_curdir = TRUE;
+
 	if (*s == ' ')
 	    ++s;	/* Skip space used for absolute path name. */
 
@@ -5899,7 +5935,7 @@ get_list_range(str, num1, num2)
     *str = skipwhite(*str);
     if (**str == '-' || vim_isdigit(**str))  /* parse "from" part of range */
     {
-	vim_str2nr(*str, NULL, &len, FALSE, FALSE, &num, NULL);
+	vim_str2nr(*str, NULL, &len, FALSE, FALSE, &num, NULL, 0);
 	*str += len;
 	*num1 = (int)num;
 	first = TRUE;
@@ -5908,7 +5944,7 @@ get_list_range(str, num1, num2)
     if (**str == ',')			/* parse "to" part of range */
     {
 	*str = skipwhite(*str + 1);
-	vim_str2nr(*str, NULL, &len, FALSE, FALSE, &num, NULL);
+	vim_str2nr(*str, NULL, &len, FALSE, FALSE, &num, NULL, 0);
 	if (len > 0)
 	{
 	    *num2 = (int)num;
@@ -6592,6 +6628,10 @@ ex_window()
 # ifdef FEAT_AUTOCMD
 	/* Don't execute autocommands while deleting the window. */
 	block_autocmds();
+# endif
+# ifdef FEAT_CONCEAL
+	/* Avoid command-line window first character being concealed. */
+	curwin->w_p_cole = 0;
 # endif
 	wp = curwin;
 	bp = curbuf;
