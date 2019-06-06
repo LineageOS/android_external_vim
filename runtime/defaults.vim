@@ -1,7 +1,7 @@
 " The default vimrc file.
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last change:	2016 Sep 02
+" Last change:	2019 Feb 18
 "
 " This is loaded if no vimrc file was found.
 " Except when Vim is run with "-u NONE" or "-C".
@@ -21,7 +21,16 @@ endif
 
 " Use Vim settings, rather than Vi settings (much better!).
 " This must be first, because it changes other options as a side effect.
-set nocompatible
+" Avoid side effects when it was already reset.
+if &compatible
+  set nocompatible
+endif
+
+" When the +eval feature is missing, the set command above will be skipped.
+" Use a trick to reset compatible only when the +eval feature is missing.
+silent! while 0
+  set nocompatible
+silent! endwhile
 
 " Allow backspacing over everything in insert mode.
 set backspace=indent,eol,start
@@ -81,8 +90,8 @@ if &t_Co > 2 || has("gui_running")
   let c_comment_strings=1
 endif
 
-" Only do this part when compiled with support for autocommands.
-if has("autocmd")
+" Only do this part when Vim was compiled with the +eval feature.
+if 1
 
   " Enable file type detection.
   " Use the default filetype settings, so that mail gets 'tw' set to 72,
@@ -97,16 +106,17 @@ if has("autocmd")
     au!
 
     " When editing a file, always jump to the last known cursor position.
-    " Don't do it when the position is invalid or when inside an event handler
-    " (happens when dropping a file on gvim).
+    " Don't do it when the position is invalid, when inside an event handler
+    " (happens when dropping a file on gvim) and for a commit message (it's
+    " likely a different one than last time).
     autocmd BufReadPost *
-      \ if line("'\"") >= 1 && line("'\"") <= line("$") |
-      \   exe "normal! g`\"" |
-      \ endif
+      \ if line("'\"") >= 1 && line("'\"") <= line("$") && &ft !~# 'commit'
+      \ |   exe "normal! g`\""
+      \ | endif
 
   augroup END
 
-endif " has("autocmd")
+endif
 
 " Convenient command to see the difference between the current buffer and the
 " file it was loaded from, thus the changes you made.

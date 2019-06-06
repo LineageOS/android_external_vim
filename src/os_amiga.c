@@ -152,7 +152,6 @@ mch_inchar(
 	 */
 	if (WaitForChar(raw_in, p_ut * 1000L) == 0)
 	{
-#ifdef FEAT_AUTOCMD
 	    if (trigger_cursorhold() && maxlen >= 3)
 	    {
 		buf[0] = K_SPECIAL;
@@ -160,25 +159,18 @@ mch_inchar(
 		buf[2] = (int)KE_CURSORHOLD;
 		return 3;
 	    }
-#endif
 	    before_blocking();
 	}
     }
 
     for (;;)	    /* repeat until we got a character */
     {
-#  ifdef FEAT_MBYTE
 	len = Read(raw_in, (char *)buf, (long)maxlen / input_conv.vc_factor);
-#  else
-	len = Read(raw_in, (char *)buf, (long)maxlen);
-#  endif
 	if (len > 0)
 	{
-#ifdef FEAT_MBYTE
 	    /* Convert from 'termencoding' to 'encoding'. */
 	    if (input_conv.vc_type != CONV_NONE)
 		len = convert_input(buf, len, maxlen);
-#endif
 	    return len;
 	}
     }
@@ -619,14 +611,14 @@ mch_settitle(char_u *title, char_u *icon)
 /*
  * Restore the window/icon title.
  * which is one of:
- *  1  Just restore title
- *  2  Just restore icon (which we don't have)
- *  3  Restore title and icon (which we don't have)
+ *  SAVE_RESTORE_TITLE  Just restore title
+ *  SAVE_RESTORE_ICON   Just restore icon (which we don't have)
+ *  SAVE_RESTORE_BOTH   Restore title and icon (which we don't have)
  */
     void
 mch_restore_title(int which)
 {
-    if (which & 1)
+    if (which & SAVE_RESTORE_TITLE)
 	mch_settitle(oldwindowtitle, NULL);
 }
 
@@ -889,6 +881,8 @@ mch_early_init(void)
     void
 mch_exit(int r)
 {
+    exiting = TRUE;
+
     if (raw_in)			    /* put terminal in 'normal' mode */
     {
 	settmode(TMODE_COOK);
@@ -907,7 +901,7 @@ mch_exit(int r)
     }
 
 #ifdef FEAT_TITLE
-    mch_restore_title(3);	    /* restore window title */
+    mch_restore_title(SAVE_RESTORE_BOTH);    /* restore window title */
 #endif
 
     ml_close_all(TRUE);		    /* remove all memfiles */
@@ -941,7 +935,7 @@ mch_exit(int r)
  *	getch() will return immediately rather than wait for a return. You
  *	lose editing features though.
  *
- * Cooked: This function returns the designate file pointer to it's normal,
+ * Cooked: This function returns the designate file pointer to its normal,
  *	wait for a <CR> mode. This is exactly like raw() except that
  *	it sends a 0 to the console to make it back into a CON: from a RAW:
  */
@@ -963,7 +957,7 @@ mch_settmode(int tmode)
     int
 mch_screenmode(char_u *arg)
 {
-    EMSG(_(e_screenmode));
+    emsg(_(e_screenmode));
     return FAIL;
 }
 
@@ -1189,7 +1183,7 @@ mch_call_shell(
     if (close_win)
     {
 	/* if Vim opened a window: Executing a shell may cause crashes */
-	EMSG(_("E360: Cannot execute shell with -f option"));
+	emsg(_("E360: Cannot execute shell with -f option"));
 	return -1;
     }
 
@@ -1230,10 +1224,10 @@ mch_call_shell(
     if (x < 0)
 # endif
     {
-	MSG_PUTS(_("Cannot execute "));
+	msg_puts(_("Cannot execute "));
 	if (cmd == NULL)
 	{
-	    MSG_PUTS(_("shell "));
+	    msg_puts(_("shell "));
 	    msg_outtrans(p_sh);
 	}
 	else
@@ -1253,7 +1247,7 @@ mch_call_shell(
 	    {
 		msg_putchar('\n');
 		msg_outnum((long)x);
-		MSG_PUTS(_(" returned\n"));
+		msg_puts(_(" returned\n"));
 	    }
 	    retval = x;
 	}
@@ -1320,7 +1314,7 @@ mch_call_shell(
     if (x < 0)
 # endif
     {
-	MSG_PUTS(_("Cannot execute "));
+	msg_puts(_("Cannot execute "));
 	if (use_execute)
 	{
 	    if (cmd == NULL)
@@ -1330,7 +1324,7 @@ mch_call_shell(
 	}
 	else
 	{
-	    MSG_PUTS(_("shell "));
+	    msg_puts(_("shell "));
 	    msg_outtrans(shellcmd);
 	}
 	msg_putchar('\n');
@@ -1355,7 +1349,7 @@ mch_call_shell(
 	    {
 		msg_putchar('\n');
 		msg_outnum((long)x);
-		MSG_PUTS(_(" returned\n"));
+		msg_puts(_(" returned\n"));
 	    }
 	    retval = x;
 	}
@@ -1387,7 +1381,7 @@ mch_breakcheck(int force)
 	got_int = TRUE;
 }
 
-/* this routine causes manx to use this Chk_Abort() rather than it's own */
+/* this routine causes manx to use this Chk_Abort() rather than its own */
 /* otherwise it resets our ^C when doing any I/O (even when Enable_Abort */
 /* is zero).  Since we want to check for our own ^C's			 */
 
@@ -1517,11 +1511,11 @@ mch_expandpath(
     matches = gap->ga_len - start_len;
 
     if (Result == ERROR_BUFFER_OVERFLOW)
-	EMSG(_("ANCHOR_BUF_SIZE too small."));
+	emsg(_("ANCHOR_BUF_SIZE too small."));
     else if (matches == 0 && Result != ERROR_OBJECT_NOT_FOUND
 			  && Result != ERROR_DEVICE_NOT_MOUNTED
 			  && Result != ERROR_NO_MORE_ENTRIES)
-	EMSG(_("I/O ERROR"));
+	emsg(_("I/O ERROR"));
 
     /*
      * Sort the files for this pattern.
@@ -1565,7 +1559,7 @@ sortcmp(const void *a, const void *b)
     int
 mch_has_exp_wildcard(char_u *p)
 {
-    for ( ; *p; mb_ptr_adv(p))
+    for ( ; *p; MB_PTR_ADV(p))
     {
 	if (*p == '\\' && p[1] != NUL)
 	    ++p;
@@ -1578,7 +1572,7 @@ mch_has_exp_wildcard(char_u *p)
     int
 mch_has_wildcard(char_u *p)
 {
-    for ( ; *p; mb_ptr_adv(p))
+    for ( ; *p; MB_PTR_ADV(p))
     {
 	if (*p == '\\' && p[1] != NUL)
 	    ++p;
@@ -1617,8 +1611,7 @@ mch_getenv(char_u *var)
     else
 #endif
     {
-	vim_free(alloced);
-	alloced = NULL;
+	VIM_CLEAR(alloced);
 	retval = NULL;
 
 	buf = alloc(IOSIZE);

@@ -35,10 +35,14 @@ vim_variant := CM
 
 LOCAL_SRC_FILES := \
 	auto/pathdef.c \
+	autocmd.c \
+	blob.c \
 	blowfish.c \
 	buffer.c \
+	change.c \
 	channel.c \
 	charset.c \
+	debugger.c \
 	dict.c \
 	diff.c \
 	digraph.c \
@@ -51,12 +55,14 @@ LOCAL_SRC_FILES := \
 	ex_eval.c \
 	ex_getln.c \
 	fileio.c \
+	findfile.c \
 	fold.c \
 	getchar.c \
 	hardcopy.c \
 	hashtab.c \
 	if_cscope.c \
 	if_xcmdsrv.c \
+	indent.c \
 	json.c \
 	list.c \
 	main.c \
@@ -74,6 +80,7 @@ LOCAL_SRC_FILES := \
 	option.c \
 	os_unix.c \
 	popupmnu.c \
+	pty.c \
 	quickfix.c \
 	regexp.c \
 	screen.c \
@@ -83,8 +90,10 @@ LOCAL_SRC_FILES := \
 	syntax.c \
 	tag.c \
 	term.c \
+	textprop.c \
 	ui.c \
 	undo.c \
+	usercmd.c \
 	userfunc.c \
 	version.c \
 	window.c
@@ -117,7 +126,7 @@ LOCAL_CFLAGS += \
 	-DHAVE_CONFIG_H \
 	-DSYS_VIMRC_FILE=\"/system/etc/vimrc\"
 
-LOCAL_CFLAGS += -Wno-unused-variable
+LOCAL_CFLAGS += -Wno-unused-variable -Wno-unused-parameter
 
 LOCAL_MODULE := vim
 LOCAL_MODULE_TAGS := eng

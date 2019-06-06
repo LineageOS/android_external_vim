@@ -14,6 +14,13 @@ if __name__ == "__main__":
         if sys.argv[1].startswith("err"):
             print(sys.argv[1], file=sys.stderr)
             sys.stderr.flush()
+        elif sys.argv[1].startswith("incomplete"):
+            print(sys.argv[1], end='')
+            sys.stdout.flush()
+            sys.exit(0)
+        elif sys.argv[1].startswith("busy"):
+            time.sleep(100)
+            sys.exit(0)
         else:
             print(sys.argv[1])
             sys.stdout.flush()
@@ -29,6 +36,11 @@ if __name__ == "__main__":
         if typed.startswith("echo "):
             print(typed[5:-1])
             sys.stdout.flush()
+        if typed.startswith("echosplit "):
+            for part in typed[10:-1].split('|'):
+                sys.stdout.write(part)
+                sys.stdout.flush()
+                time.sleep(0.05)
         if typed.startswith("double "):
             print(typed[7:-1] + "\nAND " + typed[7:-1])
             sys.stdout.flush()
@@ -47,4 +59,8 @@ if __name__ == "__main__":
         if typed.startswith("doubleerr "):
             print(typed[10:-1] + "\nAND " + typed[10:-1], file=sys.stderr)
             sys.stderr.flush()
+        if typed.startswith("XXX"):
+            print(typed, end='')
+            sys.stderr.flush()
+            break
 

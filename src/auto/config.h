@@ -29,7 +29,7 @@
 /* #undef HAVE_OUTFUNTYPE */
 
 /* Define when __DATE__ " " __TIME__ can be used */
-#define HAVE_DATE_TIME 1
+/* #undef HAVE_DATE_TIME */
 
 /* Define when __attribute__((unused)) can be used */
 #define HAVE_ATTRIBUTE_UNUSED 1
@@ -113,6 +113,9 @@
 
 /* Define if you can safely include both <sys/time.h> and <sys/select.h>.  */
 #define SYS_SELECT_WITH_SYS_TIME 1
+
+/* Define to a typecast for select() arguments 2, 3 and 4. */
+#define SELECT_TYPE_ARG234 (fd_set *)
 
 /* Define if you have /dev/ptc */
 /* #undef HAVE_DEV_PTC */
