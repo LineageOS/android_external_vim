@@ -95,9 +95,7 @@ clip_mch_request_selection(VimClipboard *cbd)
 	}
 
 	if ((clip_text != NULL) && (clip_length > 0))
-	{
 	    clip_yank_selection(type, clip_text, clip_length, cbd);
-	}
 
 	PhClipboardPasteFinish(cbdata);
     }
@@ -122,7 +120,7 @@ clip_mch_set_selection(VimClipboard *cbd)
     type = clip_convert_selection(&str, &len, cbd);
     if (type >= 0)
     {
-	text_clip = lalloc(len + 1, TRUE); /* Normal text */
+	text_clip = alloc(len + 1); // Normal text
 
 	if (text_clip && vim_clip)
 	{
