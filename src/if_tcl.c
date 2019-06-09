@@ -113,7 +113,7 @@ static tcl_info tclinfo = { NULL, 0, 0, 0, 0, NULL, NULL };
 
 /*
  *  List of Tcl interpreters who reference a vim window or buffer.
- *  Each buffer and window has it's own list in the w_tcl_ref or b_tcl_ref
+ *  Each buffer and window has its own list in the w_tcl_ref or b_tcl_ref
  *  struct member.  We need this because Tcl can create sub-interpreters with
  *  the "interp" command, and each interpreter can reference all windows and
  *  buffers.
@@ -160,7 +160,7 @@ static struct ref refsdeleted;	/* dummy object for deleted ref list */
 typedef int HANDLE;
 # endif
 
-# ifndef WIN3264
+# ifndef MSWIN
 #  include <dlfcn.h>
 #  define HANDLE void*
 #  define TCL_PROC void*
@@ -213,7 +213,7 @@ tcl_runtime_link_init(char *libname, int verbose)
     if (!(hTclLib = load_dll(libname)))
     {
 	if (verbose)
-	    EMSG2(_(e_loadlib), libname);
+	    semsg(_(e_loadlib), libname);
 	return FAIL;
     }
     for (i = 0; tcl_funcname_table[i].ptr; ++i)
@@ -224,7 +224,7 @@ tcl_runtime_link_init(char *libname, int verbose)
 	    close_dll(hTclLib);
 	    hTclLib = NULL;
 	    if (verbose)
-		EMSG2(_(e_loadfunc), tcl_funcname_table[i].name);
+		semsg(_(e_loadfunc), tcl_funcname_table[i].name);
 	    return FAIL;
 	}
     }
@@ -811,9 +811,7 @@ bufselfcmd(
 
 	    pos = NULL;
 	    if (line[0] != '\0'  &&  line[1] == '\0')
-	    {
 		pos = getmark(line[0], FALSE);
-	    }
 	    if (pos == NULL)
 	    {
 		Tcl_SetResult(interp, _("invalid mark name"), TCL_STATIC);
@@ -1091,6 +1089,7 @@ winselfcmd(
 	    /* TODO: should check column */
 	    win->w_cursor.lnum = val1;
 	    win->w_cursor.col = col2vim(val2);
+	    win->w_set_curswant = TRUE;
 	    flags |= FL_UPDATE_SCREEN;
 	    break;
 
@@ -1385,7 +1384,10 @@ tclvimexpr(
     if (str == NULL)
 	Tcl_SetResult(interp, _("invalid expression"), TCL_STATIC);
     else
+    {
 	Tcl_SetResult(interp, str, TCL_VOLATILE);
+	vim_free(str);
+    }
     err = vimerror(interp);
 #else
     Tcl_SetResult(interp, _("expressions disabled at compile time"), TCL_STATIC);
@@ -1525,9 +1527,7 @@ tclsetdelcmd(
 	if (reflist->interp == interp && reflist->vimobj == vimobj)
 	{
 	    if (reflist->delcmd)
-	    {
 		Tcl_DecrRefCount(reflist->delcmd);
-	    }
 	    Tcl_IncrRefCount(delcmd);
 	    reflist->delcmd = delcmd;
 	    return TCL_OK;
@@ -1535,7 +1535,7 @@ tclsetdelcmd(
 	reflist = reflist->next;
     }
     /* This should never happen.  Famous last word? */
-    EMSG(_("E280: TCL FATAL ERROR: reflist corrupt!? Please report this to vim-dev@vim.org"));
+    emsg(_("E280: TCL FATAL ERROR: reflist corrupt!? Please report this to vim-dev@vim.org"));
     Tcl_SetResult(interp, _("cannot register callback command: buffer/window reference not found"), TCL_STATIC);
     return TCL_ERROR;
 }
@@ -1705,7 +1705,7 @@ tclinit(exarg_T *eap)
 #ifdef DYNAMIC_TCL
     if (!tcl_enabled(TRUE))
     {
-	EMSG(_("E571: Sorry, this command is disabled: the Tcl library could not be loaded."));
+	emsg(_("E571: Sorry, this command is disabled: the Tcl library could not be loaded."));
 	return FAIL;
     }
 #endif
@@ -1737,11 +1737,11 @@ tclinit(exarg_T *eap)
 #endif
 
 	Tcl_SetChannelOption(interp, ch1, "-buffering", "line");
-#ifdef WIN3264
+#ifdef MSWIN
 	Tcl_SetChannelOption(interp, ch1, "-translation", "lf");
 #endif
 	Tcl_SetChannelOption(interp, ch2, "-buffering", "line");
-#ifdef WIN3264
+#ifdef MSWIN
 	Tcl_SetChannelOption(interp, ch2, "-translation", "lf");
 #endif
 
@@ -1813,11 +1813,11 @@ tclerrmsg(char *text)
     while ((next=strchr(text, '\n')))
     {
 	*next++ = '\0';
-	EMSG(text);
+	emsg(text);
 	text = next;
     }
     if (*text)
-	EMSG(text);
+	emsg(text);
 }
 
     static void
@@ -1828,11 +1828,11 @@ tclmsg(char *text)
     while ((next=strchr(text, '\n')))
     {
 	*next++ = '\0';
-	MSG(text);
+	msg(text);
 	text = next;
     }
     if (*text)
-	MSG(text);
+	msg(text);
 }
 
     static void
@@ -1958,6 +1958,7 @@ ex_tcldo(exarg_T *eap)
     char	var_line[VARNAME_SIZE];
     linenr_T	first_line = 0;
     linenr_T	last_line = 0;
+    buf_T	*was_curbuf = curbuf;
 
     rs = eap->line1;
     re = eap->line2;
@@ -1979,6 +1980,8 @@ ex_tcldo(exarg_T *eap)
     }
     while (err == TCL_OK  &&  rs <= re)
     {
+	if ((linenr_T)rs > curbuf->b_ml.ml_line_count)
+	    break;
 	line = (char *)ml_get_buf(curbuf, (linenr_T)rs, FALSE);
 	if (!line)
 	{
@@ -1994,7 +1997,7 @@ ex_tcldo(exarg_T *eap)
 #if (TCL_MAJOR_VERSION == 8 && TCL_MINOR_VERSION >= 5) || TCL_MAJOR_VERSION > 8
 	    || Tcl_LimitExceeded(tclinfo.interp)
 #endif
-	   )
+	    || curbuf != was_curbuf)
 	    break;
 	line = (char *)Tcl_GetVar(tclinfo.interp, var_line, 0);
 	if (line)
@@ -2080,7 +2083,6 @@ tcl_buffer_free(buf_T *buf)
     }
 }
 
-#if defined(FEAT_WINDOWS) || defined(PROTO)
     void
 tcl_window_free(win_T *win)
 {
@@ -2099,6 +2101,5 @@ tcl_window_free(win_T *win)
 	win->w_tcl_ref = NULL;
     }
 }
-#endif
 
 /* The End */

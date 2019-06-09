@@ -192,10 +192,8 @@ static int	DoRegisterName(Display *dpy, char_u *name);
 static void	DeleteAnyLingerer(Display *dpy, Window w);
 static int	GetRegProp(Display *dpy, char_u **regPropp, long_u *numItemsp, int domsg);
 static int	WaitForPend(void *p);
-static int	WaitForReply(void *p);
 static int	WindowValid(Display *dpy, Window w);
 static void	ServerWait(Display *dpy, Window w, EndCond endCond, void *endData, int localLoop, int seconds);
-static struct ServerReply *ServerReplyFind(Window w, enum ServerReplyOp op);
 static int	AppendPropCarefully(Display *display, Window window, Atom property, char_u *value, int length);
 static int	x_error_check(Display *dpy, XErrorEvent *error_event);
 static int	IsSerialName(char_u *name);
@@ -230,8 +228,8 @@ serverRegisterName(
 	{
 	    if (res < -1 || i >= 1000)
 	    {
-		MSG_ATTR(_("Unable to register a command server name"),
-							      hl_attr(HLF_W));
+		msg_attr(_("Unable to register a command server name"),
+							      HL_ATTR(HLF_W));
 		return FAIL;
 	    }
 	    if (p == NULL)
@@ -373,6 +371,7 @@ serverSendToVim(
     char_u	**result,		/* Result of eval'ed expression */
     Window	*server,		/* Actual ID of receiving app */
     Bool	asExpr,			/* Interpret as keystrokes or expr ? */
+    int		timeout,		/* seconds to wait or zero */
     Bool	localLoop,		/* Throw away everything but result */
     int		silent)			/* don't complain about no server */
 {
@@ -399,27 +398,7 @@ serverSendToVim(
 
     /* Execute locally if no display or target is ourselves */
     if (dpy == NULL || (serverName != NULL && STRICMP(name, serverName) == 0))
-    {
-	if (asExpr)
-	{
-	    char_u *ret;
-
-	    ret = eval_client_expr_to_string(cmd);
-	    if (result != NULL)
-	    {
-		if (ret == NULL)
-		    *result = vim_strsave((char_u *)_(e_invexprmsg));
-		else
-		    *result = ret;
-	    }
-	    else
-		vim_free(ret);
-	    return ret == NULL ? -1 : 0;
-	}
-	else
-	    server_to_input_buf(cmd);
-	return 0;
-    }
+	return sendToLocalVim(cmd, asExpr, result);
 
     /*
      * Bind the server name to a communication window.
@@ -439,6 +418,7 @@ serverSendToVim(
 	    {
 		LookupName(dpy, loosename ? loosename : name,
 			   /*DELETE=*/TRUE, NULL);
+		vim_free(loosename);
 		continue;
 	    }
 	}
@@ -447,7 +427,7 @@ serverSendToVim(
     if (w == None)
     {
 	if (!silent)
-	    EMSG2(_(e_noserver), name);
+	    semsg(_(e_noserver), name);
 	return -1;
     }
     else if (loosename != NULL)
@@ -460,20 +440,11 @@ serverSendToVim(
      * comm window in the communication window.
      * Length must be computed exactly!
      */
-#ifdef FEAT_MBYTE
     length = STRLEN(name) + STRLEN(p_enc) + STRLEN(cmd) + 14;
-#else
-    length = STRLEN(name) + STRLEN(cmd) + 10;
-#endif
-    property = (char_u *)alloc((unsigned)length + 30);
+    property = alloc(length + 30);
 
-#ifdef FEAT_MBYTE
     sprintf((char *)property, "%c%c%c-n %s%c-E %s%c-s %s",
 		      0, asExpr ? 'c' : 'k', 0, name, 0, p_enc, 0, cmd);
-#else
-    sprintf((char *)property, "%c%c%c-n %s%c-s %s",
-		      0, asExpr ? 'c' : 'k', 0, name, 0, cmd);
-#endif
     if (name == loosename)
 	vim_free(loosename);
     /* Add a back reference to our comm window */
@@ -487,7 +458,7 @@ serverSendToVim(
     vim_free(property);
     if (res < 0)
     {
-	EMSG(_("E248: Failed to send command to the destination program"));
+	emsg(_("E248: Failed to send command to the destination program"));
 	return -1;
     }
 
@@ -505,7 +476,8 @@ serverSendToVim(
     pending.nextPtr = pendingCommands;
     pendingCommands = &pending;
 
-    ServerWait(dpy, w, WaitForPend, &pending, localLoop, 600);
+    ServerWait(dpy, w, WaitForPend, &pending, localLoop,
+						  timeout > 0 ? timeout : 600);
 
     /*
      * Unregister the information about the pending command
@@ -615,6 +587,10 @@ ServerWait(
 	time(&now);
 	if (seconds >= 0 && (now - start) >= seconds)
 	    break;
+
+#ifdef FEAT_TIMERS
+	check_due_timer();
+#endif
 
 	/* Just look out for the answer without calling back into Vim */
 	if (localLoop)
@@ -747,7 +723,7 @@ serverStrToWin(char_u *str)
 
     sscanf((char *)str, "0x%x", &id);
     if (id == None)
-	EMSG2(_("E573: Invalid server id used: %s"), str);
+	semsg(_("E573: Invalid server id used: %s"), str);
 
     return (Window)id;
 }
@@ -773,20 +749,11 @@ serverSendReply(char_u *name, char_u *str)
     if (!WindowValid(dpy, win))
 	return -1;
 
-#ifdef FEAT_MBYTE
     length = STRLEN(p_enc) + STRLEN(str) + 14;
-#else
-    length = STRLEN(str) + 10;
-#endif
-    if ((property = (char_u *)alloc((unsigned)length + 30)) != NULL)
+    if ((property = alloc(length + 30)) != NULL)
     {
-#ifdef FEAT_MBYTE
 	sprintf((char *)property, "%cn%c-E %s%c-n %s%c-w %x",
 			    0, 0, p_enc, 0, str, 0, (unsigned int)commWindow);
-#else
-	sprintf((char *)property, "%cn%c-n %s%c-w %x",
-			    0, 0, str, 0, (unsigned int)commWindow);
-#endif
 	/* Add length of what "%x" resulted in. */
 	length += STRLEN(property + length);
 	res = AppendPropCarefully(dpy, win, commProperty, property, length + 1);
@@ -800,11 +767,13 @@ serverSendReply(char_u *name, char_u *str)
 WaitForReply(void *p)
 {
     Window  *w = (Window *) p;
+
     return ServerReplyFind(*w, SROP_Find) != NULL;
 }
 
 /*
  * Wait for replies from id (win)
+ * When "timeout" is non-zero wait up to this many seconds.
  * Return 0 and the malloc'ed string when a reply is available.
  * Return -1 if the window becomes invalid while waiting.
  */
@@ -813,13 +782,15 @@ serverReadReply(
     Display	*dpy,
     Window	win,
     char_u	**str,
-    int		localLoop)
+    int		localLoop,
+    int		timeout)
 {
     int		len;
     char_u	*s;
     struct	ServerReply *p;
 
-    ServerWait(dpy, win, WaitForReply, &win, localLoop, -1);
+    ServerWait(dpy, win, WaitForReply, &win, localLoop,
+						   timeout > 0 ? timeout : -1);
 
     if ((p = ServerReplyFind(win, SROP_Find)) != NULL && p->strings.ga_len > 0)
     {
@@ -1121,7 +1092,7 @@ GetRegProp(
 	    XFree(*regPropp);
 	XDeleteProperty(dpy, RootWindow(dpy, 0), registryProperty);
 	if (domsg)
-	    EMSG(_("E251: VIM instance registry property is badly formed.  Deleted!"));
+	    emsg(_("E251: VIM instance registry property is badly formed.  Deleted!"));
 	return FAIL;
     }
     return OK;
@@ -1132,7 +1103,7 @@ GetRegProp(
  * This procedure is invoked by the various X event loops throughout Vims when
  * a property changes on the communication window.  This procedure reads the
  * property and enqueues command requests and responses. If immediate is true,
- * it runs the event immediatly instead of enqueuing it. Immediate can cause
+ * it runs the event immediately instead of enqueuing it. Immediate can cause
  * unintended behavior and should only be used for code that blocks for a
  * response.
  */
@@ -1186,7 +1157,7 @@ save_in_queue(char_u *propInfo, long_u len)
 {
     x_queue_T *node;
 
-    node = (x_queue_T *)alloc(sizeof(x_queue_T));
+    node = ALLOC_ONE(x_queue_T);
     if (node == NULL)
 	return;	    /* out of memory */
     node->propInfo = propInfo;
@@ -1345,17 +1316,10 @@ server_parse_message(
 
 			/* Initialize the result property. */
 			ga_init2(&reply, 1, 100);
-#ifdef FEAT_MBYTE
 			(void)ga_grow(&reply, 50 + STRLEN(p_enc));
 			sprintf(reply.ga_data, "%cr%c-E %s%c-s %s%c-r ",
 						   0, 0, p_enc, 0, serial, 0);
 			reply.ga_len = 14 + STRLEN(p_enc) + STRLEN(serial);
-#else
-			(void)ga_grow(&reply, 50);
-			sprintf(reply.ga_data, "%cr%c-s %s%c-r ",
-							     0, 0, serial, 0);
-			reply.ga_len = 10 + STRLEN(serial);
-#endif
 
 			/* Evaluate the expression and return the result. */
 			if (res != NULL)
@@ -1449,8 +1413,8 @@ server_parse_message(
 	    char_u	*enc;
 
 	    /*
-	     * This is a (n)otification.  Sent with serverreply_send in VimL.
-	     * Execute any autocommand and save it for later retrieval
+	     * This is a (n)otification.  Sent with serverreply_send in Vim
+	     * script.  Execute any autocommand and save it for later retrieval
 	     */
 	    p += 2;
 	    gotWindow = 0;
@@ -1489,14 +1453,12 @@ server_parse_message(
 		ga_concat(&(r->strings), str);
 		ga_append(&(r->strings), NUL);
 	    }
-#ifdef FEAT_AUTOCMD
 	    {
 		char_u	winstr[30];
 
 		sprintf((char *)winstr, "0x%x", (unsigned int)win);
 		apply_autocmds(EVENT_REMOTEREPLY, winstr, str, TRUE, curbuf);
 	    }
-#endif
 	    vim_free(tofree);
 	}
 	else
