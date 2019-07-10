@@ -29,7 +29,7 @@
 /* #undef HAVE_OUTFUNTYPE */
 
 /* Define when __DATE__ " " __TIME__ can be used */
-#define HAVE_DATE_TIME 1
+/* #undef HAVE_DATE_TIME */
 
 /* Define when __attribute__((unused)) can be used */
 #define HAVE_ATTRIBUTE_UNUSED 1
@@ -61,7 +61,7 @@
 /* #undef USEMEMCPY */
 
 /* Define when "man -s 2" is to be used */
-/* #undef USEMAN_S */
+#define USEMAN_S 1
 
 /* Define to empty if the keyword does not work.  */
 /* #undef const */
@@ -114,6 +114,9 @@
 /* Define if you can safely include both <sys/time.h> and <sys/select.h>.  */
 #define SYS_SELECT_WITH_SYS_TIME 1
 
+/* Define to a typecast for select() arguments 2, 3 and 4. */
+#define SELECT_TYPE_ARG234 (fd_set *)
+
 /* Define if you have /dev/ptc */
 /* #undef HAVE_DEV_PTC */
 
@@ -155,12 +158,15 @@
 /* #undef BAD_GETCWD */
 
 /* Define if you the function: */
-#define HAVE_BCMP 1
 #define HAVE_FCHDIR 1
 #define HAVE_FCHOWN 1
+#define HAVE_FCHMOD 1
+#define HAVE_FLOAT_FUNCS 1
 #define HAVE_FSEEKO 1
 #define HAVE_FSYNC 1
+#define HAVE_FTRUNCATE 1
 #define HAVE_GETCWD 1
+#define HAVE_GETPGID 1
 /* #undef HAVE_GETPSEUDOTTY */
 /* #undef HAVE_GETPWENT */
 #define HAVE_GETPWNAM 1
@@ -169,14 +175,15 @@
 #define HAVE_GETTIMEOFDAY 1
 #define HAVE_GETWD 1
 /* #undef HAVE_ICONV */
-/* #undef HAVE_NL_LANGINFO_CODESET */
+#define HAVE_LOCALTIME_R 1
 #define HAVE_LSTAT 1
 #define HAVE_MEMCMP 1
 #define HAVE_MEMSET 1
 #define HAVE_MKDTEMP 1
 #define HAVE_NANOSLEEP 1
+/* #undef HAVE_NL_LANGINFO_CODESET */
 #define HAVE_OPENDIR 1
-#define HAVE_FLOAT_FUNCS 1
+#define HAVE_POSIX_OPENPT 1
 #define HAVE_PUTENV 1
 #define HAVE_QSORT 1
 #define HAVE_READLINK 1
@@ -202,6 +209,7 @@
 /* #undef HAVE_STRNICMP */
 #define HAVE_STRPBRK 1
 #define HAVE_STRTOL 1
+/* #undef HAVE_CANBERRA */
 #define HAVE_ST_BLKSIZE 1
 #define HAVE_SYSCONF 1
 /* #undef HAVE_SYSCTL */
@@ -211,9 +219,11 @@
 #define HAVE_TOWLOWER 1
 #define HAVE_TOWUPPER 1
 #define HAVE_ISWUPPER 1
+#define HAVE_UNSETENV 1
 #define HAVE_USLEEP 1
 #define HAVE_UTIME 1
 #define HAVE_BIND_TEXTDOMAIN_CODESET 1
+#define HAVE_MBLEN 1
 
 /* Define, if needed, for accessing large files. */
 /* #undef _LARGE_FILES */
@@ -253,6 +263,7 @@
 #define HAVE_SYS_PARAM_H 1
 #define HAVE_SYS_POLL_H 1
 /* #undef HAVE_SYS_PTEM_H */
+/* #undef HAVE_SYS_PTMS_H */
 #define HAVE_SYS_RESOURCE_H 1
 #define HAVE_SYS_SELECT_H 1
 #define HAVE_SYS_STATFS_H 1
@@ -382,8 +393,14 @@
 /* Define if you want to include the Cscope interface. */
 /* #undef FEAT_CSCOPE */
 
-/* Define if you want to include multibyte support. */
-/* #undef FEAT_MBYTE */
+/* Define if you don't want to include right-left support. */
+/* #undef DISABLE_RIGHTLEFT */
+
+/* Define if you don't want to include Arabic support. */
+/* #undef DISABLE_ARABIC */
+
+/* Define if you want to always define a server name at vim startup. */
+/* #undef FEAT_AUTOSERVERNAME */
 
 /* Define if you want to include fontset support. */
 /* #undef FEAT_XFONTSET */
@@ -399,9 +416,6 @@
 
 /* Define if you use KDE and want KDE Toolbar support. */
 /* #undef FEAT_KDETOOLBAR */
-
-/* Define if GTK+ multihead support is available (requires GTK+ >= 2.1.1). */
-/* #undef HAVE_GTK_MULTIHEAD */
 
 /* Define if your X has own locale library */
 /* #undef X_LOCALE */
@@ -427,17 +441,20 @@
 /* Define if we have shl_load() */
 /* #undef HAVE_SHL_LOAD */
 
-/* Define if you want to include Sun Visual Workshop support. */
-/* #undef FEAT_SUN_WORKSHOP */
-
 /* Define if you want to include NetBeans integration. */
 /* #undef FEAT_NETBEANS_INTG */
 
 /* Define if you want to include process communication. */
 #define FEAT_JOB_CHANNEL 1
 
-/* Define default global runtime path */
+/* Define if you want to include terminal emulator support. */
+/* #undef FEAT_TERMINAL */
+
+// Define default global runtime path.
 /* #undef RUNTIME_GLOBAL */
+
+// Define default global runtime after path.
+/* #undef RUNTIME_GLOBAL_AFTER */
 
 /* Define name of who modified a released Vim */
 /* #undef MODIFIED_BY */
@@ -447,6 +464,9 @@
 
 /* Define if fcntl()'s F_SETFD command knows about FD_CLOEXEC */
 #define HAVE_FD_CLOEXEC 1
+
+/* Define if /proc/self/exe or similar can be read */
+#define PROC_EXE_LINK "/proc/self/exe"
 
 /* Define if you want Cygwin to use the WIN32 clipboard, not compatible with X11*/
 /* #undef FEAT_CYGWIN_WIN32_CLIPBOARD */

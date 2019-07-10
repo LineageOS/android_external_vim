@@ -1,4 +1,3 @@
-
 vim_src := $(call my-dir)
 
 # ========================================================
@@ -23,22 +22,16 @@ include $(BUILD_PREBUILT)
 LOCAL_PATH := $(vim_src)/src
 include $(CLEAR_VARS)
 
-# vim variants: TINY SMALL CM NORMAL BIG HUGE
-#
-# NORMAL, BIG and HUGE are almost the same (1.1M)
-# TINY and SMALL are similar to busybox vi (460K)
-#
-# CM profile is between SMALL and NORMAL (780K)
-# with syntax and utf8 (mbyte) support
-#
-vim_variant := CM
-
 LOCAL_SRC_FILES := \
 	auto/pathdef.c \
+	autocmd.c \
+	blob.c \
 	blowfish.c \
 	buffer.c \
+	change.c \
 	channel.c \
 	charset.c \
+	debugger.c \
 	dict.c \
 	diff.c \
 	digraph.c \
@@ -51,12 +44,14 @@ LOCAL_SRC_FILES := \
 	ex_eval.c \
 	ex_getln.c \
 	fileio.c \
+	findfile.c \
 	fold.c \
 	getchar.c \
 	hardcopy.c \
 	hashtab.c \
 	if_cscope.c \
 	if_xcmdsrv.c \
+	indent.c \
 	json.c \
 	list.c \
 	main.c \
@@ -74,6 +69,8 @@ LOCAL_SRC_FILES := \
 	option.c \
 	os_unix.c \
 	popupmnu.c \
+	popupwin.c \
+	pty.c \
 	quickfix.c \
 	regexp.c \
 	screen.c \
@@ -83,22 +80,13 @@ LOCAL_SRC_FILES := \
 	syntax.c \
 	tag.c \
 	term.c \
+	textprop.c \
 	ui.c \
 	undo.c \
+	usercmd.c \
 	userfunc.c \
 	version.c \
 	window.c
-
-# to reduce vim size, manually define wanted features
-ifeq ($(vim_variant),CM)
-    LOCAL_CFLAGS += -DFEAT_SMALL=1 -DFEAT_MBYTE=1 \
-	-DFEAT_SYN_HL=1 -DFEAT_CINDENT=1 -DFEAT_COMMENTS=1 -DFEAT_EVAL=1 -DFEAT_AUTOCMD=1 \
-	-DFEAT_USR_CMDS=1 -DFEAT_EX_EXTRA=1 -DFEAT_CMDL_COMPL=1 \
-	-DFEAT_LISTCMDS=1 -DFEAT_CMDL_INFO=1 -DFEAT_SEARCH_EXTRA=1
-ifeq ($(TARGET_IS_64_BIT), true)
-    LOCAL_CFLAGS += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
-endif
-endif
 
 LOCAL_C_INCLUDES += \
 	external/libselinux/include \
@@ -113,9 +101,34 @@ LOCAL_SHARED_LIBRARIES += \
 	libdl
 
 LOCAL_CFLAGS += \
-	-DFEAT_$(vim_variant)=1 \
 	-DHAVE_CONFIG_H \
 	-DSYS_VIMRC_FILE=\"/system/etc/vimrc\"
+
+# vim variants: TINY SMALL CM NORMAL BIG HUGE
+#
+# NORMAL, BIG and HUGE are almost the same (1.1M)
+# TINY and SMALL are similar to busybox vi (460K)
+#
+# our profile is between SMALL and NORMAL (780K)
+# with syntax and utf8 (mbyte) support
+#
+# to reduce vim size, manually define wanted features
+LOCAL_CFLAGS += \
+	-DFEAT_SMALL=1 \
+	-DFEAT_MBYTE=1 \
+	-DFEAT_SYN_HL=1 \
+	-DFEAT_CINDENT=1 \
+	-DFEAT_COMMENTS=1 \
+	-DFEAT_EVAL=1 \
+	-DFEAT_AUTOCMD=1 \
+	-DFEAT_USR_CMDS=1 \
+	-DFEAT_EX_EXTRA=1 \
+	-DFEAT_CMDL_COMPL=1 \
+	-DFEAT_LISTCMDS=1 \
+	-DFEAT_CMDL_INFO=1 \
+	-DFEAT_SEARCH_EXTRA=1
+
+LOCAL_CFLAGS += -Wno-unused-variable -Wno-unused-parameter
 
 LOCAL_MODULE := vim
 LOCAL_MODULE_TAGS := eng
@@ -177,6 +190,7 @@ vim_plugin_files := \
 	matchparen.vim \
 
 vim_autoload_files := \
+	dist/ft.vim \
 	spacehi.vim
 
 VIM_SHARED := $(TARGET_OUT)/usr/share/vim
@@ -200,12 +214,4 @@ ALL_MODULES.$(LOCAL_MODULE).INSTALLED := \
   $(ALL_MODULES.$(LOCAL_MODULE).INSTALLED) \
   $(addprefix $(VIM_SHARED)/, $(vim_runtime_files))
 
-ifneq ($(filter B wB,$(MAKEFLAGS)),)
-# Allow to push runtime files with 'mmp -B'
-vim: $(vim_runtime_files)
-	@echo "Forced install of runtime files..."
 endif
-
-endif
-
-include $(vim_src)/src/xxd/Android.mk

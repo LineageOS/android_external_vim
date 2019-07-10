@@ -87,3 +87,25 @@ function Test_History()
   call assert_equal(-1, histnr('abc'))
   call assert_fails('call histnr([])', 'E730:')
 endfunction
+
+function Test_Search_history_window()
+  new
+  call setline(1, ['a', 'b', 'a', 'b'])
+  1
+  call feedkeys("/a\<CR>", 'xt')
+  call assert_equal('a', getline('.'))
+  1
+  call feedkeys("/b\<CR>", 'xt')
+  call assert_equal('b', getline('.'))
+  1
+  " select the previous /a command
+  call feedkeys("q/kk\<CR>", 'x!')
+  call assert_equal('a', getline('.'))
+  call assert_equal('a', @/)
+  bwipe!
+endfunc
+
+function Test_history_completion()
+  call feedkeys(":history \<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal('"history / : = > ? @ all cmd debug expr input search', @:)
+endfunc
