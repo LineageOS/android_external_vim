@@ -60,11 +60,12 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 /* created by weissman, Mon Jul  7 13:20:03 1986 */
 /* converted by swick, Thu Aug 27 1987 */
 
+#include "vim.h"
+
 #include <X11/IntrinsicP.h>
 #include <X11/StringDefs.h>
 
 #include <X11/Xaw/XawInit.h>
-#include "vim.h"
 #include "gui_at_sb.h"
 
 #include <X11/Xmu/Drawing.h>
@@ -484,7 +485,7 @@ CreateGC(Widget w)
 
 	if (XGetGeometry (XtDisplay(w), sbw->scrollbar.thumb, &root, &x, &y,
 		&width, &height, &bw, &depth) == 0)
-	    EMSG(_("Scrollbar Widget: Could not get geometry of thumb pixmap."));
+	    emsg(_("Scrollbar Widget: Could not get geometry of thumb pixmap."));
     }
 
     gcValues.foreground = sbw->scrollbar.foreground;
@@ -644,7 +645,11 @@ Redisplay(Widget w, XEvent *event, Region region)
     static Boolean
 CompareEvents(XEvent *oldEvent, XEvent *newEvent)
 {
-#define Check(field) if (newEvent->field != oldEvent->field) return False;
+#define Check(field) \
+    do { \
+	if (newEvent->field != oldEvent->field) \
+	    return False; \
+    } while (0)
 
     Check(xany.display);
     Check(xany.type);

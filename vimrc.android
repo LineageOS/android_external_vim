@@ -15,6 +15,9 @@ set nocompatible
 " allow backspacing over everything in insert mode
 set backspace=indent,eol,start
 
+" Disable modeline parsing for security reasons
+set nomodeline
+
 " swap directories
 set directory=.,/data/local/tmp,/tmp
 

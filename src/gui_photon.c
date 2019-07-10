@@ -212,10 +212,6 @@ static PtCallbackF_t gui_ph_handle_menu_unrealized;
 static void gui_ph_get_panelgroup_margins(short*, short*, short*, short*);
 #endif
 
-#ifdef FEAT_TOOLBAR
-static PhImage_t *gui_ph_toolbar_find_icon(vimmenu_T *menu);
-#endif
-
 static void gui_ph_draw_start(void);
 static void gui_ph_draw_end(void);
 
@@ -383,7 +379,7 @@ gui_ph_handle_window_cb(PtWidget_t *widget, void *data, PtCallbackInfo_t *info)
 	    else
 	    {
 		gui_focus_change(FALSE);
-		gui_mch_stop_blink();
+		gui_mch_stop_blink(TRUE);
 	    }
 	    break;
 
@@ -455,9 +451,7 @@ gui_ph_handle_keyboard(PtWidget_t *widget, void *data, PtCallbackInfo_t *info)
 
     /* We're a good lil photon program, aren't we? yes we are, yeess wee arrr */
     if (key->key_flags & Pk_KF_Compose)
-    {
 	return Pt_CONTINUE;
-    }
 
     if ((key->key_flags & Pk_KF_Cap_Valid) &&
 	    PkIsKeyDown(key->key_flags))
@@ -517,13 +511,8 @@ gui_ph_handle_keyboard(PtWidget_t *widget, void *data, PtCallbackInfo_t *info)
 	if (special_keys[i].key_sym == 0)
 	{
 	    ch = PhTo8859_1(key);
-	    if (ch == -1
-#ifdef FEAT_MBYTE
-		|| (enc_utf8 && ch > 127)
-#endif
-		)
+	    if (ch == -1 || (enc_utf8 && ch > 127))
 	    {
-#ifdef FEAT_MBYTE
 		len = PhKeyToMb(string, key);
 		if (len > 0)
 		{
@@ -550,7 +539,6 @@ gui_ph_handle_keyboard(PtWidget_t *widget, void *data, PtCallbackInfo_t *info)
 		    return Pt_CONSUME;
 		}
 		len = 0;
-#endif
 		ch = key->key_cap;
 		if (ch < 0xff)
 		{
@@ -988,7 +976,7 @@ gui_ph_pg_add_buffer(char *name)
 {
     char **new_titles = NULL;
 
-    new_titles = (char **) alloc((num_panels + 1) * sizeof(char **));
+    new_titles = ALLOC_MULT(char *, (num_panels + 1));
     if (new_titles != NULL)
     {
 	if (num_panels > 0)
@@ -1013,7 +1001,7 @@ gui_ph_pg_remove_buffer(char *name)
     /* If there is only 1 panel, we just use the temporary place holder */
     if (num_panels > 1)
     {
-	new_titles = (char **) alloc((num_panels - 1) * sizeof(char **));
+	new_titles = ALLOC_MULT(char *, num_panels - 1);
 	if (new_titles != NULL)
 	{
 	    char **s = new_titles;
@@ -1021,9 +1009,7 @@ gui_ph_pg_remove_buffer(char *name)
 	    for (i = 0; i < num_panels; i++)
 	    {
 		if (STRCMP(panel_titles[ i ], name) != 0)
-		{
 		    *s++ = panel_titles[ i ];
-		}
 	    }
 	    num_panels--;
 
@@ -1040,8 +1026,7 @@ gui_ph_pg_remove_buffer(char *name)
 	PtSetResource(gui.vimPanelGroup, Pt_ARG_PG_PANEL_TITLES, &empty_title,
 		1);
 
-	vim_free(panel_titles);
-	panel_titles = NULL;
+	VIM_CLEAR(panel_titles);
     }
 }
 
@@ -1079,7 +1064,6 @@ gui_ph_pane_resize(PtWidget_t *widget, void *data, PtCallbackInfo_t *info)
 
 /****************************************************************************/
 
-#ifdef FEAT_MBYTE
     void
 gui_ph_encoding_changed(int new_encoding)
 {
@@ -1105,7 +1089,6 @@ gui_ph_encoding_changed(int new_encoding)
 
     charset_translate = PxTranslateSet(charset_translate, charset);
 }
-#endif
 
 /****************************************************************************/
 /****************************************************************************/
@@ -1125,7 +1108,7 @@ gui_mch_init(void)
     PhDim_t	window_size = {100, 100}; /* Arbitrary values */
     PhPoint_t	pos = {0, 0};
 
-    gui.event_buffer = (PhEvent_t *) alloc(EVENT_BUFFER_SIZE);
+    gui.event_buffer = alloc(EVENT_BUFFER_SIZE);
     if (gui.event_buffer == NULL)
 	return FAIL;
 
@@ -1347,9 +1330,7 @@ gui_mch_update(void)
 
     PtAppAddWorkProc(NULL, exit_gui_mch_update, &working);
     while ((working == TRUE) && !vim_is_input_buf_full())
-    {
 	PtProcessEvent();
-    }
 }
 
     int
@@ -1357,8 +1338,9 @@ gui_mch_wait_for_chars(int wtime)
 {
     is_timeout = FALSE;
 
-    if (wtime > 0)
-	PtSetResource(gui_ph_timer_timeout, Pt_ARG_TIMER_INITIAL, wtime, 0);
+    if (wtime >= 0)
+	PtSetResource(gui_ph_timer_timeout, Pt_ARG_TIMER_INITIAL,
+						    wtime == 0 ? 1 : wtime, 0);
 
     while (1)
     {
@@ -1537,7 +1519,7 @@ gui_mch_dialog(
 	title = "Vim";
 
     buttons_copy = alloc(len + 1);
-    button_array = (char_u **) alloc(button_count * sizeof(char_u *));
+    button_array = ALLOC_MULT(char_u *, button_count);
     if (buttons_copy != NULL && button_array != NULL)
     {
 	STRCPY(buttons_copy, buttons);
@@ -1986,6 +1968,12 @@ gui_mch_get_color(char_u *name)
     return gui_get_color_cmn(name);
 }
 
+    guicolor_T
+gui_mch_get_rgb_color(int r, int g, int b)
+{
+    return gui_get_rgb_color_cmn(r, g, b);
+}
+
     void
 gui_mch_set_fg_color(guicolor_T color)
 {
@@ -2140,11 +2128,7 @@ gui_mch_draw_string(int row, int col, char_u *s, int len, int flags)
     if (flags & DRAW_UNDERL)
 	PgSetUnderline(gui.norm_pixel, Pg_TRANSPARENT, 0);
 
-    if (charset_translate != NULL
-#ifdef FEAT_MBYTE
-	    && enc_utf8 == 0
-#endif
-	   )
+    if (charset_translate != NULL && enc_utf8 == 0)
     {
 	int src_taken, dst_made;
 
@@ -2267,11 +2251,11 @@ gui_mch_start_blink(void)
 }
 
     void
-gui_mch_stop_blink(void)
+gui_mch_stop_blink(int may_call_gui_update_cursor)
 {
     PtSetResource(gui_ph_timer_cursor, Pt_ARG_TIMER_INITIAL, 0, 0);
 
-    if (blink_state == BLINK_OFF)
+    if (blink_state == BLINK_OFF && may_call_gui_update_cursor)
 	gui_update_cursor(TRUE, FALSE);
 
     blink_state = BLINK_NONE;
@@ -2418,9 +2402,7 @@ gui_ph_toolbar_find_icon(vimmenu_T *menu)
 
     if (menu->iconidx >= 0 &&
 	    (menu->iconidx < ARRAY_LENGTH(gui_ph_toolbar_images)))
-    {
 	return gui_ph_toolbar_images[menu->iconidx];
-    }
 
     return NULL;
 }
@@ -2936,7 +2918,7 @@ gui_mch_get_font(char_u *vim_font_name, int report_error)
     }
 
     if (report_error)
-	EMSG2(e_font, vim_font_name);
+	semsg(e_font, vim_font_name);
 
     return FAIL;
 }

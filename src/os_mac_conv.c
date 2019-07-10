@@ -14,7 +14,6 @@
  */
 
 #define NO_X11_INCLUDES
-typedef int BalloonEval;    /* used in header files */
 
 #include "vim.h"
 
@@ -481,10 +480,7 @@ mac_precompose_path(
 	    if (TECConvertText(gPathConverter, decompPath,
 			decompLen, &decompLen, result,
 			decompLen, &actualLen) != noErr)
-	    {
-		vim_free(result);
-		result = NULL;
-	    }
+		VIM_CLEAR(result);
 	}
     }
 
@@ -518,10 +514,7 @@ mac_utf16_to_utf8(
 	    utf8_len += inputRead;
 	}
 	else
-	{
-	    vim_free(result);
-	    result = NULL;
-	}
+	    VIM_CLEAR(result);
     }
     else
     {
@@ -557,7 +550,7 @@ mac_utf8_to_utf16(
     }
 
     convertRange = CFRangeMake(0, CFStringGetLength(utf8_str));
-    result = (UniChar *)alloc(convertRange.length * sizeof(UniChar));
+    result = ALLOC_MULT(UniChar, convertRange.length);
 
     CFStringGetCharacters(utf8_str, convertRange, result);
 
