@@ -11,6 +11,8 @@ LOCAL_MODULE := vimrc
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := ETC
 
+LOCAL_SYSTEM_EXT_MODULE := true
+
 LOCAL_SRC_FILES := vimrc.android
 
 include $(BUILD_PREBUILT)
@@ -157,13 +159,13 @@ LOCAL_SHARED_LIBRARIES += \
 
 LOCAL_CFLAGS += \
 	-DHAVE_CONFIG_H \
-	-DSYS_VIMRC_FILE=\"/system/etc/vimrc\"
+	-DSYS_VIMRC_FILE=\"/system_ext/etc/vimrc\"
 
 LOCAL_CFLAGS += -Wno-unused-variable -Wno-unused-parameter
 
 LOCAL_MODULE := vim
 LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
+LOCAL_SYSTEM_EXT_MODULE := true
 LOCAL_REQUIRED_MODULES := vimrc
 include $(BUILD_EXECUTABLE)
 
@@ -226,7 +228,7 @@ vim_autoload_files := \
 	dist/ft.vim \
 	spacehi.vim
 
-VIM_SHARED := $(TARGET_OUT)/usr/share/vim
+VIM_SHARED := $(TARGET_OUT_SYSTEM_EXT)/usr/share/vim
 
 vim_runtime_files := \
   $(vim_runtime_files) \

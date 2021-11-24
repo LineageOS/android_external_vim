@@ -102,7 +102,7 @@ if has("multi_byte")
 endif
 
 if has("syntax")
-  source /system/usr/share/vim/autoload/spacehi.vim
+  source /system_ext/usr/share/vim/autoload/spacehi.vim
 endif
 
 " Convenient command to see the difference between the current buffer and the
