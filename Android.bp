@@ -199,6 +199,7 @@ cc_binary {
         "-DHAVE_CONFIG_H",
         "-DSYS_VIMRC_FILE=\"/system_ext/etc/vimrc\"",
     ],
+    c_std: "gnu89",
     local_include_dirs: [
         "src/proto",
         "src",
