@@ -23,6 +23,24 @@ prebuilt_usr_share {
 }
 
 prebuilt_usr_share {
+    name: "vim-runtime-colors-lists",
+    srcs: [
+        "runtime/colors/lists/*",
+    ],
+    sub_dir: "vim/colors/lists",
+    system_ext_specific: true,
+}
+
+prebuilt_usr_share {
+    name: "vim-runtime-colors-tools",
+    srcs: [
+        "runtime/colors/tools/*",
+    ],
+    sub_dir: "vim/colors/tools",
+    system_ext_specific: true,
+}
+
+prebuilt_usr_share {
     name: "vim-runtime-colors",
     srcs: [
         "runtime/colors/*",
@@ -76,6 +94,21 @@ cc_binary {
     name: "vim",
     srcs: [
         "src/auto/pathdef.c",
+        "src/libvterm/src/encoding.c",
+        "src/libvterm/src/keyboard.c",
+        "src/libvterm/src/mouse.c",
+        "src/libvterm/src/parser.c",
+        "src/libvterm/src/pen.c",
+        "src/libvterm/src/screen.c",
+        "src/libvterm/src/state.c",
+        "src/libvterm/src/unicode.c",
+        "src/libvterm/src/vterm.c",
+        "src/xdiff/xdiffi.c",
+        "src/xdiff/xemit.c",
+        "src/xdiff/xhistogram.c",
+        "src/xdiff/xpatience.c",
+        "src/xdiff/xprepare.c",
+        "src/xdiff/xutils.c",
         "src/alloc.c",
         "src/arabic.c",
         "src/arglist.c",
@@ -117,7 +150,9 @@ cc_binary {
         "src/findfile.c",
         "src/float.c",
         "src/fold.c",
+        "src/gc.c",
         "src/getchar.c",
+        "src/gui_xim.c",
         "src/hardcopy.c",
         "src/hashtab.c",
         "src/help.c",
@@ -130,8 +165,10 @@ cc_binary {
         "src/iscygpty.c",
         "src/job.c",
         "src/json.c",
+        "src/linematch.c",
         "src/list.c",
         "src/locale.c",
+        "src/logfile.c",
         "src/main.c",
         "src/map.c",
         "src/mark.c",
@@ -171,6 +208,7 @@ cc_binary {
         "src/spellsuggest.c",
         "src/strings.c",
         "src/syntax.c",
+        "src/tabpanel.c",
         "src/tag.c",
         "src/term.c",
         "src/terminal.c",
@@ -179,12 +217,14 @@ cc_binary {
         "src/textobject.c",
         "src/textprop.c",
         "src/time.c",
+        "src/tuple.c",
         "src/typval.c",
         "src/ui.c",
         "src/undo.c",
         "src/usercmd.c",
         "src/userfunc.c",
         "src/version.c",
+        "src/vim9class.c",
         "src/vim9cmds.c",
         "src/vim9compile.c",
         "src/vim9execute.c",
@@ -197,9 +237,11 @@ cc_binary {
     ],
     cflags: [
         "-DHAVE_CONFIG_H",
+        "-DINLINE=",
         "-DSYS_VIMRC_FILE=\"/system_ext/etc/vimrc\"",
     ],
     local_include_dirs: [
+        "src/libvterm/include",
         "src/proto",
         "src",
     ],
@@ -213,6 +255,8 @@ cc_binary {
         "vimrc",
         "vim-runtime-autoload-dist",
         "vim-runtime-autoload",
+        "vim-runtime-colors-lists",
+        "vim-runtime-colors-tools",
         "vim-runtime-colors",
         "vim-runtime-doc",
         "vim-runtime-plugin",
