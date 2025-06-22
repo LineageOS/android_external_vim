@@ -16,7 +16,7 @@ src/types.vim
 src/auto/config.cache
 # src/auto/config.h
 src/auto/config.log
-# src/auto/config.mk
+src/auto/config.mk
 src/auto/config.status
 # src/auto/osdef.h
 src/auto/link.log
