@@ -13,7 +13,7 @@ source shared.vim
 
 func Check_X11_Connection()
   if has('x11')
-    CheckEnv DISPLAY
+    CheckX11
     try
       call remote_send('xxx', '')
     catch
@@ -63,8 +63,8 @@ func Test_client_server()
     " the GUI and check that the remote command still works.
     " Need to wait for the GUI to start up, otherwise the send hangs in trying
     " to send to the terminal window.
-    if has('gui_athena') || has('gui_motif')
-      " For those GUIs, ignore the 'failed to create input context' error.
+    if has('gui_motif')
+      " For this GUI ignore the 'failed to create input context' error.
       call remote_send(name, ":call test_ignore_error('E285') | gui -f\<CR>")
     else
       call remote_send(name, ":gui -f\<CR>")
@@ -130,9 +130,9 @@ func Test_client_server()
 
     " Run a separate instance to send a command to the server
     call remote_expr(name, 'execute("only")')
-    call system(cmd .. ' --remote-send ":new Xfile<CR>"')
+    call system(cmd .. ' --remote-send ":new Xclientfile<CR>"')
     call assert_equal('2', remote_expr(name, 'winnr("$")'))
-    call assert_equal('Xfile', remote_expr(name, 'winbufnr(1)->bufname()'))
+    call assert_equal('Xclientfile', remote_expr(name, 'winbufnr(1)->bufname()'))
     call remote_expr(name, 'execute("only")')
 
     " Invoke a remote-expr. On MS-Windows, the returned value has a carriage
@@ -141,24 +141,24 @@ func Test_client_server()
     call assert_equal(['4'], split(l, "\n"))
 
     " Edit multiple files using --remote
-    call system(cmd .. ' --remote Xfile1 Xfile2 Xfile3')
-    call assert_match(".*Xfile1\n.*Xfile2\n.*Xfile3\n", remote_expr(name, 'argv()'))
+    call system(cmd .. ' --remote Xclientfile1 Xclientfile2 Xclientfile3')
+    call assert_match(".*Xclientfile1\n.*Xclientfile2\n.*Xclientfile3\n", remote_expr(name, 'argv()'))
     eval name->remote_send(":%bw!\<CR>")
 
     " Edit files in separate tab pages
-    call system(cmd .. ' --remote-tab Xfile1 Xfile2 Xfile3')
+    call system(cmd .. ' --remote-tab Xclientfile1 Xclientfile2 Xclientfile3')
     call WaitForAssert({-> assert_equal('3', remote_expr(name, 'tabpagenr("$")'))})
-    call assert_match('.*\<Xfile2', remote_expr(name, 'bufname(tabpagebuflist(2)[0])'))
+    call assert_match('.*\<Xclientfile2', remote_expr(name, 'bufname(tabpagebuflist(2)[0])'))
     eval name->remote_send(":%bw!\<CR>")
 
     " Edit a file using --remote-wait
     eval name->remote_send(":source $VIMRUNTIME/plugin/rrhelper.vim\<CR>")
-    call system(cmd .. ' --remote-wait +enew Xfile1')
-    call assert_match('.*\<Xfile1', remote_expr(name, 'bufname("#")'))
+    call system(cmd .. ' --remote-wait +enew Xclientfile1')
+    call assert_match('.*\<Xclientfile1', remote_expr(name, 'bufname("#")'))
     eval name->remote_send(":%bw!\<CR>")
 
     " Edit files using --remote-tab-wait
-    call system(cmd .. ' --remote-tabwait +tabonly\|enew Xfile1 Xfile2')
+    call system(cmd .. ' --remote-tabwait +tabonly\|enew Xclientfile1 Xclientfile2')
     call assert_equal('1', remote_expr(name, 'tabpagenr("$")'))
     eval name->remote_send(":%bw!\<CR>")
 
@@ -182,12 +182,54 @@ func Test_client_server()
     endif
   endtry
 
-  call assert_fails('call remote_startserver([])', 'E730:')
+  call assert_fails('call remote_startserver("")', 'E1175:')
+  call assert_fails('call remote_startserver([])', 'E1174:')
   call assert_fails("let x = remote_peek([])", 'E730:')
   call assert_fails("let x = remote_read('vim10')",
         \ has('unix') ? ['E573:.*vim10'] : 'E277:')
   call assert_fails("call server2client('abc', 'xyz')",
         \ has('unix') ? ['E573:.*abc'] : 'E258:')
+endfunc
+
+func Test_client_server_stopinsert()
+  " test does not work on MS-Windows
+  CheckNotMSWindows
+  let g:test_is_flaky = 1
+  let cmd = GetVimCommand()
+  if cmd == ''
+    throw 'GetVimCommand() failed'
+  endif
+  call Check_X11_Connection()
+  let fname = 'Xclientserver_stop.txt'
+  let name = 'XVIMTEST2'
+  call writefile(['one two three'], fname, 'D')
+
+  let cmd .= ' -c "set virtualedit=onemore"'
+  let cmd .= ' -c "call cursor(1, 14)"'
+  let cmd .= ' -c "startinsert"'
+  let cmd .= ' --servername ' . name
+  let cmd .= ' ' .. fname
+  let job = job_start(cmd, {'stoponexit': 'kill', 'out_io': 'null'})
+  call WaitForAssert({-> assert_equal("run", job_status(job))})
+
+  " Takes a short while for the server to be active.
+  " When using valgrind it takes much longer.
+  call WaitForAssert({-> assert_match(name, serverlist())})
+
+  call remote_expr(name, 'execute("stopinsert")')
+
+  call assert_equal('n', name->remote_expr("mode(1)"))
+  call assert_equal('13', name->remote_expr("col('.')"))
+
+  eval name->remote_send(":qa!\<CR>")
+  try
+    call WaitForAssert({-> assert_equal("dead", job_status(job))})
+  finally
+    if job_status(job) != 'dead'
+      call assert_report('Server did not exit')
+      call job_stop(job, 'kill')
+    endif
+  endtry
 endfunc
 
 " Uncomment this line to get a debugging log

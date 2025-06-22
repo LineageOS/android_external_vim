@@ -30,11 +30,13 @@ endfunc
 func Test_equivalence_re1()
   set re=1
   call s:equivalence_test()
+  set re=0
 endfunc
 
 func Test_equivalence_re2()
   set re=2
   call s:equivalence_test()
+  set re=0
 endfunc
 
 func Test_recursive_substitute()
@@ -67,6 +69,7 @@ func Test_eow_with_optional()
     let actual = matchlist('abc def', '\(abc\>\)\?\s*\(def\)')
     call assert_equal(expected, actual)
   endfor
+  set re=0
 endfunc
 
 func Test_backref()
@@ -89,6 +92,31 @@ func Test_multi_failure()
   call assert_fails('/a*\+', 'E871:')
   call assert_fails('/a\{a}', 'E554:')
   set re=0
+endfunc
+
+func Test_column_success_failure()
+  new
+  call setline(1, 'xbar')
+
+  set re=1
+  %s/\%>0v./A/
+  call assert_equal('Abar', getline(1))
+  call assert_fails('/\%v', 'E71:')
+  call assert_fails('/\%>v', 'E71:')
+  call assert_fails('/\%c', 'E71:')
+  call assert_fails('/\%<c', 'E71:')
+  call assert_fails('/\%l', 'E71:')
+  set re=2
+  %s/\%>0v./B/
+  call assert_equal('Bbar', getline(1))
+  call assert_fails('/\%v', 'E1273:')
+  call assert_fails('/\%>v', 'E1273:')
+  call assert_fails('/\%c', 'E1273:')
+  call assert_fails('/\%<c', 'E1273:')
+  call assert_fails('/\%l', 'E1273:')
+
+  set re=0
+  bwipe!
 endfunc
 
 func Test_recursive_addstate()
@@ -799,7 +827,7 @@ func Test_matchstr_with_ze()
   bwipe!
 endfunc
 
-" Check a pattern with a look beind crossing a line boundary
+" Check a pattern with a look behind crossing a line boundary
 func Test_lookbehind_across_line()
   new
   call append(0, ['Behind:', 'asdfasd<yyy', 'xxstart1', 'asdfasd<yy',
@@ -846,12 +874,26 @@ func Regex_Mark()
   %d
 endfunc
 
+" Same test as above, but use verymagic
+func Regex_Mark_Verymagic()
+  call append(0, ['', '', '', 'Marks:', 'asdfSasdfsadfEasdf', 'asdfSas',
+        \ 'dfsadfEasdf', '', '', '', '', ''])
+  call cursor(4, 1)
+  exe "normal jfSmsfEme:.-4,.+6s/\\v.%>'s.*%<'e../here/\<CR>"
+  exe "normal jfSmsj0fEme:.-4,.+6s/\\v.%>'s\\_.*%<'e../again/\<CR>"
+  call assert_equal(['', '', '', 'Marks:', 'asdfhereasdf', 'asdfagainasdf',
+        \ '', '', '', '', '', ''], getline(1, '$'))
+  %d
+endfunc
+
 func Test_matching_marks()
   new
   set regexpengine=1
   call Regex_Mark()
+  call Regex_Mark_Verymagic()
   set regexpengine=2
   call Regex_Mark()
+  call Regex_Mark_Verymagic()
   bwipe!
 endfunc
 
@@ -1042,9 +1084,16 @@ endfunc
 
 func Test_using_mark_position()
   " this was using freed memory
+  " new engine
   new
   norm O0
   call assert_fails("s/\\%')", 'E486:')
+  bwipe!
+
+  " old engine
+  new
+  norm O0
+  call assert_fails("s/\\%#=1\\%')", 'E486:')
   bwipe!
 endfunc
 
@@ -1063,5 +1112,66 @@ func Test_using_invalid_visual_position()
   /\%V
   bwipe!
 endfunc
+
+func Test_using_two_engines_pattern()
+  new
+  call setline(1, ['foobar=0', 'foobar=1', 'foobar=2'])
+  " \%#= at the end of the pattern
+  for i in range(0, 2)
+    for j in range(0, 2)
+      exe "set re=" .. i
+      call cursor(j + 1, 7)
+      call assert_fails("%s/foobar\\%#=" .. j, 'E1281:')
+    endfor
+  endfor
+  set re=0
+
+  " \%#= at the start of the pattern
+  for i in range(0, 2)
+    call cursor(i + 1, 7)
+    exe ":%s/\\%#=" .. i .. "foobar=" .. i .. "/xx"
+  endfor
+  call assert_equal(['xx', 'xx', 'xx'], getline(1, '$'))
+  bwipe!
+endfunc
+
+func Test_recursive_substitute_expr()
+  new
+  func Repl()
+    s
+  endfunc
+  silent! s/\%')/~\=Repl()
+
+  bwipe!
+  delfunc Repl
+endfunc
+
+def Test_compare_columns()
+  # this was using a line below the last line
+  enew
+  setline(1, ['', ''])
+  prop_type_add('name', {highlight: 'ErrorMsg'})
+  prop_add(1, 1, {length: 1, type: 'name'})
+  search('\%#=1\%>.l\n.*\%<2v', 'nW')
+  search('\%#=2\%>.l\n.*\%<2v', 'nW')
+  bwipe!
+  prop_type_delete('name')
+enddef
+
+def Test_compare_column_matchstr()
+  # do some search in text to set the line number, it should be ignored in
+  # matchstr().
+  enew
+  setline(1, ['one', 'two', 'three'])
+  :3
+  :/ee
+  bwipe!
+  set re=1
+  call assert_equal('aaa', matchstr('aaaaaaaaaaaaaaaaaaaa', '.*\%<5v'))
+  set re=2
+  call assert_equal('aaa', matchstr('aaaaaaaaaaaaaaaaaaaa', '.*\%<5v'))
+  set re=0
+enddef
+
 
 " vim: shiftwidth=2 sts=2 expandtab

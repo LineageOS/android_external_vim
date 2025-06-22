@@ -1,7 +1,8 @@
-" Menu Translations:    Czech (latin1 - w/o diacritics)
+" Menu Translations:    Czech (ASCII - without diacritics)
 " Maintainer:           Jiri Sedlak <jiri_sedlak@users.sourceforge.net>
 " Previous maintainer:  Jiri Brezina
 " Based on:             menu.vim (2012-10-21)
+" Generated from menu_cs_cz.utf-8.vim, DO NOT EDIT
 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -18,7 +19,7 @@ scriptencoding latin1
 menutrans &File				&Soubor
 menutrans &Open\.\.\.<Tab>:e		&Otevrit\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp	Otevrit\ v\ no&vem\ okne\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew	Otevrit\ tab\.\.\.<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew	Otevrit\ tab\.\.\.<Tab>:tabnew
 menutrans &New<Tab>:enew		&Novy<Tab>:enew
 menutrans &Close<Tab>:close		&Zavrit<Tab>:close
 menutrans &Save<Tab>:w			&Ulozit<Tab>:w

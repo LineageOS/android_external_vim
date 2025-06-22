@@ -1,6 +1,9 @@
 " Test for tabline
 
 source shared.vim
+source view_util.vim
+source check.vim
+source screendump.vim
 
 func TablineWithCaughtError()
   let s:func_in_tabline_called = 1
@@ -130,10 +133,97 @@ func Test_tabline_empty_group()
   tabnew
   redraw!
 
-  tabclose
+  bw!
   set tabline=
 endfunc
 
+" When there are exactly 20 tabline format items (the exact size of the
+" initial tabline items array), test that we don't write beyond the size
+" of the array.
+func Test_tabline_20_format_items_no_overrun()
+  set showtabline=2
 
+  let tabline = repeat('%#StatColorHi2#', 20)
+  let &tabline = tabline
+  redrawtabline
+
+  set showtabline& tabline&
+endfunc
+
+func Test_mouse_click_in_tab()
+  " This used to crash because TabPageIdxs[] was not initialized
+  let lines =<< trim END
+      tabnew
+      set mouse=a
+      exe "norm \<LeftMouse>"
+  END
+  call writefile(lines, 'Xclickscript', 'D')
+  call RunVim([], [], "-e -s -S Xclickscript -c qa")
+endfunc
+
+func Test_tabline_showcmd()
+  CheckScreendump
+
+  let lines =<< trim END
+    func MyTabLine()
+      return '%S'
+    endfunc
+
+    set showtabline=2
+    set tabline=%!MyTabLine()
+    set showcmdloc=tabline
+    call setline(1, ['a', 'b', 'c'])
+    set foldopen+=jump
+    1,2fold
+    3
+  END
+  call writefile(lines, 'XTest_tabline', 'D')
+
+  let buf = RunVimInTerminal('-S XTest_tabline', {'rows': 6})
+
+  call term_sendkeys(buf, "g")
+  call VerifyScreenDump(buf, 'Test_tabline_showcmd_1', {})
+
+  " typing "gg" should open the fold
+  call term_sendkeys(buf, "g")
+  call VerifyScreenDump(buf, 'Test_tabline_showcmd_2', {})
+
+  call term_sendkeys(buf, "\<C-V>Gl")
+  call VerifyScreenDump(buf, 'Test_tabline_showcmd_3', {})
+
+  call term_sendkeys(buf, "\<Esc>1234")
+  call VerifyScreenDump(buf, 'Test_tabline_showcmd_4', {})
+
+  call term_sendkeys(buf, "\<Esc>:set tabline=\<CR>")
+  call term_sendkeys(buf, ":\<CR>")
+  call term_sendkeys(buf, "1234")
+  call VerifyScreenDump(buf, 'Test_tabline_showcmd_5', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func TruncTabLine()
+  return '%1T口口%2Ta' .. repeat('b', &columns - 4) .. '%999X%#TabLine#c'
+endfunc
+
+" Test 'tabline' with truncated double-width label at the start.
+func Test_tabline_truncated_double_width()
+  tabnew
+  redraw
+  call assert_match('X$', Screenline(1))
+  let attr_TabLineFill = screenattr(1, &columns - 1)
+  let attr_TabLine = screenattr(1, &columns)
+  call assert_notequal(attr_TabLine, attr_TabLineFill)
+
+  set tabline=%!TruncTabLine()
+  redraw
+  call assert_equal('<a' .. repeat('b', &columns - 4) .. 'c', Screenline(1))
+  call assert_equal(attr_TabLineFill, screenattr(1, &columns - 2))
+  call assert_equal(attr_TabLine, screenattr(1, &columns - 1))
+  call assert_equal(attr_TabLine, screenattr(1, &columns))
+
+  bw!
+  set tabline=
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

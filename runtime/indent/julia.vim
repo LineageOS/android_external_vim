@@ -2,8 +2,15 @@
 " Language:	Julia
 " Maintainer:	Carlo Baldassi <carlobaldassi@gmail.com>
 " Homepage:	https://github.com/JuliaEditorSupport/julia-vim
-" Last Change:	2016 jun 16
-" Notes:        originally based on Bram Molenaar's indent file for vim
+" Last Change:	2022 Jun 14
+"		2023 Aug 28 by Vim Project (undo_indent)
+" Notes:        originally based on Bram Moolenaar's indent file for vim
+
+" Only load this indent file when no other was loaded.
+if exists("b:did_indent")
+  finish
+endif
+let b:did_indent = 1
 
 setlocal autoindent
 
@@ -14,6 +21,8 @@ setlocal indentkeys-=:
 setlocal indentkeys-=0{
 setlocal indentkeys-=0}
 setlocal nosmartindent
+
+let b:undo_indent = "setl ai< inde< indk< si<"
 
 " Only define the function once.
 if exists("*GetJuliaIndent")
@@ -301,7 +310,7 @@ function IsFunctionArgPar(lnum, c)
 endfunction
 
 function JumpToMatch(lnum, last_closed_bracket)
-  " we use the % command to skip back (tries to ues matchit if possible,
+  " we use the % command to skip back (tries to use matchit if possible,
   " otherwise resorts to vim's default, which is buggy but better than
   " nothing)
   call cursor(a:lnum, a:last_closed_bracket)

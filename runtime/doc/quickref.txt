@@ -1,4 +1,4 @@
-*quickref.txt*  For Vim version 8.2.  Last change: 2021 Dec 21
+*quickref.txt*  For Vim version 9.1.  Last change: 2025 Jun 12
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -604,12 +604,12 @@ Short explanation of each option:		*option-list*
 'altkeymap'	  'akm'	    obsolete option for Farsi
 'ambiwidth'	  'ambw'    what to do with Unicode chars of ambiguous width
 'antialias'	  'anti'    Mac OS X: use smooth, antialiased fonts
-'autochdir'	  'acd'     change directory to the file in the current window
-'autoshelldir'	  'asd'     change directory to the shell's current directory
 'arabic'	  'arab'    for Arabic as a default second language
 'arabicshape'	  'arshape' do shaping for Arabic characters
+'autochdir'	  'acd'     change directory to the file in the current window
 'autoindent'	  'ai'	    take indent for new line from previous line
 'autoread'	  'ar'	    autom. read file when changed outside of Vim
+'autoshelldir'	  'asd'     change directory to the shell's current directory
 'autowrite'	  'aw'	    automatically write file if changed
 'autowriteall'	  'awa'     as 'autowrite', but works with more commands
 'background'	  'bg'	    "dark" or "light", used for highlight colors
@@ -639,9 +639,11 @@ Short explanation of each option:		*option-list*
 'cdpath'	  'cd'	    list of directories searched with ":cd"
 'cedit'			    key used to open the command-line window
 'charconvert'	  'ccv'     expression for character encoding conversion
+'chistory'	  'chi'     maximum number of quickfix lists in history
 'cindent'	  'cin'     do C program indenting
 'cinkeys'	  'cink'    keys that trigger indent when 'cindent' is set
 'cinoptions'	  'cino'    how to do indenting when 'cindent' is set
+'cinscopedecls'	  'cinsd'   words that are recognized by 'cino-g'
 'cinwords'	  'cinw'    words where 'si' and 'cin' add an indent
 'clipboard'	  'cb'	    use the clipboard as the unnamed register
 'cmdheight'	  'ch'	    number of lines to use for the command-line
@@ -688,6 +690,7 @@ Short explanation of each option:		*option-list*
 'edcompatible'	  'ed'	    toggle flags of ":substitute" command
 'emoji'		  'emo'	    emoji characters are considered full width
 'encoding'	  'enc'     encoding used internally
+'endoffile'	  'eof'     write CTRL-Z at end of the file
 'endofline'	  'eol'     write <EOL> for last line in file
 'equalalways'	  'ea'	    windows are automatically made the same size
 'equalprg'	  'ep'	    external program to use for "=" command
@@ -696,6 +699,7 @@ Short explanation of each option:		*option-list*
 'errorformat'	  'efm'     description of the lines in the error file
 'esckeys'	  'ek'	    recognize function keys in Insert mode
 'eventignore'	  'ei'	    autocommand events that are ignored
+'eventignorewin'  'eiw'     autocommand events that are ignored in a window
 'expandtab'	  'et'	    use spaces when <Tab> is inserted
 'exrc'		  'ex'	    read .vimrc and .exrc in the current directory
 'fileencoding'	  'fenc'    file encoding for multibyte text
@@ -705,6 +709,7 @@ Short explanation of each option:		*option-list*
 'fileignorecase'  'fic'     ignore case when using file names
 'filetype'	  'ft'	    type of file, used for autocommands
 'fillchars'	  'fcs'     characters to use for displaying special items
+'findfunc'	  'ffu'     function to be called for the |:find| command
 'fixendofline'	  'fixeol'  make sure last line in file has <EOL>
 'fkmap'		  'fk'	    obsolete option for Farsi
 'foldclose'	  'fcl'     close a fold when the cursor leaves it
@@ -770,9 +775,11 @@ Short explanation of each option:		*option-list*
 'iskeyword'	  'isk'     characters included in keywords
 'isprint'	  'isp'     printable characters
 'joinspaces'	  'js'	    two spaces after a period with a join command
+'jumpoptions'	  'jop'     specifies how jumping is done
 'key'			    encryption key
 'keymap'	  'kmp'     name of a keyboard mapping
 'keymodel'	  'km'	    enable starting/stopping selection with keys
+'keyprotocol'	  'kpc'	    what keyboard protocol to use for what terminal
 'keywordprg'	  'kp'	    program to use for the "K" command
 'langmap'	  'lmap'    alphabetic characters for other language mode
 'langmenu'	  'lm'	    language to be used for the menus
@@ -780,10 +787,12 @@ Short explanation of each option:		*option-list*
 'langremap'	  'lrm'	    do apply 'langmap' to mapped characters
 'laststatus'	  'ls'	    tells when last window has status lines
 'lazyredraw'	  'lz'	    don't redraw while executing macros
+'lhistory'	  'lhi'	    maximum number of location lists in history
 'linebreak'	  'lbr'     wrap long lines at a blank
 'lines'			    number of lines in the display
 'linespace'	  'lsp'     number of pixel lines to use between characters
 'lisp'			    automatic indenting for Lisp
+'lispoptions'	  'lop'     changes how Lisp indenting is done
 'lispwords'	  'lw'	    words that change how lisp indenting works
 'list'			    show <Tab> and <EOL>
 'listchars'	  'lcs'     characters for displaying in list mode
@@ -814,6 +823,7 @@ Short explanation of each option:		*option-list*
 'mousefocus'	  'mousef'  keyboard focus follows the mouse
 'mousehide'	  'mh'	    hide mouse pointer while typing
 'mousemodel'	  'mousem'  changes meaning of mouse buttons
+'mousemoveevent'  'mousemev'  report mouse moves with <MouseMove>
 'mouseshape'	  'mouses'  shape of the mouse pointer in different modes
 'mousetime'	  'mouset'  max time between mouse double-click
 'mzquantum'	  'mzq'     the interval between polls for MzScheme threads
@@ -897,7 +907,8 @@ Short explanation of each option:		*option-list*
 'shortmess'	  'shm'     list of flags, reduce length of messages
 'shortname'	  'sn'	    Filenames assumed to be 8.3 chars
 'showbreak'	  'sbr'     string to use at the start of wrapped lines
-'showcmd'	  'sc'	    show (partial) command in status line
+'showcmd'	  'sc'	    show (partial) command somewhere
+'showcmdloc'	  'sloc'    where to show (partial) command
 'showfulltag'	  'sft'     show full tag pattern when completing tag
 'showmatch'	  'sm'	    briefly jump to matching bracket if insert one
 'showmode'	  'smd'     message on status line to show current mode
@@ -907,8 +918,9 @@ Short explanation of each option:		*option-list*
 'signcolumn'	  'scl'	    when to display the sign column
 'smartcase'	  'scs'     no ignore case when pattern has uppercase
 'smartindent'	  'si'	    smart autoindenting for C programs
-'smarttab'	  'sta'     use 'shiftwidth' when inserting <Tab>
-'softtabstop'	  'sts'     number of spaces that <Tab> uses while editing
+'smarttab'	  'sta'     <Tab> in leading whitespace indents by 'shiftwidth'
+'smoothscroll'	  'sms'     scroll by screen lines when 'wrap' is set
+'softtabstop'	  'sts'     number of columns between two soft tab stops
 'spell'			    enable spell checking
 'spellcapcheck'   'spc'     pattern to locate end of a sentence
 'spellfile'	  'spf'     files where |zg| and |zw| store words
@@ -916,6 +928,7 @@ Short explanation of each option:		*option-list*
 'spelloptions'	  'spo'     options for spell checking
 'spellsuggest'	  'sps'     method(s) used to suggest spelling corrections
 'splitbelow'	  'sb'	    new window from split is below the current one
+'splitkeep'	  'spk'     determines scroll behavior for split windows
 'splitright'	  'spr'     new window is put right of the current one
 'startofline'	  'sol'     commands move cursor to first non-blank in line
 'statusline'	  'stl'     custom format for the status line
@@ -926,9 +939,10 @@ Short explanation of each option:		*option-list*
 'switchbuf'	  'swb'     sets behavior when switching to another buffer
 'synmaxcol'	  'smc'     maximum column to find syntax items
 'syntax'	  'syn'     syntax to be loaded for current buffer
+'tabclose'	  'tcl'     which tab page to focus when closing a tab
 'tabline'	  'tal'     custom format for the console tab pages line
 'tabpagemax'	  'tpm'     maximum number of tab pages for |-p| and "tab all"
-'tabstop'	  'ts'	    number of spaces that <Tab> in file uses
+'tabstop'	  'ts'	    number of columns between two tab stops
 'tagbsearch'	  'tbs'     use binary searching in tags files
 'tagcase'	  'tc'      how to handle case when searching in tags files
 'tagfunc'	  'tfu'	    function to get list of tag matches
@@ -973,8 +987,8 @@ Short explanation of each option:		*option-list*
 'undoreload'	  'ur'	    max nr of lines to save for undo on a buffer reload
 'updatecount'	  'uc'	    after this many characters flush swap file
 'updatetime'	  'ut'	    after this many milliseconds flush swap file
-'varsofttabstop'  'vsts'    a list of number of spaces when typing <Tab>
-'vartabstop'	  'vts'	    a list of number of spaces for <Tab>s
+'varsofttabstop'  'vsts'    a list of number of columns between soft tab stops
+'vartabstop'	  'vts'	    a list of number of columns between tab stops
 'verbose'	  'vbs'     give informative messages
 'verbosefile'	  'vfile'   file to write messages in
 'viewdir'	  'vdir'    directory where to store files with :mkview
@@ -996,9 +1010,10 @@ Short explanation of each option:		*option-list*
 'winaltkeys'	  'wak'     when the windows system handles ALT keys
 'wincolor'	  'wcr'	    window-local highlighting
 'window'	  'wi'	    nr of lines to scroll for CTRL-F and CTRL-B
-'winheight'	  'wh'	    minimum number of lines for the current window
+'winfixbuf'	  'wfb'     keep window focused on a single buffer
 'winfixheight'	  'wfh'     keep window height when opening/closing windows
 'winfixwidth'	  'wfw'     keep window width when opening/closing windows
+'winheight'	  'wh'	    minimum number of lines for the current window
 'winminheight'	  'wmh'     minimum number of lines for any window
 'winminwidth'	  'wmw'     minimal number of columns for any window
 'winptydll'		    name of the winpty dynamic library
@@ -1348,7 +1363,7 @@ Context-sensitive completion on the command-line:
 |CTRL-W_^|	CTRL-W ^		split window and edit alternate file
 |CTRL-W_n|	CTRL-W n  or  :new	create new empty window
 |CTRL-W_q|	CTRL-W q  or  :q[uit]	quit editing and close window
-|CTRL-W_c|	CTRL-W c  or  :cl[ose]	make buffer hidden and close window
+|CTRL-W_c|	CTRL-W c  or  :clo[se]	make buffer hidden and close window
 |CTRL-W_o|	CTRL-W o  or  :on[ly]	make current window only one on the
 					   screen
 

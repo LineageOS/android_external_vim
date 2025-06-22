@@ -302,7 +302,25 @@ func Test_getmarklist()
   call assert_equal({'mark' : "'r", 'pos' : [bufnr(), 2, 2, 0]},
         \ bufnr()->getmarklist()[0])
   call assert_equal([], {}->getmarklist())
+  normal! yy
+  call assert_equal([
+        \ {'mark': "'[", 'pos': [bufnr(), 2, 1, 0]},
+        \ {'mark': "']", 'pos': [bufnr(), 2, v:maxcol, 0]},
+        \ ], getmarklist(bufnr())[-2:])
   close!
 endfunc
+
+" This was using freed memory
+func Test_jump_mark_autocmd()
+  next 00
+  edit 0
+  sargument
+  au BufEnter 0 all
+  sil norm 
+
+  au! BufEnter
+  bwipe!
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -1,4 +1,4 @@
-*if_perl.txt*   For Vim version 8.2.  Last change: 2022 Jan 08
+*if_perl.txt*   For Vim version 9.1.  Last change: 2025 Apr 27
 
 
 		  VIM REFERENCE MANUAL    by Sven Verdoolaege
@@ -22,9 +22,9 @@ line of a file, regardless of the filename suffix, to check if a file is a
 Perl script (see scripts.vim in Vim's syntax directory).  Vim assumes a file
 is POD text if the filename has a .POD suffix.
 
-To use tags with Perl, you need a recent version of Exuberant ctags.  Look
-here:
-	http://ctags.sourceforge.net
+To use tags with Perl, you need Universal/Exuberant Ctags.  Look here:
+	Universal Ctags (preferred): https://ctags.io
+	Exuberant Ctags: http://ctags.sourceforge.net
 
 Alternatively, you can use the Perl script pltags.pl, which is shipped with
 Vim in the $VIMRUNTIME/tools directory.  This script has currently more
@@ -74,7 +74,7 @@ The ActiveState one should work, Strawberry Perl is a good alternative.
 			|script-here|.
 
 
-Example vim script: >
+Example Vim script: >
 
 	function! WhitePearl()
 	perl << EOF
@@ -103,7 +103,7 @@ Here are some things you can try: >
   :perldo $_ = reverse($_);1
   :perl VIM::Msg("hello")
   :perl $line = $curbuf->Get(42)
-<
+<							*E299*
 Executing Perl commands in the |sandbox| is limited.  ":perldo" will not be
 possible at all.  ":perl" will be evaluated in the Safe environment, if
 possible.
@@ -254,23 +254,14 @@ $main::curbuf
 
 							*script-here*
 When using a script language in-line, you might want to skip this when the
-language isn't supported.  But this mechanism doesn't work: >
+language isn't supported.  >
    if has('perl')
      perl << EOF
-       this will NOT work!
+       print 'perl works'
    EOF
    endif
-Instead, put the Perl/Python/Ruby/etc. command in a function and call that
-function: >
-    if has('perl')
-      function DefPerl()
-	perl << EOF
-	  this works
-    EOF
-      endfunction
-      call DefPerl()
-    endif
-Note that "EOF" must be at the start of the line.
+Note that "EOF" must be at the start of the line without preceding white
+space.
 
 ==============================================================================
 4. Dynamic loading					*perl-dynamic*
@@ -305,6 +296,12 @@ The 'perldll' option can be used to specify the Perl shared library file
 instead of DYNAMIC_PERL_DLL file what was specified at compile time.  The
 version of the shared library must match the Perl version Vim was compiled
 with.
+
+Note: If you are building Perl locally, you have to use a version compiled
+with threading support for it for Vim to successfully link against it. You can
+use the `-Dusethreads` flags when configuring Perl, and check that a Perl
+binary has it enabled by running `perl -V` and verify that `USE_ITHREADS` is
+under "Compile-time options".
 
 ==============================================================================
  vim:tw=78:ts=8:noet:ft=help:norl:

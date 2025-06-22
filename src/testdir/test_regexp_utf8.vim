@@ -1,5 +1,7 @@
 " Tests for regexp in utf8 encoding
 
+source shared.vim
+
 func s:equivalence_test()
   let str = "AÀÁÂÃÄÅĀĂĄǍǞǠǺȂȦȺḀẠẢẤẦẨẪẬẮẰẲẴẶ BƁɃḂḄḆ CÇĆĈĊČƇȻḈꞒ DĎĐƊḊḌḎḐḒ EÈÉÊËĒĔĖĘĚȄȆȨɆḔḖḘḚḜẸẺẼẾỀỂỄỆ FƑḞꞘ GĜĞĠĢƓǤǦǴḠꞠ HĤĦȞḢḤḦḨḪⱧ IÌÍÎÏĨĪĬĮİƗǏȈȊḬḮỈỊ JĴɈ KĶƘǨḰḲḴⱩꝀ LĹĻĽĿŁȽḶḸḺḼⱠ MḾṀṂ NÑŃŅŇǸṄṆṈṊꞤ OÒÓÔÕÖØŌŎŐƟƠǑǪǬǾȌȎȪȬȮȰṌṎṐṒỌỎỐỒỔỖỘỚỜỞỠỢ PƤṔṖⱣ QɊ RŔŖŘȐȒɌṘṚṜṞⱤꞦ SŚŜŞŠȘṠṢṤṦṨⱾꞨ TŢŤŦƬƮȚȾṪṬṮṰ UÙÚÛÜŨŪŬŮŰƯǕǙǛǓǗȔȖɄṲṴṶṸṺỤỦỨỪỬỮỰ  VƲṼṾ WŴẀẂẄẆẈ XẊẌ YÝŶŸƳȲɎẎỲỴỶỸ ZŹŻŽƵẐẒẔⱫ aàáâãäåāăąǎǟǡǻȃȧᶏḁẚạảấầẩẫậắằẳẵặⱥ bƀɓᵬᶀḃḅḇ cçćĉċčƈȼḉꞓꞔ dďđɗᵭᶁᶑḋḍḏḑḓ eèéêëēĕėęěȅȇȩɇᶒḕḗḙḛḝẹẻẽếềểễệ fƒᵮᶂḟꞙ gĝğġģǥǧǵɠᶃḡꞡ hĥħȟḣḥḧḩḫẖⱨꞕ iìíîïĩīĭįǐȉȋɨᶖḭḯỉị jĵǰɉ kķƙǩᶄḱḳḵⱪꝁ lĺļľŀłƚḷḹḻḽⱡ mᵯḿṁṃ nñńņňŉǹᵰᶇṅṇṉṋꞥ oòóôõöøōŏőơǒǫǭǿȍȏȫȭȯȱɵṍṏṑṓọỏốồổỗộớờởỡợ pƥᵱᵽᶈṕṗ qɋʠ rŕŗřȑȓɍɽᵲᵳᶉṛṝṟꞧ sśŝşšșȿᵴᶊṡṣṥṧṩꞩ tţťŧƫƭțʈᵵṫṭṯṱẗⱦ uùúûüũūŭůűųǚǖưǔǘǜȕȗʉᵾᶙṳṵṷṹṻụủứừửữự vʋᶌṽṿ wŵẁẃẅẇẉẘ xẋẍ yýÿŷƴȳɏẏẙỳỵỷỹ zźżžƶᵶᶎẑẓẕⱬ"
   let groups = split(str)
@@ -152,9 +154,6 @@ func s:classes_test()
   if has('win32')
     let identchars_ok = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz ¡¢£¤¥¦§µÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ'
     let kwordchars_ok = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyzµÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
-  elseif has('ebcdic')
-    let identchars_ok = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz¬®µº¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
-    let kwordchars_ok = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz¬®µº¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
   else
     let identchars_ok = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyzµÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
     let kwordchars_ok = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyzµÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
@@ -166,8 +165,6 @@ func s:classes_test()
     let fnamechars_ok = '$+,-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
   elseif has('vms')
     let fnamechars_ok = '#$%+,-./0123456789:;<>ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz~ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
-  elseif has('ebcdic')
-    let fnamechars_ok = '#$%+,-./=ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
   else
     let fnamechars_ok = '#$%+,-./0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ'
   endif
@@ -231,8 +228,7 @@ func Test_multibyte_chars()
   "  When there is no match use only the first two items.
   let tl = []
 
-  " Multi-byte character tests. These will fail unless vim is compiled
-  " with Multibyte (FEAT_MBYTE) or BIG/HUGE features.
+  " Multi-byte character tests.
   call add(tl, [2, '[[:alpha:][=a=]]\+', '879 aiaãâaiuvna ', 'aiaãâaiuvna'])
   call add(tl, [2, '[[=a=]]\+', 'ddaãâbcd', 'aãâ'])								" equivalence classes
   call add(tl, [2, '[^ม ]\+', 'มม oijasoifjos ifjoisj f osij j มมมมม abcd', 'oijasoifjos'])
@@ -346,7 +342,7 @@ func Test_multibyte_chars()
 endfunc
 
 " check that 'ambiwidth' does not change the meaning of \p
-func Test_ambiwidth()
+func Test_regexp_ambiwidth()
   set regexpengine=1 ambiwidth=single
   call assert_equal(0, match("\u00EC", '\p'))
   set regexpengine=1 ambiwidth=double
@@ -513,7 +509,6 @@ endfunc
 " Check that [[:upper:]] matches for automatic engine
 func Test_match_char_class_upper()
   new
-  let _engine=&regexpengine
 
   " Test 1: [[:upper:]]\{2,\}
   set regexpengine=0
@@ -554,16 +549,74 @@ func Test_match_char_class_upper()
   call assert_equal(4, searchcount().total, 'TEST 3 lower')
 
   " clean up
-  let &regexpengine=_engine
+  set regexpengine=0
   bwipe!
 endfunc
 
 func Test_match_invalid_byte()
-  call writefile(0z630a.765d30aa0a.2e0a.790a.4030, 'Xinvalid')
+  call writefile(0z630a.765d30aa0a.2e0a.790a.4030, 'Xinvalid', 'D')
   new
   source Xinvalid
   bwipe!
-  call delete('Xinvalid')
+endfunc
+
+func Test_match_illegal_byte()
+  " Text has illegal bytes which need to be set explicitly
+  let lines = ["norm :set no\x01\<CR>", "silent n\xff", "silent norm :b\xff\<CR>"]
+  call writefile(lines, 'Xregexp', 'D')
+  call system(GetVimCommand() .. ' -X -Z -e -s -S Xregexp -c qa!')
+endfunc
+
+func Test_match_too_complicated()
+  set regexpengine=1
+  exe "noswapfile vsplit \xeb\xdb\x99"
+  silent! buf \&\zs*\zs*0
+  bwipe!
+  set regexpengine=0
+endfunc
+
+func Test_combining_chars_in_collection()
+  new
+  for i in range(0,2)
+    exe "set re=".i
+    put =['ɔ̃', 'ɔ',  '̃  ã', 'abcd']
+    :%s/[ɔ̃]//
+    call assert_equal(['', '', 'ɔ', '̃  ã', 'abcd'], getline(1,'$'))
+    %d
+  endfor
+  bw!
+endfunc
+
+func Test_search_multibyte_match_ascii()
+  new
+  " Match single 'ſ' and 's'
+  call setline(1,  'das abc heraus abc ſich abc ſind')
+  for i in range(0, 2)
+    exe "set re="..i
+    let ic_match = matchbufline('%', '\c\%u17f', 1, '$')->mapnew({idx, val -> val.text})
+    let noic_match = matchbufline('%', '\C\%u17f', 1, '$')->mapnew({idx, val -> val.text})
+    call assert_equal(['s', 's', 'ſ','ſ'], ic_match, "Ignorecase Regex-engine: " .. &re)
+    call assert_equal(['ſ','ſ'], noic_match, "No-Ignorecase Regex-engine: " .. &re)
+  endfor
+  " Match several 'ſſ' and 'ss'
+  call setline(1,  'das abc herauss abc ſſich abc ſind')
+  for i in range(0, 2)
+    exe "set re="..i
+    let ic_match = matchbufline('%', '\c\%u17f\%u17f', 1, '$')->mapnew({idx, val -> val.text})
+    let noic_match = matchbufline('%', '\C\%u17f\%u17f', 1, '$')->mapnew({idx, val -> val.text})
+    let ic_match2 = matchbufline('%', '\c\%u17f\+', 1, '$')->mapnew({idx, val -> val.text})
+    let noic_match2 = matchbufline('%', '\C\%u17f\+', 1, '$')->mapnew({idx, val -> val.text})
+    let ic_match3 = matchbufline('%', '\c[\u17f]\+', 1, '$')->mapnew({idx, val -> val.text})
+    let noic_match3 = matchbufline('%', '\C[\u17f]\+', 1, '$')->mapnew({idx, val -> val.text})
+
+    call assert_equal(['ss', 'ſſ'], ic_match, "Ignorecase Regex-engine: " .. &re)
+    call assert_equal(['ſſ'], noic_match, "No-Ignorecase Regex-engine: " .. &re)
+    call assert_equal(['s', 'ss', 'ſſ', 'ſ'], ic_match2, "Ignorecase Regex-engine: " .. &re)
+    call assert_equal(['ſſ','ſ'], noic_match2, "No-Ignorecase Regex-engine: " .. &re)
+    call assert_equal(['s', 'ss', 'ſſ', 'ſ'], ic_match3, "Ignorecase Collection Regex-engine: " .. &re)
+    call assert_equal(['ſſ','ſ'], noic_match3, "No-Ignorecase Collection Regex-engine: " .. &re)
+  endfor
+  bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

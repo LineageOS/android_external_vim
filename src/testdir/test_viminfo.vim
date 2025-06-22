@@ -20,7 +20,7 @@ func Test_viminfo_read_and_write()
 	\ '|copied as-is',
 	\ '|and one more',
 	\ ]
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   rviminfo Xviminfo
   call assert_equal('asdf', @/)
 
@@ -40,8 +40,6 @@ func Test_viminfo_read_and_write()
     endif
   endfor
   call assert_equal(3, done)
-
-  call delete('Xviminfo')
 endfunc
 
 func Test_global_vars()
@@ -130,7 +128,7 @@ func Test_global_vars()
         \ "!GLOB_BLOB_3\tBLO\t0z1x",
         \ "!GLOB_BLOB_4\tBLO\t0z12 ab",
         \ "!GLOB_LIST_1\tLIS\t1 2",
-        \ "!GLOB_DICT_1\tDIC\t1 2"], 'Xviminfo')
+        \ "!GLOB_DICT_1\tDIC\t1 2"], 'Xviminfo', 'D')
   call assert_fails('rv! Xviminfo', 'E488:')
   call assert_equal('123', g:GLOB_BLOB_1)
   call assert_equal(1, type(g:GLOB_BLOB_1))
@@ -145,7 +143,6 @@ func Test_global_vars()
   call assert_equal('1 2', g:GLOB_DICT_1)
   call assert_equal(1, type(g:GLOB_DICT_1))
 
-  call delete('Xviminfo')
   set viminfo-=!
 endfunc
 
@@ -304,7 +301,7 @@ func Test_cmdline_history_order()
   call test_settime(39)
   call histadd(':', "echo '39'")
   wviminfo Xviminfo
-  
+
   call histdel(':')
   rviminfo Xviminfo
   call assert_equal("echo '39'", histget(':', -1))
@@ -563,7 +560,7 @@ func Test_viminfo_encoding()
   sp Xviminfo
   call assert_equal('latin1', &fenc)
   close
-  
+
   call histdel(':')
   rviminfo Xviminfo
   call assert_equal("echo 'é'", histget(':', -1))
@@ -583,7 +580,7 @@ func Test_viminfo_bad_syntax()
   call add(lines, '|1,"x\') " trailing backslash
   call add(lines, '|1,,,,') "trailing comma
   call add(lines, '|1,>234') " trailing continuation line
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   rviminfo Xviminfo
 
   call delete('Xviminfo')
@@ -613,9 +610,28 @@ func Test_viminfo_bad_syntax2()
   call add(lines, '|4,20,1,1,1,"x"') " invalid value for file name
   call add(lines, '|4,49,0,1,1,"x"') " invalid value for line number
 
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   rviminfo Xviminfo
-  call delete('Xviminfo')
+endfunc
+
+" This used to crash Vim (GitHub issue #12652)
+func Test_viminfo_bad_syntax3()
+  let lines =<< trim END
+    call writefile([], 'Xvbs3.result')
+    qall!
+  END
+  call writefile(lines, 'Xvbs3script', 'D')
+
+  let lines = []
+  call add(lines, '|1,4')
+  " bad viminfo syntax for register barline
+  call add(lines, '|3,1,1,1,1,0,71489,,125') " empty line1
+  call writefile(lines, 'Xviminfo', 'D')
+
+  call RunVim([], [], '--clean -i Xviminfo -S Xvbs3script')
+  call assert_true(filereadable('Xvbs3.result'))
+
+  call delete('Xvbs3.result')
 endfunc
 
 func Test_viminfo_file_marks()
@@ -691,10 +707,9 @@ func Test_viminfo_file_mark_zero_time()
 	\ '|4,66,1,0,0,"/tmp/nothing"',
 	\ "",
 	\ ]
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   delmark B
   rviminfo Xviminfo
-  call delete('Xviminfo')
   call assert_equal(1, line("'B"))
   delmark B
 endfunc
@@ -703,7 +718,7 @@ endfunc
 func Test_viminfo_file_mark_unloaded_buf()
   let save_viminfo = &viminfo
   set viminfo&vim
-  call writefile(repeat(['vim'], 10), 'Xfile1')
+  call writefile(repeat(['vim'], 10), 'Xfile1', 'D')
   %bwipe
   edit! Xfile1
   call setpos("'u", [0, 3, 1, 0])
@@ -716,12 +731,12 @@ func Test_viminfo_file_mark_unloaded_buf()
   call assert_equal([0, 3, 1, 0], getpos("'u"))
   call assert_equal([0, 5, 1, 0], getpos("'v"))
   %bwipe
-  call delete('Xfile1')
   call delete('Xviminfo')
   let &viminfo = save_viminfo
 endfunc
 
 func Test_viminfo_oldfiles()
+  set noswapfile
   let v:oldfiles = []
   let lines = [
 	\ '# comment line',
@@ -744,11 +759,10 @@ func Test_viminfo_oldfiles()
 	\ "\t\"\t11\t0",
 	\ "",
 	\ ]
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   delmark E
   edit /tmp/file_two.txt
   rviminfo! Xviminfo
-  call delete('Xviminfo')
 
   call assert_equal('h viminfo', histget(':'))
   call assert_equal('session', histget('/'))
@@ -765,6 +779,7 @@ func Test_viminfo_oldfiles()
   call assert_equal("/tmp/another.txt", expand("%"))
   bwipe
   delmark E
+  set swapfile&
 endfunc
 
 " Test for storing and restoring buffer list in 'viminfo'
@@ -837,7 +852,7 @@ func Test_viminfo_error()
   call assert_fails('rviminfo xyz', 'E195:')
 
   " Illegal starting character
-  call writefile(["a 123"], 'Xviminfo')
+  call writefile(["a 123"], 'Xviminfo', 'D')
   call assert_fails('rv Xviminfo', 'E575:')
 
   " Illegal register name in the viminfo file
@@ -857,8 +872,6 @@ func Test_viminfo_error()
 
   call writefile(repeat(['"@'], 15), 'Xviminfo')
   call assert_fails('rv Xviminfo', 'E577:')
-
-  call delete('Xviminfo')
 endfunc
 
 " Test for saving and restoring last substitute string in viminfo
@@ -899,7 +912,7 @@ func Test_viminfo_registers_old()
 	\ "	:echo 'Hello'\<CR>",
 	\ "",
 	\ ]
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   let @a = 'one'
   let @b = 'two'
   let @m = 'three'
@@ -917,7 +930,7 @@ func Test_viminfo_registers_old()
   call assert_equal(":echo 'Hello'\<CR>", getreg('m'))
   call assert_equal('Vim', getreg('"'))
   call assert_equal("\nHello", execute('normal @@'))
-  call delete('Xviminfo')
+
   let @" = ''
 endfunc
 
@@ -929,11 +942,11 @@ func Test_viminfo_large_register()
   set viminfo+=<200
   let lines = ['"r	CHAR	0']
   call extend(lines, repeat(["\tsun is rising"], 200))
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   let @r = ''
   rviminfo! Xviminfo
   call assert_equal(join(repeat(["sun is rising"], 200), "\n"), @r)
-  call delete('Xviminfo')
+
   let @r = ''
   let &viminfo = save_viminfo
 endfunc
@@ -944,9 +957,9 @@ func Test_viminfofile_none()
   set viminfofile=NONE
   wviminfo Xviminfo
   call assert_false(filereadable('Xviminfo'))
-  call writefile([''], 'Xviminfo')
+  call writefile([''], 'Xviminfo', 'D')
   call assert_fails('rviminfo Xviminfo', 'E195:')
-  call delete('Xviminfo')
+
   let &viminfofile = save_vif
 endfunc
 
@@ -954,18 +967,16 @@ endfunc
 func Test_viminfo_perm()
   CheckUnix
   CheckNotRoot
-  call writefile([''], 'Xviminfo')
+  call writefile([''], 'Xviminfo', 'D')
   call setfperm('Xviminfo', 'r-x------')
   call assert_fails('wviminfo Xviminfo', 'E137:')
   call setfperm('Xviminfo', '--x------')
   call assert_fails('rviminfo Xviminfo', 'E195:')
-  call delete('Xviminfo')
 
   " Try to write the viminfo to a directory
-  call mkdir('Xdir')
-  call assert_fails('wviminfo Xdir', 'E137:')
-  call assert_fails('rviminfo Xdir', 'E195:')
-  call delete('Xdir', 'rf')
+  call mkdir('Xvifdir', 'R')
+  call assert_fails('wviminfo Xvifdir', 'E137:')
+  call assert_fails('rviminfo Xvifdir', 'E195:')
 endfunc
 
 " Test for writing to an existing viminfo file merges the file marks
@@ -977,8 +988,8 @@ func XTest_viminfo_marks_merge()
   %argdelete
   %bwipe
 
-  call writefile(repeat(['editor'], 10), 'Xbufa')
-  call writefile(repeat(['Vim'], 10), 'Xbufb')
+  call writefile(repeat(['editor'], 10), 'Xbufa', 'D')
+  call writefile(repeat(['Vim'], 10), 'Xbufb', 'D')
 
   " set marks in buffers
   call test_settime(10)
@@ -1011,8 +1022,6 @@ func XTest_viminfo_marks_merge()
   " cleanup
   %bwipe
   call delete('Xviminfo')
-  call delete('Xbufa')
-  call delete('Xbufb')
   call test_settime(0)
   let &viminfo=save_viminfo
 endfunc
@@ -1049,7 +1058,7 @@ func Test_viminfo_oldfiles_newfile()
     w! Xnew-file.txt
     qall
   [CODE]
-  call writefile(commands, 'Xviminfotest')
+  call writefile(commands, 'Xviminfotest', 'D')
   let buf = RunVimInTerminal('-S Xviminfotest', #{wait_for_ruler: 0})
   call WaitForAssert({-> assert_equal("finished", term_getstatus(buf))})
 
@@ -1057,8 +1066,8 @@ func Test_viminfo_oldfiles_newfile()
   rviminfo! Xviminfofile
   call assert_match('Xnew-file.txt$', v:oldfiles[0])
   call assert_equal(1, len(v:oldfiles))
+
   call delete('Xviminfofile')
-  call delete('Xviminfotest')
   call delete('Xnew-file.txt')
 
   let v:oldfiles = test_null_list()
@@ -1260,7 +1269,7 @@ func Test_viminfo_merge_old_filemarks()
   call add(lines, '|1,4')
   call add(lines, '> ' .. fnamemodify('a.txt', ':p:~'))
   call add(lines, "\tb\t7\t0\n")
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   edit b.txt
   call setline(1, range(1, 20))
   12mark b
@@ -1272,7 +1281,6 @@ func Test_viminfo_merge_old_filemarks()
   edit b.txt
   rviminfo! Xviminfo
   call assert_equal(12, line("'b"))
-  call delete('Xviminfo')
 endfunc
 
 " Test for merging the jump list from a old viminfo file
@@ -1282,14 +1290,69 @@ func Test_viminfo_merge_old_jumplist()
   call add(lines, "-'  20  1  " .. fnamemodify('a.txt', ':p:~'))
   call add(lines, "-'  30  1  " .. fnamemodify('b.txt', ':p:~'))
   call add(lines, "-'  40  1  " .. fnamemodify('b.txt', ':p:~'))
-  call writefile(lines, 'Xviminfo')
+  call writefile(lines, 'Xviminfo', 'D')
   clearjumps
   rviminfo! Xviminfo
   let l = getjumplist()[0]
   call assert_equal([40, 30, 20, 10], [l[0].lnum, l[1].lnum, l[2].lnum,
         \ l[3].lnum])
   bw!
-  call delete('Xviminfo')
+endfunc
+
+func Test_viminfo_oldfiles_filter()
+  let v:oldfiles = []
+  let _viminfofile = &viminfofile
+  let &viminfofile=''
+  let lines = [
+	\ '# comment line',
+	\ '*encoding=utf-8',
+	\ "> /tmp/vimrc_one.vim",
+	\ "\t\"\t11\t0",
+	\ "",
+	\ "> /tmp/foobar.txt",
+	\ "\t\"\t11\t0",
+	\ "",
+	\ ]
+  call writefile(lines, 'Xviminfo1', 'D')
+  rviminfo! Xviminfo1
+  new
+  " filter returns a single item
+  let a = execute('filter /vim/ oldfiles')->split('\n')
+  call assert_equal(1, len(a))
+  " filter returns more than a single match
+  let a = execute('filter #tmp# oldfiles')->split('\n')
+  call assert_equal(2, len(a))
+  " don't get prompted for the file, but directly open it
+  filter /vim/ browse oldfiles
+  call assert_equal("/tmp/vimrc_one.vim", expand("%"))
+  bw
+  let &viminfofile = _viminfofile
+endfunc
+
+func Test_viminfo_global_var()
+  let _viminfofile = &viminfofile
+  let _viminfo = &viminfo
+  let &viminfofile=''
+  set viminfo+=!
+  let lines = [
+    \ '# comment line',
+    \ "",
+    \ '# Viminfo version',
+    \ '|1,4',
+    \ "",
+    \ '*encoding=utf-8',
+    \ "",
+    \ '# global variables:',
+    \ "!VAL\tFLO\t-in",
+    \ "!VAR\tFLO\t-inf",
+    \ "",
+    \ ]
+  call writefile(lines, 'Xviminfo2', 'D')
+  rviminfo! Xviminfo2
+  call assert_equal(0.0, g:VAL)
+  call assert_equal(str2float("-inf"), g:VAR)
+  let &viminfofile = _viminfofile
+  let &viminfo = _viminfo
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

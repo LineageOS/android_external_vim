@@ -1,7 +1,9 @@
 " Vim syntax file
-" Language:     Wget configuration file (/etc/wgetrc ~/.wgetrc)
+" Language:	Wget configuration file (/etc/wgetrc ~/.wgetrc)
 " Maintainer:	Doug Kearns <dougkearns@gmail.com>
-" Last Change:	2013 Jun 1
+" Last Change:	2023 Nov 05
+
+" GNU Wget 1.21 built on linux-gnu.
 
 if exists("b:current_syntax")
   finish
@@ -10,7 +12,7 @@ endif
 let s:cpo_save = &cpo
 set cpo&vim
 
-syn match wgetComment "#.*$" contains=wgetTodo contained
+syn match wgetComment "#.*" contains=wgetTodo contained
 
 syn keyword wgetTodo TODO NOTE FIXME XXX contained
 
@@ -18,158 +20,207 @@ syn region wgetString start=+"+ skip=+\\\\\|\\"+ end=+"+ contained oneline
 syn region wgetString start=+'+ skip=+\\\\\|\\'+ end=+'+ contained oneline
 
 syn case ignore
-syn keyword wgetBoolean on off contained
-syn keyword wgetNumber  inf    contained
-syn case match
 
-syn match wgetNumber "\<\%(\d\+\|inf\)\>" contained
-syn match wgetQuota  "\<\d\+[kKmM]\>"     contained
-syn match wgetTime   "\<\d\+[smhdw]\>"    contained
+syn keyword wgetBoolean on off yes no	 contained
+syn keyword wgetNumber	inf		 contained
+syn match   wgetNumber "\<\d\+>"	 contained
+syn match   wgetQuota  "\<\d\+[kmgt]\>"	 contained
+syn match   wgetTime   "\<\d\+[smhdw]\>" contained
 
 "{{{ Commands
-let s:commands = map([
-        \ "accept",
-	\ "add_hostdir",
-	\ "adjust_extension",
-	\ "always_rest",
-	\ "ask_password",
-	\ "auth_no_challenge",
-	\ "background",
-	\ "backup_converted",
-	\ "backups",
-	\ "base",
-	\ "bind_address",
-	\ "ca_certificate",
-	\ "ca_directory",
-	\ "cache",
-	\ "certificate",
-	\ "certificate_type",
-	\ "check_certificate",
-	\ "connect_timeout",
-	\ "content_disposition",
-	\ "continue",
-	\ "convert_links",
-	\ "cookies",
-	\ "cut_dirs",
-	\ "debug",
-	\ "default_page",
-	\ "delete_after",
-	\ "dns_cache",
-	\ "dns_timeout",
-	\ "dir_prefix",
-	\ "dir_struct",
-	\ "domains",
-	\ "dot_bytes",
-	\ "dots_in_line",
-	\ "dot_spacing",
-	\ "dot_style",
-	\ "egd_file",
-	\ "exclude_directories",
-	\ "exclude_domains",
-	\ "follow_ftp",
-	\ "follow_tags",
-	\ "force_html",
-	\ "ftp_passwd",
-	\ "ftp_password",
-	\ "ftp_user",
-	\ "ftp_proxy",
-	\ "glob",
-	\ "header",
-	\ "html_extension",
-	\ "htmlify",
-	\ "http_keep_alive",
-	\ "http_passwd",
-	\ "http_password",
-	\ "http_proxy",
-	\ "https_proxy",
-	\ "http_user",
-	\ "ignore_case",
-	\ "ignore_length",
-	\ "ignore_tags",
-	\ "include_directories",
-	\ "inet4_only",
-	\ "inet6_only",
-	\ "input",
-	\ "iri",
-	\ "keep_session_cookies",
-	\ "kill_longer",
-	\ "limit_rate",
-	\ "load_cookies",
-	\ "locale",
-	\ "local_encoding",
-	\ "logfile",
-	\ "login",
-	\ "max_redirect",
-	\ "mirror",
-	\ "netrc",
-	\ "no_clobber",
-	\ "no_parent",
-	\ "no_proxy",
-	\ "numtries",
-	\ "output_document",
-	\ "page_requisites",
-	\ "passive_ftp",
-	\ "passwd",
-	\ "password",
-	\ "post_data",
-	\ "post_file",
-	\ "prefer_family",
-	\ "preserve_permissions",
-	\ "private_key",
-	\ "private_key_type",
-	\ "progress",
-	\ "protocol_directories",
-	\ "proxy_passwd",
-	\ "proxy_password",
-	\ "proxy_user",
-	\ "quiet",
-	\ "quota",
-	\ "random_file",
-	\ "random_wait",
-	\ "read_timeout",
-	\ "reclevel",
-	\ "recursive",
-	\ "referer",
-	\ "reject",
-	\ "relative_only",
-	\ "remote_encoding",
-	\ "remove_listing",
-	\ "restrict_file_names",
-	\ "retr_symlinks",
-	\ "retry_connrefused",
-	\ "robots",
-	\ "save_cookies",
-	\ "save_headers",
-	\ "secure_protocol",
-	\ "server_response",
-	\ "show_all_dns_entries",
-	\ "simple_host_check",
-	\ "span_hosts",
-	\ "spider",
-	\ "strict_comments",
-	\ "sslcertfile",
-	\ "sslcertkey",
-	\ "timeout",
-	\ "time_stamping",
-	\ "use_server_timestamps",
-	\ "tries",
-	\ "trust_server_names",
-	\ "user",
-	\ "use_proxy",
-	\ "user_agent",
-	\ "verbose",
-	\ "wait",
-	\ "wait_retry"],
-	\ "substitute(v:val, '_', '[-_]\\\\=', 'g')")
+let s:commands =<< trim EOL
+  accept
+  accept-regex
+  add-host-dir
+  adjust-extension
+  always-rest
+  ask-password
+  auth-no-challenge
+  background
+  backup-converted
+  backups
+  base
+  bind-address
+  bind-dns-address
+  body-data
+  body-file
+  ca-certificate
+  ca-directory
+  cache
+  certificate
+  certificate-type
+  check-certificate
+  choose-config
+  ciphers
+  compression
+  connect-timeout
+  content-disposition
+  content-on-error
+  continue
+  convert-file-only
+  convert-links
+  cookies
+  crl-file
+  cut-dirs
+  debug
+  default-page
+  delete-after
+  dns-cache
+  dns-servers
+  dns-timeout
+  dir-prefix
+  dir-struct
+  domains
+  dot-bytes
+  dots-in-line
+  dot-spacing
+  dot-style
+  egd-file
+  exclude-directories
+  exclude-domains
+  follow-ftp
+  follow-tags
+  force-html
+  ftp-passwd
+  ftp-password
+  ftp-user
+  ftp-proxy
+  ftps-clear-data-connection
+  ftps-fallback-to-ftp
+  ftps-implicit
+  ftps-resume-ssl
+  hsts
+  hsts-file
+  ftp-stmlf
+  glob
+  header
+  html-extension
+  htmlify
+  http-keep-alive
+  http-passwd
+  http-password
+  http-proxy
+  https-proxy
+  https-only
+  http-user
+  if-modified-since
+  ignore-case
+  ignore-length
+  ignore-tags
+  include-directories
+  inet4-only
+  inet6-only
+  input
+  input-meta-link
+  iri
+  keep-bad-hash
+  keep-session-cookies
+  kill-longer
+  limit-rate
+  load-cookies
+  locale
+  local-encoding
+  logfile
+  login
+  max-redirect
+  metalink-index
+  metalink-over-http
+  method
+  mirror
+  netrc
+  no-clobber
+  no-config
+  no-parent
+  no-proxy
+  numtries
+  output-document
+  page-requisites
+  passive-ftp
+  passwd
+  password
+  pinned-pubkey
+  post-data
+  post-file
+  prefer-family
+  preferred-location
+  preserve-permissions
+  private-key
+  private-key-type
+  progress
+  protocol-directories
+  proxy-passwd
+  proxy-password
+  proxy-user
+  quiet
+  quota
+  random-file
+  random-wait
+  read-timeout
+  rec-level
+  recursive
+  referer
+  regex-type
+  reject
+  rejected-log
+  reject-regex
+  relative-only
+  remote-encoding
+  remove-listing
+  report-speed
+  restrict-file-names
+  retr-symlinks
+  retry-connrefused
+  retry-on-host-error
+  retry-on-http-error
+  robots
+  save-cookies
+  save-headers
+  secure-protocol
+  server-response
+  show-all-dns-entries
+  show-progress
+  simple-host-check
+  span-hosts
+  spider
+  start-pos
+  strict-comments
+  sslcertfile
+  sslcertkey
+  timeout
+  timestamping
+  use-server-timestamps
+  tries
+  trust-server-names
+  unlink
+  use-askpass
+  user
+  use-proxy
+  user-agent
+  verbose
+  wait
+  wait-retry
+  warc-cdx
+  warc-cdx-dedup
+  warc-compression
+  warc-digests
+  warc-file
+  warc-header
+  warc-keep-log
+  warc-max-size
+  warc-temp-dir
+  wdebug
+  xattr
+EOL
 "}}}
 
-syn case ignore
 for cmd in s:commands
-  exe 'syn match wgetCommand "' . cmd . '" nextgroup=wgetAssignmentOperator skipwhite contained'
+  exe 'syn match wgetCommand "\<' .. substitute(cmd, '-', '[-_]\\=', "g") .. '\>" nextgroup=wgetAssignmentOperator skipwhite contained'
 endfor
+unlet s:commands
+
 syn case match
 
-syn match wgetStart "^" nextgroup=wgetCommand,wgetComment skipwhite
+syn match wgetLineStart		 "^" nextgroup=wgetCommand,wgetComment skipwhite
 syn match wgetAssignmentOperator "=" nextgroup=wgetString,wgetBoolean,wgetNumber,wgetQuota,wgetTime skipwhite contained
 
 hi def link wgetAssignmentOperator Special
@@ -179,6 +230,7 @@ hi def link wgetComment		   Comment
 hi def link wgetNumber		   Number
 hi def link wgetQuota		   Number
 hi def link wgetString		   String
+hi def link wgetTime		   Number
 hi def link wgetTodo		   Todo
 
 let b:current_syntax = "wget"

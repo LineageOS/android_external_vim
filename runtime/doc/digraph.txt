@@ -1,4 +1,4 @@
-*digraph.txt*   For Vim version 8.2.  Last change: 2021 Jul 19
+*digraph.txt*   For Vim version 9.1.  Last change: 2025 Feb 02
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -125,8 +125,8 @@ see them.
 
 On most systems Vim uses the same digraphs.  They work for the Unicode and
 ISO-8859-1 character sets.  These default digraphs are taken from the RFC1345
-mnemonics.  To make it easy to remember the mnemonic, the second character has
-a standard meaning:
+mnemonics (with some additions).  To make it easy to remember the mnemonic,
+the second character has a standard meaning:
 
 	char name		char	meaning ~
 	Exclamation mark	!	Grave
@@ -162,7 +162,7 @@ These are the RFC1345 digraphs for the one-byte characters.  See the output of
 ":digraphs" for the others.
 
 EURO
-
+							*euro* *euro-digraph*
 Exception: RFC1345 doesn't specify the euro sign.  In Vim the digraph =e was
 added for this.  Note the difference between latin1, where the digraph Cu is
 used for the currency sign, and latin9 (iso-8859-15), where the digraph =e is
@@ -173,6 +173,13 @@ ROUBLE
 
 The rouble sign was added in 2014 as 0x20bd.  Vim supports the digraphs =R and
 =P for this.  Note that R= and P= are other characters.
+
+QUADRUPLE PRIME
+
+The quadruple prime using the digraph 4' was added in 2023.  Although it is
+not part of RFC 1345, it supplements the existing digraph implementation as
+there already exist digraphs for PRIME, DOUBLE PRIME and TRIPLE PRIME using
+the 1', 2' and 3' digraphs.
 
 							*digraph-table*
 char  digraph	hex	dec	official name ~
@@ -547,7 +554,7 @@ char  digraph	hex	dec	official name ~
 Θ	H*	0398	0920	GREEK CAPITAL LETTER THETA
 Ι	I*	0399	0921	GREEK CAPITAL LETTER IOTA
 Κ	K*	039A	0922	GREEK CAPITAL LETTER KAPPA
-Λ	L*	039B	0923	GREEK CAPITAL LETTER LAMDA
+Λ	L*	039B	0923	GREEK CAPITAL LETTER LAMDA (aka LAMBDA)
 Μ	M*	039C	0924	GREEK CAPITAL LETTER MU
 Ν	N*	039D	0925	GREEK CAPITAL LETTER NU
 Ξ	C*	039E	0926	GREEK CAPITAL LETTER XI
@@ -578,7 +585,7 @@ char  digraph	hex	dec	official name ~
 θ	h*	03B8	0952	GREEK SMALL LETTER THETA
 ι	i*	03B9	0953	GREEK SMALL LETTER IOTA
 κ	k*	03BA	0954	GREEK SMALL LETTER KAPPA
-λ	l*	03BB	0955	GREEK SMALL LETTER LAMDA
+λ	l*	03BB	0955	GREEK SMALL LETTER LAMDA (aka LAMBDA)
 μ	m*	03BC	0956	GREEK SMALL LETTER MU
 ν	n*	03BD	0957	GREEK SMALL LETTER NU
 ξ	c*	03BE	0958	GREEK SMALL LETTER XI
@@ -931,6 +938,7 @@ char  digraph	hex	dec	official name ~
 ′	1'	2032	8242	PRIME
 ″	2'	2033	8243	DOUBLE PRIME
 ‴	3'	2034	8244	TRIPLE PRIME
+⁗	4'	2057	8279	QUADRUPLE PRIME
 ‵	1"	2035	8245	REVERSED PRIME
 ‶	2"	2036	8246	REVERSED DOUBLE PRIME
 ‷	3"	2037	8247	REVERSED TRIPLE PRIME
@@ -1067,6 +1075,7 @@ char  digraph	hex	dec	official name ~
 ≅	?=	2245	8773	APPROXIMATELY EQUAL TO
 ≈	?2	2248	8776	ALMOST EQUAL TO
 ≌	=?	224C	8780	ALL EQUAL TO
+≐	.=	2250	8784	APPROACHES THE LIMIT
 ≓	HI	2253	8787	IMAGE OF OR APPROXIMATELY EQUAL TO
 ≠	!=	2260	8800	NOT EQUAL TO
 ≡	=3	2261	8801	IDENTICAL TO

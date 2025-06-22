@@ -1,4 +1,4 @@
-*gui.txt*       For Vim version 8.2.  Last change: 2021 Jun 27
+*gui.txt*       For Vim version 9.1.  Last change: 2024 Nov 17
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -25,7 +25,7 @@ Other GUI documentation:
 
 First you must make sure you actually have a version of Vim with the GUI code
 included.  You can check this with the ":version" command, it says "with xxx
-GUI", where "xxx" is X11-Motif, X11-Athena, Photon, GTK2, GTK3, etc., or
+GUI", where "xxx" is X11-Motif, Photon, GTK2, GTK3, etc., or
 "MS-Windows 32 bit GUI version".
 
 How to start the GUI depends on the system used.  Mostly you can run the
@@ -70,6 +70,8 @@ When the GUI starts up initializations are carried out, in this order:
   - For Win32, $HOME is set by Vim if needed, see |$HOME-windows|.
   - When a "_gvimrc" file is not found, ".gvimrc" is tried too.  And vice
     versa.
+  - On Unix, if "~/.config/vim/gvimrc" or "$XDG_CONFIG_HOME/vim/gvimrc"
+    exists, it is sourced.  You can check this with ":version".
   The name of the first file found is stored in $MYGVIMRC, unless it was
   already set.
 - If the 'exrc' option is set (which is NOT the default) the file ./.gvimrc
@@ -95,11 +97,11 @@ terminal version.
 
 Recommended place for your personal GUI initializations:
 	Unix		    $HOME/.gvimrc or $HOME/.vim/gvimrc
-	Win32    	    $HOME/_gvimrc, $HOME/vimfiles/gvimrc
+	Win32		    $HOME/_gvimrc, $HOME/vimfiles/gvimrc
 			    or $VIM/_gvimrc
 	Amiga		    s:.gvimrc, home:.gvimrc, home:vimfiles:gvimrc
 			    or $VIM/.gvimrc
-	Haiku	            $HOME/config/settings/vim/gvimrc
+	Haiku		    $HOME/config/settings/vim/gvimrc
 
 The personal initialization files are searched in the order specified above
 and only the first one that is found is read.
@@ -108,7 +110,7 @@ There are a number of options which only have meaning in the GUI version of
 Vim.  These are 'guicursor', 'guifont', 'guipty' and 'guioptions'.  They are
 documented in |options.txt| with all the other options.
 
-If using the Motif or Athena version of the GUI (but not for the GTK+ or
+If using the Motif version of the GUI (but not for the GTK+ or
 Win32 version), a number of X resources are available.  See |gui-resources|.
 
 Another way to set the colors for different occasions is with highlight
@@ -144,10 +146,11 @@ task bar with the 'guiheadroom' option.
 		remembered until the window is opened.  The position is
 		adjusted to make the window fit on the screen (if possible).
 
-						    *:win* *:winsize* *E465*
+					    *:wi* *:win* *:winsize* *E465*
 :win[size] {width} {height}
 		Set the window height to {width} by {height} characters.
-		Obsolete, use ":set lines=11 columns=22".
+		It is recommended to use `:set lines=11 columns=22` instead,
+		since it's easy to see what the numbers mean.
 		If you get less lines than expected, check the 'guiheadroom'
 		option.
 
@@ -155,8 +158,8 @@ If you are running the X Window System, you can get information about the
 window Vim is running in with these commands: >
 	:!xwininfo -id $WINDOWID
 	:!xprop -id $WINDOWID
-	:execute '!xwininfo -id ' . v:windowid
-	:execute '!xprop -id ' . v:windowid
+	:execute '!xwininfo -id ' .. v:windowid
+	:execute '!xprop -id ' .. v:windowid
 <
 							*gui-IME* *iBus*
 Input methods for international characters in X that rely on the XIM
@@ -235,7 +238,7 @@ takes too much time or you don't like the cursor jumping to another line,
 include the 'h' flag in 'guioptions'.  Then the scrolling is limited by the
 text of the current cursor line.
 
-							*athena-intellimouse*
+							*motif-intellimouse*
 If you have an Intellimouse and an X server that supports using the wheel,
 then you can use the wheel to scroll the text up and down in gvim.  This works
 with XFree86 4.0 and later, and with some older versions when you add patches.
@@ -260,6 +263,7 @@ Other options that are relevant:
 'mousefocus'	window focus follows mouse pointer |gui-mouse-focus|
 'mousemodel'	what mouse button does which action
 'mousehide'	hide mouse pointer while typing text
+'mousemoveevent' enable mouse move events so that <MouseMove> can be mapped
 'selectmode'	whether to start Select mode or Visual mode
 
 A quick way to set these is with the ":behave" command.
@@ -405,6 +409,9 @@ These mappings make selection work the way it probably should in a Motif
 application, with shift-left mouse allowing for extending the visual area
 rather than the right mouse button.
 
+<MouseMove> may be mapped, but 'mousemoveevent' must be enabled to use the
+mapping.
+
 Mouse mapping with modifiers does not work for modeless selection.
 
 
@@ -467,6 +474,8 @@ When the "unnamed" string is included in the 'clipboard' option, the unnamed
 register is the same as the "* register.  Thus you can yank to and paste the
 selection without prepending "* to commands.
 
+See also |W23| and |W24|.
+
 ==============================================================================
 5. Menus						*menus*
 
@@ -491,14 +500,14 @@ Starting off with the default set is a good idea.  You can add more items, or,
 if you don't like the defaults at all, start with removing all menus
 |:unmenu-all|.  You can also avoid the default menus being loaded by adding
 this line to your .vimrc file (NOT your .gvimrc file!): >
-	:let did_install_default_menus = 1
+	:let g:did_install_default_menus = 1
 If you also want to avoid the Syntax menu: >
-	:let did_install_syntax_menu = 1
+	:let g:did_install_syntax_menu = 1
 The first item in the Syntax menu can be used to show all available filetypes
 in the menu (which can take a bit of time to load).  If you want to have all
 filetypes already present at startup, add: >
-	:let do_syntax_sel_menu = 1
-
+	:let g:do_syntax_sel_menu = 1
+<				    *menu-lazyload* *g:do_no_lazyload_menus*
 The following menuitems show all available color schemes, keymaps and compiler
 settings:
 	Edit > Color Scheme ~
@@ -508,7 +517,7 @@ However, they can also take a bit of time to load, because they search all
 related files from the directories in 'runtimepath'.  Therefore they are
 loaded lazily (by the |CursorHold| event), or you can also load them manually.
 If you want to have all these items already present at startup, add: >
-	:let do_no_lazyload_menus = 1
+	:let g:do_no_lazyload_menus = 1
 
 Note that the menu.vim is sourced when `:syntax on` or `:filetype on` is
 executed or after your .vimrc file is sourced.  This means that the 'encoding'
@@ -741,7 +750,7 @@ because the item will never be selected.  Use a single colon to keep it
 simple.
 
 							*gui-toolbar*
-The toolbar is currently available in the Win32, Athena, Motif, GTK+ (X11),
+The toolbar is currently available in the Win32, Motif, GTK+ (X11),
 and Photon GUI.  It should turn up in other GUIs in due course.  The
 default toolbar is setup in menu.vim.
 The display of the toolbar is controlled by the 'guioptions' letter 'T'.  You
@@ -851,13 +860,13 @@ Example for debugger tools: >
 	nnoremenu 1.20 WinBar.Next :Next<CR>
 	nnoremenu 1.30 WinBar.Finish :Finish<CR>
 	nnoremenu 1.40 WinBar.Cont :Continue<CR>
-<
+<					*hl-ToolbarLine* *hl-ToolbarButton*
 The window toolbar uses the ToolbarLine and ToolbarButton highlight groups.
 
 When splitting the window the window toolbar is not copied to the new window.
 
 							*popup-menu*
-In the Win32, GTK+, Motif, Athena and Photon GUI, you can define the
+In the Win32, GTK+, Motif and Photon GUI, you can define the
 special menu "PopUp".  This is the menu that is displayed when the right mouse
 button is pressed, if 'mousemodel' is set to popup or popup_setpos.
 Example: >
@@ -883,6 +892,11 @@ s	The menu was defined with "<silent>" to avoid showing what it is
 
 Note that hitting <Tab> while entering a menu name after a menu command may
 be used to complete the name of the menu item.
+
+It is not allowed to change menus while listing them.  *E1310*
+This doesn't normally happen, only when, for example, you would have a timer
+callback define a menu and the user lists menus in a way it shows
+|more-prompt|.
 
 
 5.4 Executing Menus					*execute-menus*
@@ -958,7 +972,7 @@ name and all existing submenus below it are affected.
 
 5.7 Examples for Menus					*menu-examples*
 
-Here is an example on how to add menu items with menu's!  You can add a menu
+Here is an example on how to add menu items with menus.  You can add a menu
 item for the keyword under the cursor.  The register "z" is used. >
 
   :nmenu Words.Add\ Var		wb"zye:menu! Words.<C-R>z <C-R>z<CR>
@@ -1171,7 +1185,7 @@ When 'guifont' is set and a valid font is found in it and 'guifontwide' is
 empty Vim will attempt to find a matching double-width font and set
 'guifontwide' to it.
 
-GTK+ GUI only:  		    	*guifontwide_gtk*
+GTK+ GUI only:				*guifontwide_gtk*
 
 If set and valid, 'guifontwide' is always used for double width characters,
 even if 'encoding' is not set to "utf-8".
@@ -1216,10 +1230,9 @@ This section describes other features which are related to the GUI.
   like this to set options specifically for each type of GUI: >
 
 	if has("gui_running")
-	    if has("gui_gtk2")
+	    if has("gui_gtk")
 		:set guifont=Luxi\ Mono\ 12
 	    elseif has("x11")
-		" Also for GTK 1
 		:set guifont=*-lucidatypewriter-medium-r-normal-*-*-180-*-*-m-*-*
 	    elseif has("gui_win32")
 		:set guifont=Luxi_Mono:h12:cANSI
@@ -1227,7 +1240,8 @@ This section describes other features which are related to the GUI.
 	endif
 
 A recommended Japanese font is MS Mincho.  You can find info here:
-http://www.lexikan.com/mincho.htm
+https://learn.microsoft.com/en-us/typography/font-list/ms-mincho
+It should be distributed with Windows.
 
 ==============================================================================
 8. Shell Commands					*gui-shell*

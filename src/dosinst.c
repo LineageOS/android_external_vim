@@ -211,8 +211,8 @@ check_unpack(void)
     {
 	printf("ERROR: Cannot find filetype.vim in \"%s\"\n", installdir);
 	printf("It looks like you did not unpack the runtime archive.\n");
-	printf("You must unpack the runtime archive \"vim%srt.zip\" before installing.\n",
-		VIM_VERSION_NODOT + 3);
+	printf("You must unpack the runtime archive \"%srt.zip\" before installing.\n",
+		VIM_VERSION_NODOT);
 	myexit(1);
     }
 
@@ -439,7 +439,7 @@ static int num_windows;
  */
 //ARGSUSED
     static BOOL CALLBACK
-window_cb(HWND hwnd, LPARAM lparam)
+window_cb(HWND hwnd, LPARAM lparam UNUSED)
 {
     char title[256];
 
@@ -830,87 +830,88 @@ install_bat_choice(int idx)
     char	*vimarg = targets[choices[idx].arg].exearg;
     FILE	*fd;
 
-    if (*batpath != NUL)
+    if (*batpath == NUL)
+	return;
+
+    fd = fopen(batpath, "w");
+    if (fd == NULL)
     {
-	fd = fopen(batpath, "w");
-	if (fd == NULL)
-	    printf("\nERROR: Cannot open \"%s\" for writing.\n", batpath);
-	else
-	{
-	    need_uninstall_entry = 1;
-
-	    fprintf(fd, "@echo off\n");
-	    fprintf(fd, "rem -- Run Vim --\n");
-	    fprintf(fd, VIMBAT_UNINSTKEY "\n");
-	    fprintf(fd, "\n");
-	    fprintf(fd, "setlocal\n");
-
-	    /*
-	     * Don't use double quotes for the "set" argument, also when it
-	     * contains a space.  The quotes would be included in the value.
-	     * The order of preference is:
-	     * 1. $VIMRUNTIME/vim.exe	    (user preference)
-	     * 2. $VIM/vim81/vim.exe	    (hard coded version)
-	     * 3. installdir/vim.exe	    (hard coded install directory)
-	     */
-	    fprintf(fd, "set VIM_EXE_DIR=%s\n", installdir);
-	    fprintf(fd, "if exist \"%%VIM%%\\%s\\%s\" set VIM_EXE_DIR=%%VIM%%\\%s\n",
-			       VIM_VERSION_NODOT, exename, VIM_VERSION_NODOT);
-	    fprintf(fd, "if exist \"%%VIMRUNTIME%%\\%s\" set VIM_EXE_DIR=%%VIMRUNTIME%%\n", exename);
-	    fprintf(fd, "\n");
-
-	    // Give an error message when the executable could not be found.
-	    fprintf(fd, "if not exist \"%%VIM_EXE_DIR%%\\%s\" (\n", exename);
-	    fprintf(fd, "    echo \"%%VIM_EXE_DIR%%\\%s\" not found\n", exename);
-	    fprintf(fd, "    goto :eof\n");
-	    fprintf(fd, ")\n");
-	    fprintf(fd, "\n");
-
-	    if (*exename == 'g')
-	    {
-		fprintf(fd, "rem check --nofork argument\n");
-		fprintf(fd, "set VIMNOFORK=\n");
-		fprintf(fd, ":loopstart\n");
-		fprintf(fd, "if .%%1==. goto loopend\n");
-		fprintf(fd, "if .%%1==.--nofork (\n");
-		fprintf(fd, "    set VIMNOFORK=1\n");
-		fprintf(fd, ") else if .%%1==.-f (\n");
-		fprintf(fd, "    set VIMNOFORK=1\n");
-		fprintf(fd, ")\n");
-		fprintf(fd, "shift\n");
-		fprintf(fd, "goto loopstart\n");
-		fprintf(fd, ":loopend\n");
-		fprintf(fd, "\n");
-	    }
-
-	    if (*exename == 'g')
-	    {
-		// For gvim.exe use "start /b" to avoid that the console window
-		// stays open.
-		fprintf(fd, "if .%%VIMNOFORK%%==.1 (\n");
-		fprintf(fd, "    start \"dummy\" /b /wait ");
-		// Always use quotes, $VIM or $VIMRUNTIME might have a space.
-		fprintf(fd, "\"%%VIM_EXE_DIR%%\\%s\" %s %%*\n",
-							     exename, vimarg);
-		fprintf(fd, ") else (\n");
-		fprintf(fd, "    start \"dummy\" /b ");
-		// Always use quotes, $VIM or $VIMRUNTIME might have a space.
-		fprintf(fd, "\"%%VIM_EXE_DIR%%\\%s\" %s %%*\n",
-							     exename, vimarg);
-		fprintf(fd, ")\n");
-	    }
-	    else
-	    {
-		// Always use quotes, $VIM or $VIMRUNTIME might have a space.
-		fprintf(fd, "\"%%VIM_EXE_DIR%%\\%s\" %s %%*\n",
-							     exename, vimarg);
-	    }
-
-	    fclose(fd);
-	    printf("%s has been %s\n", batpath,
-				 oldname == NULL ? "created" : "overwritten");
-	}
+	printf("\nERROR: Cannot open \"%s\" for writing.\n", batpath);
+	return;
     }
+
+    need_uninstall_entry = 1;
+
+    fprintf(fd, "@echo off\n");
+    fprintf(fd, "rem -- Run Vim --\n");
+    fprintf(fd, VIMBAT_UNINSTKEY "\n");
+    fprintf(fd, "\n");
+    fprintf(fd, "setlocal\n");
+
+    /*
+     * Don't use double quotes for the "set" argument, also when it
+     * contains a space.  The quotes would be included in the value.
+     * The order of preference is:
+     * 1. $VIMRUNTIME/vim.exe	    (user preference)
+     * 2. $VIM/vim81/vim.exe	    (hard coded version)
+     * 3. installdir/vim.exe	    (hard coded install directory)
+     */
+    fprintf(fd, "set VIM_EXE_DIR=%s\n", installdir);
+    fprintf(fd, "if exist \"%%VIM%%\\%s\\%s\" set VIM_EXE_DIR=%%VIM%%\\%s\n",
+	    VIM_VERSION_NODOT, exename, VIM_VERSION_NODOT);
+    fprintf(fd, "if exist \"%%VIMRUNTIME%%\\%s\" set VIM_EXE_DIR=%%VIMRUNTIME%%\n", exename);
+    fprintf(fd, "\n");
+
+    // Give an error message when the executable could not be found.
+    fprintf(fd, "if not exist \"%%VIM_EXE_DIR%%\\%s\" (\n", exename);
+    fprintf(fd, "    echo \"%%VIM_EXE_DIR%%\\%s\" not found\n", exename);
+    fprintf(fd, "    goto :eof\n");
+    fprintf(fd, ")\n");
+    fprintf(fd, "\n");
+
+    if (*exename == 'g')
+    {
+	fprintf(fd, "rem check --nofork argument\n");
+	fprintf(fd, "set VIMNOFORK=\n");
+	fprintf(fd, ":loopstart\n");
+	fprintf(fd, "if .%%1==. goto loopend\n");
+	fprintf(fd, "if .%%1==.--nofork (\n");
+	fprintf(fd, "    set VIMNOFORK=1\n");
+	fprintf(fd, ") else if .%%1==.-f (\n");
+	fprintf(fd, "    set VIMNOFORK=1\n");
+	fprintf(fd, ")\n");
+	fprintf(fd, "shift\n");
+	fprintf(fd, "goto loopstart\n");
+	fprintf(fd, ":loopend\n");
+	fprintf(fd, "\n");
+    }
+
+    if (*exename == 'g')
+    {
+	// For gvim.exe use "start /b" to avoid that the console window
+	// stays open.
+	fprintf(fd, "if .%%VIMNOFORK%%==.1 (\n");
+	fprintf(fd, "    start \"dummy\" /b /wait ");
+	// Always use quotes, $VIM or $VIMRUNTIME might have a space.
+	fprintf(fd, "\"%%VIM_EXE_DIR%%\\%s\" %s %%*\n",
+		exename, vimarg);
+	fprintf(fd, ") else (\n");
+	fprintf(fd, "    start \"dummy\" /b ");
+	// Always use quotes, $VIM or $VIMRUNTIME might have a space.
+	fprintf(fd, "\"%%VIM_EXE_DIR%%\\%s\" %s %%*\n",
+		exename, vimarg);
+	fprintf(fd, ")\n");
+    }
+    else
+    {
+	// Always use quotes, $VIM or $VIMRUNTIME might have a space.
+	fprintf(fd, "\"%%VIM_EXE_DIR%%\\%s\" %s %%*\n",
+		exename, vimarg);
+    }
+
+    fclose(fd);
+    printf("%s has been %s\n", batpath,
+	    oldname == NULL ? "created" : "overwritten");
 }
 
 /*
@@ -1170,7 +1171,7 @@ init_bat_choices(void)
  * Install the vimrc file.
  */
     static void
-install_vimrc(int idx)
+install_vimrc(int idx UNUSED)
 {
     FILE	*fd, *tfd;
     char	*fname;
@@ -1527,7 +1528,7 @@ register_openwith(
 		"*\\OpenWithList\\gvim.exe",
 	};
 
-	for (i = 0; ERROR_SUCCESS == lRet && i < ARRAYSIZE(openwith); i++)
+	for (i = 0; ERROR_SUCCESS == lRet && i < (int)ARRAYSIZE(openwith); i++)
 	    lRet = reg_create_key_and_value(hRootKey, openwith[i], NULL, "", flag);
     }
 
@@ -1662,7 +1663,7 @@ install_registry(void)
 	uninstall_string,
 	icon_string,
 	version_string,
-	"Bram Moolenaar et al.");
+	"The Vim Project");
     if (ERROR_SUCCESS != lRet)
 	return FAIL;
 
@@ -1891,7 +1892,7 @@ build_shortcut(
  * Create shortcut(s) in the Start Menu\Programs\Vim folder.
  */
     static void
-install_start_menu(int idx)
+install_start_menu(int idx UNUSED)
 {
     need_uninstall_entry = 1;
     printf("Creating start menu\n");
@@ -2495,7 +2496,7 @@ command_line_setup_choices(int argc, char **argv)
 	    int vimfiles_dir_choice = (int)vimfiles_dir_none;
 
 	    init_directories_choice();
-	    if (argv[i + 1][0] != '-')
+	    if (i + 1 < argc && argv[i + 1][0] != '-')
 	    {
 		i++;
 		if (strcmp(argv[i], "vim") == 0)
@@ -2694,8 +2695,8 @@ request_choice(void)
 
     printf("\n\nInstall will do for you:\n");
     for (i = 0; i < choice_count; ++i)
-      if (choices[i].active)
-	  printf("%2d  %s\n", i + 1, choices[i].text);
+	if (choices[i].active)
+	    printf("%2d  %s\n", i + 1, choices[i].text);
     printf("To change an item, enter its number\n\n");
     printf("Enter item number, h (help), d (do it) or q (quit): ");
 }
@@ -2759,7 +2760,7 @@ main(int argc, char **argv)
 	    rewind(stdin);
 	    if (scanf("%99s", buf) == 1)
 	    {
-		if (isdigit(buf[0]))
+		if (isdigit((unsigned char)buf[0]))
 		{
 		    // Change a choice.
 		    i = atoi(buf);

@@ -10,6 +10,24 @@ source mouse.vim
 source view_util.vim
 source term_util.vim
 
+func s:TermGuiColorsTest()
+  CheckNotMSWindows
+  if !CanRunVimInTerminal()
+    throw 'Skipped: cannot make screendumps'
+  endif
+  if !executable('tput')
+    throw "Skipped: tput not executable!"
+  endif
+  if has("gui_running")
+    throw "Skipped: does not work in GUI mode"
+  endif
+  call system('tput -Txterm-direct RGB 2>/dev/null')
+  if v:shell_error
+    throw "Skipped: xterm-direct $TERM has no RGB capability"
+  endif
+endfunc
+
+
 func Test_term_mouse_left_click()
   new
   let save_mouse = &mouse
@@ -17,6 +35,8 @@ func Test_term_mouse_left_click()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
+
   call setline(1, ['line 1', 'line 2', 'line 3 is a bit longer'])
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec + g:Ttymouse_netterm
@@ -47,6 +67,7 @@ func Test_xterm_mouse_right_click_extends_visual()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
 
   for visual_mode in ["v", "V", "\<C-V>"]
     for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
@@ -118,6 +139,7 @@ func Test_xterm_mouse_tagjump()
   let save_term = &term
   let save_ttymouse = &ttymouse
   set mouse=a term=xterm
+  call WaitForResponses()
 
   for ttymouse_val in g:Ttymouse_values
     let msg = 'ttymouse=' .. ttymouse_val
@@ -192,6 +214,7 @@ func Test_term_mouse_middle_click()
   let save_quotestar = @*
   let save_quoteplus = @+
   set mouse=a term=xterm
+  call WaitForResponses()
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
     let msg = 'ttymouse=' .. ttymouse_val
@@ -261,7 +284,7 @@ func Test_term_mouse_middle_click()
   let &ttymouse = save_ttymouse
   call test_override('no_query_mouse', 0)
   let @* = save_quotestar
-  let @+ = save_quotestar
+  let @+ = save_quoteplus
   bwipe!
 endfunc
 
@@ -277,6 +300,7 @@ func Test_term_mouse_middle_click_no_clipboard()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
     let msg = 'ttymouse=' .. ttymouse_val
@@ -295,7 +319,7 @@ func Test_term_mouse_middle_click_no_clipboard()
   let &ttymouse = save_ttymouse
   let &term = save_term
   let &mouse = save_mouse
-  close!
+  bw!
 endfunc
 
 func Test_term_mouse_middle_click_insert_mode()
@@ -307,6 +331,7 @@ func Test_term_mouse_middle_click_insert_mode()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
     let msg = 'ttymouse=' .. ttymouse_val
@@ -349,6 +374,7 @@ func Test_term_mouse_switch_win_insert_mode()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm ttymouse=xterm2
+  call WaitForResponses()
 
   call feedkeys('ivim' ..
         \ MouseLeftClickCode(8, 6) .. MouseLeftReleaseCode(8, 6) ..
@@ -362,18 +388,18 @@ func Test_term_mouse_switch_win_insert_mode()
   let &term = save_term
   let &ttymouse = save_ttymouse
   call test_override('no_query_mouse', 0)
-  close!
+  bw!
 endfunc
 
 " Test for using the mouse to increase the height of the cmdline window
 func Test_mouse_cmdwin_resize()
-  CheckFeature cmdwin
-
   let save_mouse = &mouse
   let save_term = &term
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm ttymouse=xterm2
+  call WaitForResponses()
+
   5new
   redraw!
 
@@ -402,6 +428,8 @@ func Test_1xterm_mouse_wheel()
   let save_wrap = &wrap
   let save_ttymouse = &ttymouse
   set mouse=a term=xterm nowrap
+  call WaitForResponses()
+
   call setline(1, range(100000000000000, 100000000000100))
 
   for ttymouse_val in g:Ttymouse_values
@@ -427,25 +455,22 @@ func Test_1xterm_mouse_wheel()
     call assert_equal(1, line('w0'), msg)
     call assert_equal([0, 7, 1, 0], getpos('.'), msg)
 
-    if has('gui')
-      " Horizontal wheel scrolling currently only works when vim is
-      " compiled with gui enabled.
-      call MouseWheelRight(1, 1)
-      call assert_equal(7, 1 + virtcol(".") - wincol(), msg)
-      call assert_equal([0, 7, 7, 0], getpos('.'), msg)
+    call MouseWheelRight(1, 1)
+    call assert_equal(7, 1 + virtcol(".") - wincol(), msg)
+    call assert_equal([0, 7, 7, 0], getpos('.'), msg)
 
-      call MouseWheelRight(1, 1)
-      call assert_equal(13, 1 + virtcol(".") - wincol(), msg)
-      call assert_equal([0, 7, 13, 0], getpos('.'), msg)
+    call MouseWheelRight(1, 1)
+    call assert_equal(13, 1 + virtcol(".") - wincol(), msg)
+    call assert_equal([0, 7, 13, 0], getpos('.'), msg)
 
-      call MouseWheelLeft(1, 1)
-      call assert_equal(7, 1 + virtcol(".") - wincol(), msg)
-      call assert_equal([0, 7, 13, 0], getpos('.'), msg)
+    call MouseWheelLeft(1, 1)
+    call assert_equal(7, 1 + virtcol(".") - wincol(), msg)
+    call assert_equal([0, 7, 13, 0], getpos('.'), msg)
 
-      call MouseWheelLeft(1, 1)
-      call assert_equal(1, 1 + virtcol(".") - wincol(), msg)
-      call assert_equal([0, 7, 13, 0], getpos('.'), msg)
-    endif
+    call MouseWheelLeft(1, 1)
+    call assert_equal(1, 1 + virtcol(".") - wincol(), msg)
+    call assert_equal([0, 7, 13, 0], getpos('.'), msg)
+
   endfor
 
   let &mouse = save_mouse
@@ -463,6 +488,8 @@ func Test_term_mouse_drag_beyond_window()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
+
   let col = 1
   call setline(1, range(1, 100))
 
@@ -548,6 +575,7 @@ func Test_term_mouse_drag_window_separator()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
     let msg = 'ttymouse=' .. ttymouse_val
@@ -607,6 +635,7 @@ func Test_term_mouse_drag_statusline()
   call test_override('no_query_mouse', 1)
   let save_laststatus = &laststatus
   set mouse=a term=xterm laststatus=2
+  call WaitForResponses()
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
     let msg = 'ttymouse=' .. ttymouse_val
@@ -649,6 +678,8 @@ func Test_term_mouse_click_tab()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
+
   let row = 1
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec + g:Ttymouse_netterm
@@ -698,6 +729,8 @@ func Test_term_mouse_click_X_to_close_tab()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
+
   let row = 1
   let col = &columns
 
@@ -747,6 +780,8 @@ func Test_term_mouse_drag_to_move_tab()
   call test_override('no_query_mouse', 1)
   " Set 'mousetime' to 1 to avoid recognizing a double-click in the loop
   set mouse=a term=xterm mousetime=1
+  call WaitForResponses()
+
   let row = 1
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
@@ -777,6 +812,28 @@ func Test_term_mouse_drag_to_move_tab()
         \              'Tab page 2',
         \              '    Xtab1'], a, msg)
 
+    " Switch to tab1
+    tabnext
+    let a = split(execute(':tabs'), "\n")
+    call assert_equal(['Tab page 1',
+        \              '    Xtab2',
+        \              'Tab page 2',
+        \              '>   Xtab1'], a, msg)
+
+    " Click in tab2 and drag it to tab1.
+    " This time it is non-current tab.
+    call MouseLeftClick(row, 6)
+    call assert_equal(0, getcharmod(), msg)
+    for col in [7, 8, 9, 10]
+      call MouseLeftDrag(row, col)
+    endfor
+    call MouseLeftRelease(row, col)
+    let a = split(execute(':tabs'), "\n")
+    call assert_equal(['Tab page 1',
+        \              '    Xtab1',
+        \              'Tab page 2',
+        \              '>   Xtab2'], a, msg)
+
     " Click elsewhere so that click in next iteration is not
     " interpreted as unwanted double-click.
     call MouseLeftClick(row, 11)
@@ -800,6 +857,8 @@ func Test_term_mouse_double_click_to_create_tab()
   " Set 'mousetime' to a small value, so that double-click works but we don't
   " have to wait long to avoid a triple-click.
   set mouse=a term=xterm mousetime=200
+  call WaitForResponses()
+
   let row = 1
   let col = 10
 
@@ -853,10 +912,12 @@ func Test_term_mouse_multiple_clicks_to_visually_select()
   let save_term = &term
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
-  
+
   " 'mousetime' must be sufficiently large, or else the test is flaky when
   " using a ssh connection with X forwarding; i.e. ssh -X (issue #7563).
   set mouse=a term=xterm mousetime=600
+  call WaitForResponses()
+
   new
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
@@ -982,6 +1043,8 @@ func Test_mouse_alt_leftclick()
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm mousetime=200
   set mousemodel=popup
+  call WaitForResponses()
+
   new
   call setline(1, 'one (two) three')
 
@@ -1006,7 +1069,7 @@ func Test_mouse_alt_leftclick()
   let &ttymouse = save_ttymouse
   set mousetime& mousemodel&
   call test_override('no_query_mouse', 0)
-  close!
+  bw!
 endfunc
 
 func Test_xterm_mouse_click_in_fold_columns()
@@ -1016,6 +1079,7 @@ func Test_xterm_mouse_click_in_fold_columns()
   let save_ttymouse = &ttymouse
   let save_foldcolumn = &foldcolumn
   set mouse=a term=xterm foldcolumn=3 ttymouse=xterm2
+  call WaitForResponses()
 
   " Create 2 nested folds.
   call setline(1, range(1, 7))
@@ -1067,6 +1131,8 @@ func Test_term_mouse_click_in_cmdline_to_set_pos()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
+
   let row = &lines
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
@@ -1101,6 +1167,8 @@ func Test_term_mouse_middle_click_in_cmdline_to_paste()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm
+  call WaitForResponses()
+
   let row = &lines
   " Column values does not matter, paste is done at position of cursor.
   let col = 1
@@ -1135,6 +1203,7 @@ func Test_term_mouse_shift_middle_click()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm ttymouse=xterm2 mousemodel=
+  call WaitForResponses()
 
   call test_setmouse(1, 1)
   exe "normal \<S-MiddleMouse>"
@@ -1157,6 +1226,7 @@ func Test_term_mouse_visual_mode()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set term=xterm ttymouse=xterm2
+  call WaitForResponses()
 
   " If visual mode is not present in 'mouse', then left click should not
   " do anything in visal mode.
@@ -1202,7 +1272,7 @@ func Test_term_mouse_visual_mode()
   call assert_equal(5, col("'<"))
   call assert_equal(12, col("'>"))
 
-  " Multi-line selection. Right click inside thse selection.
+  " Multi-line selection. Right click inside the selection.
   call setline(1, repeat(['aaaaaa'], 7))
   call test_setmouse(3, 1)
   exe "normal ggVG\<RightMouse>y"
@@ -1224,7 +1294,7 @@ func Test_term_mouse_visual_mode()
   let &term = save_term
   let &ttymouse = save_ttymouse
   call test_override('no_query_mouse', 0)
-  close!
+  bw!
 endfunc
 
 " Test for displaying the popup menu using the right mouse click
@@ -1238,6 +1308,7 @@ func Test_term_mouse_popup_menu()
   let save_mousemodel = &mousemodel
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm mousemodel=popup
+  call WaitForResponses()
 
   menu PopUp.foo :let g:menustr = 'foo'<CR>
   menu PopUp.bar :let g:menustr = 'bar'<CR>
@@ -1258,7 +1329,7 @@ func Test_term_mouse_popup_menu()
   let &ttymouse = save_ttymouse
   let &mousemodel = save_mousemodel
   call test_override('no_query_mouse', 0)
-  close!
+  bw!
 endfunc
 
 " Test for 'mousemodel' set to popup_setpos to move the cursor where the popup
@@ -1274,6 +1345,7 @@ func Test_term_mouse_popup_menu_setpos()
   let save_mousemodel = &mousemodel
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm mousemodel=popup_setpos
+  call WaitForResponses()
 
   nmenu PopUp.foo :let g:menustr = 'foo'<CR>
   nmenu PopUp.bar :let g:menustr = 'bar'<CR>
@@ -1300,20 +1372,20 @@ func Test_term_mouse_popup_menu_setpos()
     call assert_equal([1, 10], [line('.'), col('.')], msg)
     call assert_equal('ran away', @", msg)
 
-    " Test for right click in visual mode before the selection
+    " Test for right click in visual mode right before the selection
     let @" = ''
     call cursor(1, 10)
-    call feedkeys('vee' .. MouseRightClickCode(1, 2)
-		\ .. MouseRightReleaseCode(1, 2) .. "\<Down>\<CR>", "x")
-    call assert_equal([1, 2], [line('.'), col('.')], msg)
+    call feedkeys('vee' .. MouseRightClickCode(1, 9)
+		\ .. MouseRightReleaseCode(1, 9) .. "\<Down>\<CR>", "x")
+    call assert_equal([1, 9], [line('.'), col('.')], msg)
     call assert_equal('', @", msg)
 
-    " Test for right click in visual mode after the selection
+    " Test for right click in visual mode right after the selection
     let @" = ''
     call cursor(1, 10)
-    call feedkeys('vee' .. MouseRightClickCode(1, 20)
-		\ .. MouseRightReleaseCode(1, 20) .. "\<Down>\<CR>", "x")
-    call assert_equal([1, 20], [line('.'), col('.')], msg)
+    call feedkeys('vee' .. MouseRightClickCode(1, 18)
+		\ .. MouseRightReleaseCode(1, 18) .. "\<Down>\<CR>", "x")
+    call assert_equal([1, 18], [line('.'), col('.')], msg)
     call assert_equal('', @", msg)
 
     " Test for right click in block-wise visual mode inside the selection
@@ -1333,6 +1405,32 @@ func Test_term_mouse_popup_menu_setpos()
     call assert_equal('v', getregtype('"'), msg)
     call assert_equal('', @", msg)
 
+    " Test for right click in line-wise visual mode inside the selection
+    let @" = ''
+    call cursor(1, 16)
+    call feedkeys("V" .. MouseRightClickCode(1, 10)
+		\ .. MouseRightReleaseCode(1, 10) .. "\<Down>\<CR>", "x")
+    call assert_equal([1, 1], [line('.'), col('.')], msg) " After yanking, the cursor goes to 1,1
+    call assert_equal("V", getregtype('"'), msg)
+    call assert_equal(1, len(getreg('"', 1, v:true)), msg)
+
+    " Test for right click in multi-line line-wise visual mode inside the selection
+    let @" = ''
+    call cursor(1, 16)
+    call feedkeys("Vj" .. MouseRightClickCode(2, 20)
+		\ .. MouseRightReleaseCode(2, 20) .. "\<Down>\<CR>", "x")
+    call assert_equal([1, 1], [line('.'), col('.')], msg) " After yanking, the cursor goes to 1,1
+    call assert_equal("V", getregtype('"'), msg)
+    call assert_equal(2, len(getreg('"', 1, v:true)), msg)
+
+    " Test for right click in line-wise visual mode outside the selection
+    let @" = ''
+    call cursor(1, 16)
+    call feedkeys("V" .. MouseRightClickCode(2, 10)
+		\ .. MouseRightReleaseCode(2, 10) .. "\<Down>\<CR>", "x")
+    call assert_equal([2, 10], [line('.'), col('.')], msg)
+    call assert_equal("", @", msg)
+
     " Try clicking on the status line
     let @" = ''
     call cursor(1, 10)
@@ -1343,7 +1441,7 @@ func Test_term_mouse_popup_menu_setpos()
 
     " Try clicking outside the window
     let @" = ''
-    call cursor(7, 2)
+    call cursor(2, 2)
     call feedkeys('vee' .. MouseRightClickCode(7, 2)
 		\ .. MouseRightReleaseCode(7, 2) .. "\<Down>\<CR>", "x")
     call assert_equal(2, winnr(), msg)
@@ -1357,7 +1455,7 @@ func Test_term_mouse_popup_menu_setpos()
   let &ttymouse = save_ttymouse
   let &mousemodel = save_mousemodel
   call test_override('no_query_mouse', 0)
-  close!
+  bw!
 endfunc
 
 " Test for searching for the word under the cursor using Shift-Right or
@@ -1370,6 +1468,7 @@ func Test_term_mouse_search()
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm ttymouse=xterm2
   set mousemodel=
+  call WaitForResponses()
 
   " In normal mode, Shift-Left or Shift-Right click should search for the word
   " under the cursor.
@@ -1395,7 +1494,7 @@ func Test_term_mouse_search()
   let &term = save_term
   let &ttymouse = save_ttymouse
   call test_override('no_query_mouse', 0)
-  close!
+  bw!
 endfunc
 
 " Test for selecting an entry in the quickfix/location list window using the
@@ -1407,6 +1506,7 @@ func Test_term_mouse_quickfix_window()
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm ttymouse=xterm2
   set mousemodel=
+  call WaitForResponses()
 
   cgetexpr "Xfile1:1:L1"
   copen 5
@@ -1436,6 +1536,7 @@ func Test_term_mouse_help_window()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=h term=xterm mousetime=200
+  call WaitForResponses()
 
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec
     let msg = 'ttymouse=' .. ttymouse_val
@@ -1472,6 +1573,7 @@ func Test_mouse_termcodes()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=xterm mousetime=200
+  call WaitForResponses()
 
   new
   for ttymouse_val in g:Ttymouse_values + g:Ttymouse_dec + g:Ttymouse_netterm
@@ -1623,7 +1725,8 @@ func Test_xx01_term_style_response()
         \ cursor_style: 'u',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'u',
-        \ mouse: 's'
+        \ mouse: 's',
+        \ kitty: 'u',
         \ }, terminalprops())
 
   set t_RV=
@@ -1657,24 +1760,18 @@ func Test_xx02_iTerm2_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'u',
-        \ mouse: 's'
+        \ mouse: 's',
+        \ kitty: 'u',
         \ }, terminalprops())
 
   set t_RV=
   call test_override('term_props', 0)
 endfunc
 
-" This checks the libvterm version response.
-" This must be after other tests, because it has side effects to xterm
-" properties.
-func Test_xx03_libvterm_response()
-  " Termresponse is only parsed when t_RV is not empty.
-  set t_RV=x
-  call test_override('term_props', 1)
-
+func Run_libvterm_konsole_response(code)
   set ttymouse=xterm
   call test_option_not_set('ttymouse')
-  let seq = "\<Esc>[>0;100;0c"
+  let seq = "\<Esc>[>0;" .. a:code .. ";0c"
   call feedkeys(seq, 'Lx!')
   call assert_equal(seq, v:termresponse)
   call assert_equal('sgr', &ttymouse)
@@ -1683,8 +1780,23 @@ func Test_xx03_libvterm_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'u',
-        \ mouse: 's'
+        \ mouse: 's',
+        \ kitty: 'u',
         \ }, terminalprops())
+endfunc
+
+" This checks the libvterm version response.
+" This must be after other tests, because it has side effects to xterm
+" properties.
+func Test_xx03_libvterm_konsole_response()
+  " Termresponse is only parsed when t_RV is not empty.
+  set t_RV=x
+  call test_override('term_props', 1)
+
+  " libvterm
+  call Run_libvterm_konsole_response(100)
+  " Konsole
+  call Run_libvterm_konsole_response(115)
 
   set t_RV=
   call test_override('term_props', 0)
@@ -1711,7 +1823,8 @@ func Test_xx04_Mac_Terminal_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'y',
-        \ mouse: 's'
+        \ mouse: 's',
+        \ kitty: 'u',
         \ }, terminalprops())
   call assert_equal("\<Esc>[58;2;%lu;%lu;%lum", &t_8u)
 
@@ -1741,7 +1854,8 @@ func Test_xx05_mintty_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'y',
-        \ mouse: 's'
+        \ mouse: 's',
+        \ kitty: 'u',
         \ }, terminalprops())
 
   set t_RV=
@@ -1776,11 +1890,35 @@ func Test_xx06_screen_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'n',
         \ underline_rgb: 'y',
-        \ mouse: 's'
+        \ mouse: 's',
+        \ kitty: 'u',
         \ }, terminalprops())
 
   set t_RV=
   call test_override('term_props', 0)
+endfunc
+
+func Do_check_t_8u_set_reset(set_by_user)
+  set ttymouse=xterm
+  call test_option_not_set('ttymouse')
+  let default_value = "\<Esc>[58;2;%lu;%lu;%lum"
+  let &t_8u = default_value
+  if !a:set_by_user
+    call test_option_not_set('t_8u')
+  endif
+  let seq = "\<Esc>[>0;279;0c"
+  call feedkeys(seq, 'Lx!')
+  call assert_equal(seq, v:termresponse)
+  call assert_equal('sgr', &ttymouse)
+
+  call assert_equal(#{
+        \ cursor_style: 'u',
+        \ cursor_blink_mode: 'u',
+        \ underline_rgb: 'u',
+        \ mouse: 's',
+        \ kitty: 'u',
+        \ }, terminalprops())
+  call assert_equal(a:set_by_user ? default_value : '', &t_8u)
 endfunc
 
 " This checks the xterm version response.
@@ -1802,6 +1940,8 @@ func Test_xx07_xterm_response()
   " xterm < 95: "xterm" (actually unmodified)
   set t_RV=
   set term=xterm
+  call WaitForResponses()
+
   set t_RV=x
   set ttymouse=xterm
   call test_option_not_set('ttymouse')
@@ -1814,7 +1954,8 @@ func Test_xx07_xterm_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'y',
-        \ mouse: 'u'
+        \ mouse: 'u',
+        \ kitty: 'u',
         \ }, terminalprops())
 
   " xterm >= 95 < 277 "xterm2"
@@ -1829,7 +1970,8 @@ func Test_xx07_xterm_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'u',
-        \ mouse: '2'
+        \ mouse: '2',
+        \ kitty: 'u',
         \ }, terminalprops())
 
   " xterm >= 277: "sgr"
@@ -1844,14 +1986,27 @@ func Test_xx07_xterm_response()
         \ cursor_style: 'n',
         \ cursor_blink_mode: 'u',
         \ underline_rgb: 'u',
-        \ mouse: 's'
+        \ mouse: 's',
+        \ kitty: 'u',
         \ }, terminalprops())
 
-  " xterm >= 279: "sgr" and cursor_style not reset; also check t_8u reset
+  " xterm >= 279: "sgr" and cursor_style not reset; also check t_8u reset,
+  " except when it was set by the user
+  call Do_check_t_8u_set_reset(0)
+  call Do_check_t_8u_set_reset(1)
+
+  set t_RV=
+  call test_override('term_props', 0)
+endfunc
+
+func Test_xx08_kitty_response()
+  " Termresponse is only parsed when t_RV is not empty.
+  set t_RV=x
+  call test_override('term_props', 1)
+
   set ttymouse=xterm
   call test_option_not_set('ttymouse')
-  let &t_8u = "\<Esc>[58;2;%lu;%lu;%lum"
-  let seq = "\<Esc>[>0;279;0c"
+  let seq = "\<Esc>[>1;4001;12c"
   call feedkeys(seq, 'Lx!')
   call assert_equal(seq, v:termresponse)
   call assert_equal('sgr', &ttymouse)
@@ -1859,10 +2014,16 @@ func Test_xx07_xterm_response()
   call assert_equal(#{
         \ cursor_style: 'u',
         \ cursor_blink_mode: 'u',
-        \ underline_rgb: 'u',
-        \ mouse: 's'
+        \ underline_rgb: 'y',
+        \ mouse: 's',
+        \ kitty: 'y',
         \ }, terminalprops())
-  call assert_equal('', &t_8u)
+
+  call feedkeys("\<Esc>[?1u") " simulate the kitty keyboard protocol is enabled
+  call feedkeys(':' .. GetEscCodeCSIu('V', '5') .. GetEscCodeCSIuWithoutModifier("\<Esc>") .. "\<C-B>\"\<CR>", 'Lx!')
+  call assert_equal("\"\<Esc>", @:)
+  call feedkeys(':' .. GetEscCodeCSIu('V', '5') .. GetEscCodeCSIu("\<Esc>", '129') .. "\<C-B>\"\<CR>", 'Lx!')
+  call assert_equal("\"\<Esc>", @:)
 
   set t_RV=
   call test_override('term_props', 0)
@@ -1872,6 +2033,7 @@ func Test_focus_events()
   let save_term = &term
   let save_ttymouse = &ttymouse
   set term=xterm ttymouse=xterm2
+  call WaitForResponses()
 
   au FocusGained * let g:focus_gained += 1
   au FocusLost * let g:focus_lost += 1
@@ -1929,26 +2091,28 @@ endfunc
 
 func Test_list_builtin_terminals()
   CheckRunVimInTerminal
+
   call RunVimInTerminal('', #{rows: 14})
   call term_sendkeys('', ":set cmdheight=3\<CR>")
   call TermWait('', 100)
   call term_sendkeys('', ":set term=xxx\<CR>")
   call TermWait('', 100)
-  call assert_match('builtin_dumb', term_getline('', 11))
-  call assert_match('Not found in termcap', term_getline('', 12))
+
+  " Check that the list ends in "builtin_dumb" and "builtin_debug".
+  let dumb_idx = 0
+  for n in range(8, 12)
+    if term_getline('', n) =~ 'builtin_dumb'
+      let dumb_idx = n
+      break
+    endif
+  endfor
+  call assert_notequal(0, dumb_idx, 'builtin_dumb not found')
+
+  call assert_match('builtin_dumb', term_getline('', dumb_idx))
+  call assert_match('builtin_debug', term_getline('', dumb_idx + 1))
+  call assert_match('Not found in termcap', term_getline('', dumb_idx + 2))
+
   call StopVimInTerminal('')
-endfunc
-
-func GetEscCodeCSI27(key, modifier)
-  let key = printf("%d", char2nr(a:key))
-  let mod = printf("%d", a:modifier)
-  return "\<Esc>[27;" .. mod .. ';' .. key .. '~'
-endfunc
-
-func GetEscCodeCSIu(key, modifier)
-  let key = printf("%d", char2nr(a:key))
-  let mod = printf("%d", a:modifier)
-  return "\<Esc>[" .. key .. ';' .. mod .. 'u'
 endfunc
 
 " This checks the CSI sequences when in modifyOtherKeys mode.
@@ -2039,6 +2203,26 @@ func Test_modifyOtherKeys_no_mapping()
   set timeoutlen&
 endfunc
 
+func Test_CSIu_keys_without_modifiers()
+  " make this execute faster
+  set timeoutlen=10
+
+  call WaitForResponses()
+
+  " Escape sent as `CSI 27 u` should act as normal escape and not undo
+  call setline(1, 'a')
+  call feedkeys('a' .. GetEscCodeCSIuWithoutModifier("\e"), 'Lx!')
+  call assert_equal('n', mode())
+  call assert_equal('a', getline(1))
+
+  " Tab sent as `CSI 9 u` should work
+  call setline(1, '')
+  call feedkeys('a' .. GetEscCodeCSIuWithoutModifier("\t") .. "\<Esc>", 'Lx!')
+  call assert_equal("\t", getline(1))
+
+  set timeoutlen&
+endfunc
+
 " Check that when DEC mouse codes are recognized a special key is handled.
 func Test_ignore_dec_mouse()
   silent !infocmp gnome >/dev/null 2>&1
@@ -2052,6 +2236,7 @@ func Test_ignore_dec_mouse()
   let save_ttymouse = &ttymouse
   call test_override('no_query_mouse', 1)
   set mouse=a term=gnome ttymouse=
+  call WaitForResponses()
 
   execute "set <xF1>=\<Esc>[1;*P"
   nnoremap <S-F1> agot it<Esc>
@@ -2095,7 +2280,44 @@ func Test_modifyOtherKeys_mapped()
 
   iunmap '
   iunmap <C-W><C-A>
+
+  " clean buffer
+  %d _
+  imap B b
+  imap BBB blimp
+  let input = repeat(GetEscCodeCSI27('B', 2), 3)
+  call feedkeys("a" .. input .. "\<Esc>", 'Lx!')
+  call assert_equal('blimp', getline(1))
+  " cleanup
+  iunmap BBB
+  iunmap B
   set timeoutlen&
+endfunc
+
+func Test_modifyOtherKeys_ambiguous_mapping()
+  new
+  set timeoutlen=10
+  map <C-J> a
+  map <C-J>x <Nop>
+  call setline(1, 'x')
+
+  " CTRL-J b should have trigger the <C-J> mapping and then insert "b"
+  call feedkeys(GetEscCodeCSI27('J', 5) .. "b\<Esc>", 'Lx!')
+  call assert_equal('xb', getline(1))
+
+  unmap <C-J>
+  unmap <C-J>x
+
+  " if a special character is following there should be a check for a termcode
+  nnoremap s aX<Esc>
+  nnoremap s<BS> aY<Esc>
+  set t_kb=
+  call setline(1, 'x')
+  call feedkeys("s\x08", 'Lx!')
+  call assert_equal('xY', getline(1))
+
+  set timeoutlen&
+  bwipe!
 endfunc
 
 " Whether Shift-Tab sends "ESC [ Z" or "ESC [ 27 ; 2 ; 9 ~" is unpredictable,
@@ -2269,8 +2491,109 @@ func Test_mapping_works_with_shift_ctrl_alt()
   call RunTest_mapping_works_with_mods(function('GetEscCodeCSIu'), 'C-S-A', 8)
 endfunc
 
+func Test_mapping_works_with_unknown_modifiers()
+  new
+  set timeoutlen=10
+
+  for Func in [function('GetEscCodeCSI27'), function('GetEscCodeCSIu')]
+    call RunTest_mapping_mods('<C-z>', 'z', Func, 5)
+    " Add 16, 32, 64 or 128 for modifiers we currently don't support.
+    call RunTest_mapping_mods('<C-z>', 'z', Func, 5 + 16)
+    call RunTest_mapping_mods('<C-z>', 'z', Func, 5 + 32)
+    call RunTest_mapping_mods('<C-z>', 'z', Func, 5 + 64)
+    call RunTest_mapping_mods('<C-z>', 'z', Func, 5 + 128)
+
+    call RunTest_mapping_mods('<S-X>', 'X', Func, 2)
+    " Add 16, 32, 64 or 128 for modifiers we currently don't support.
+    call RunTest_mapping_mods('<S-X>', 'X', Func, 2 + 16)
+    call RunTest_mapping_mods('<S-X>', 'X', Func, 2 + 32)
+    call RunTest_mapping_mods('<S-X>', 'X', Func, 2 + 64)
+    call RunTest_mapping_mods('<S-X>', 'X', Func, 2 + 128)
+  endfor
+
+  bwipe!
+  set timeoutlen&
+endfunc
+
+func RunTest_mapping_funckey(map, func, key, code)
+  call setline(1, '')
+  exe 'inoremap ' .. a:map .. ' xyz'
+  call feedkeys('a' .. a:func(a:key, a:code) .. "\<Esc>", 'Lx!')
+  call assert_equal("xyz", getline(1), 'mapping ' .. a:map)
+  exe 'iunmap ' .. a:map
+endfunc
+
+func Test_mapping_kitty_function_keys()
+  new
+  set timeoutlen=10
+
+  " Function keys made with CSI and ending in [ABCDEFHPQRS].
+  " 'E' is keypad BEGIN, not supported
+  let maps = [
+        \    ['<Up>', 'A', 0],
+        \    ['<S-Up>', 'A', 2],
+        \    ['<C-Up>', 'A', 5],
+        \    ['<C-S-Up>', 'A', 6],
+        \
+        \    ['<Down>', 'B', 0],
+        \    ['<S-Down>', 'B', 2],
+        \    ['<C-Down>', 'B', 5],
+        \    ['<C-S-Down>', 'B', 6],
+        \
+        \    ['<Right>', 'C', 0],
+        \    ['<S-Right>', 'C', 2],
+        \    ['<C-Right>', 'C', 5],
+        \    ['<C-S-Right>', 'C', 6],
+        \
+        \    ['<Left>', 'D', 0],
+        \    ['<S-Left>', 'D', 2],
+        \    ['<C-Left>', 'D', 5],
+        \    ['<C-S-Left>', 'D', 6],
+        \
+        \    ['<End>', 'F', 0],
+        \    ['<S-End>', 'F', 2],
+        \    ['<C-End>', 'F', 5],
+        \    ['<C-S-End>', 'F', 6],
+        \
+        \    ['<Home>', 'H', 0],
+        \    ['<S-Home>', 'H', 2],
+        \    ['<C-Home>', 'H', 5],
+        \    ['<C-S-Home>', 'H', 6],
+        \
+        \    ['<F1>', 'P', 0],
+        \    ['<S-F1>', 'P', 2],
+        \    ['<C-F1>', 'P', 5],
+        \    ['<C-S-F1>', 'P', 6],
+        \
+        \    ['<F2>', 'Q', 0],
+        \    ['<S-F2>', 'Q', 2],
+        \    ['<C-F2>', 'Q', 5],
+        \    ['<C-S-F2>', 'Q', 6],
+        \
+        \    ['<F3>', 'R', 0],
+        \    ['<S-F3>', 'R', 2],
+        \    ['<C-F3>', 'R', 5],
+        \    ['<C-S-F3>', 'R', 6],
+        \
+        \    ['<F4>', 'S', 0],
+        \    ['<S-F4>', 'S', 2],
+        \    ['<C-F4>', 'S', 5],
+        \    ['<C-S-F4>', 'S', 6],
+        \ ]
+
+  for map in maps
+    call RunTest_mapping_funckey(map[0], function('GetEscCodeFunckey'), map[1], map[2])
+  endfor
+
+  bwipe!
+  set timeoutlen&
+endfunc
+
 func Test_insert_literal()
   set timeoutlen=10
+
+  call WaitForResponses()
+
   new
   " CTRL-V CTRL-X inserts a ^X
   call feedkeys('a' .. GetEscCodeCSIu('V', '5') .. GetEscCodeCSIu('X', '5') .. "\<Esc>", 'Lx!')
@@ -2311,6 +2634,22 @@ func Test_cmdline_literal()
   call feedkeys(':' .. GetEscCodeCSI27('V', '6') .. GetEscCodeCSI27('Y', '5') .. "\<C-B>\"\<CR>", 'Lx!')
   call assert_equal("\"\<Esc>[27;5;89~", @:)
 
+  set timeoutlen&
+endfunc
+
+func Test_mapping_esc()
+  set timeoutlen=10
+
+  new
+  nnoremap <Up> iHello<Esc>
+  nnoremap <Esc> <Nop>
+
+  call feedkeys(substitute(&t_ku, '\*', '', 'g'), 'Lx!')
+  call assert_equal("Hello", getline(1))
+
+  bwipe!
+  nunmap <Up>
+  nunmap <Esc>
   set timeoutlen&
 endfunc
 
@@ -2374,16 +2713,98 @@ func Test_special_term_keycodes()
   bw!
 endfunc
 
+func Test_home_key_works()
+  " The '@' character in K_HOME must only match "1" when followed by ";",
+  " otherwise this code for Home is not recognized: "<Esc>[1~"
+  " Set termcap values like "xterm" uses them.  Except using F2 for xHome,
+  " because that termcap entry can't be set here.
+  let save_K1 = exists('&t_K1') ? &t_K1 : ''
+  let save_kh = exists('&t_kh') ? &t_kh : ''
+  let save_k2 = exists('&t_k2') ? &t_k2 : ''
+  let save_k3 = exists('&t_k3') ? &t_k3 : ''
+  let save_end = exists('&t_@7') ? &t_@7 : ''
+
+  let &t_K1 = "\<Esc>[1;*~"      " <kHome>
+  let &t_kh = "\<Esc>[@;*H"      " <Home>
+  let &t_k2 = "\<Esc>O*H"        " use <F2> for <xHome>
+  let &t_k3 = "\<Esc>[7;*~"      " use <F3> for <zHome>
+  let &t_@7 = "\<Esc>[@;*F"      " <End>
+
+  new
+  call feedkeys("i\<C-K>\<Esc>OH\n\<Esc>", 'tx')
+  call feedkeys("i\<C-K>\<Esc>[1~\n\<Esc>", 'tx')
+  call assert_equal([
+        \ '<F2>',
+        \ '<kHome>',
+        \ ''], getline(1, '$'))
+
+  bwipe!
+  let &t_K1 = save_K1
+  let &t_kh = save_kh
+  let &t_k2 = save_k2
+  let &t_k3 = save_k3
+  let &t_@7 = save_end
+endfunc
+
 func Test_terminal_builtin_without_gui()
   CheckNotMSWindows
 
   " builtin_gui should not be output by :set term=xxx
-  let output = systemlist("TERM=dumb " .. v:progpath .. " --clean -c ':set t_ti= t_te=' -c 'set term=xxx' -c ':q!'")
+  let output = systemlist("TERM=dumb " .. v:progpath .. " --not-a-term --clean -c ':set t_ti= t_te=' -c 'set term=xxx' -c ':q!'")
   redraw!
   call map(output, {_, val -> trim(val)})
   call assert_equal(-1, index(output, 'builtin_gui'))
   call assert_notequal(-1, index(output, 'builtin_dumb'))
 endfunc
 
+func Test_xterm_direct_enables_termguicolors()
+  call s:TermGuiColorsTest()
+  " TERM=xterm-direct enables termguicolors
+  let colors  = systemlist('tput -Txterm-direct colors')[0]
+  defer delete('XTerm-direct.txt')
+
+  let buf = RunVimInTerminal('--cmd ":set noswapfile" --clean XTerm-direct.txt',
+        \  {'rows': 10, 'env': {'TERM': 'xterm-direct'}})
+  call TermWait(buf)
+  call term_sendkeys(buf, ":$put ='TERM: ' .. &term\<cr>")
+  " doesn't work. Vim cannot query xterm colors in the embedded terminal?
+  "call term_sendkeys(buf, ":$put ='Colors: ' .. &t_Co\<cr>")
+  call term_sendkeys(buf, ":$put ='Termguicolors: ' .. &tgc\<cr>")
+  call term_sendkeys(buf, ":wq\<cr>")
+  call TermWait(buf)
+
+  let result=readfile('XTerm-direct.txt')
+  " call assert_equal(['', 'TERM: xterm-direct', 'Colors: ' .. colors, 'Termguicolors: 1'], result)
+  call assert_equal(['', 'TERM: xterm-direct', 'Termguicolors: 0'], result)
+  " cleanup
+  bw!
+  close
+endfunc
+
+func Test_xterm_direct_no_termguicolors()
+  " unfortunately doesn't work with libvterm
+  call s:TermGuiColorsTest()
+
+  let lines =<< trim END
+      set notermguicolors noswapfile
+      set t_Co=16777216
+  END
+  call writefile(lines, 'XtermDirect', 'D')
+  defer delete('XTerm-direct2.txt')
+
+  let buf = RunVimInTerminal('-S XtermDirect --clean XTerm-direct2.txt',
+        \  {'rows': 10, 'env': {'TERM': 'xterm-direct'}})
+  call TermWait(buf)
+  call term_sendkeys(buf, ":$put ='TERM: ' .. &term\<cr>")
+  call term_sendkeys(buf, ":$put ='Termguicolors: ' .. &tgc\<cr>")
+  call term_sendkeys(buf, ":wq\<cr>")
+  call TermWait(buf)
+
+  let result=readfile('XTerm-direct2.txt')
+  call assert_equal(['', 'TERM: xterm-direct', 'Termguicolors: 0'], result)
+  " cleanup
+  bw!
+  close
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

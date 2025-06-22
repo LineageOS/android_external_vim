@@ -1,13 +1,15 @@
 " vi:set ts=8 sts=8 sw=8 tw=0:
 "
 " Menu Translations:	Japanese (EUC-JP)
-" Last Translator:	MURAOKA Taro  <koron.kaoriya@gmail.com>
-" Last Change:		18-Jul-2018.
+" Last Translator:	MURAOKA Taro <koron.kaoriya@gmail.com>
+" Last Change:		18-Dec-2023.
 "
-" Copyright (C) 2001-2018 MURAOKA Taro <koron.kaoriya@gmail.com>,
+" Copyright (C) 2001-2023 MURAOKA Taro <koron.kaoriya@gmail.com>,
 "			  vim-jp <http://vim-jp.org/>
 "
 " THIS FILE IS DISTRIBUTED UNDER THE VIM LICENSE.
+"
+" Generated from menu_ja_jp.utf-8.vim, DO NOT EDIT
 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -23,7 +25,7 @@ scriptencoding euc-jp
 menutrans &Help			¥Ø¥ë¥×(&H)
 menutrans &Overview<Tab><F1>	³µÎ¬(&O)<Tab><F1>
 menutrans &User\ Manual		¥æ¡¼¥¶¡¼¥Þ¥Ë¥å¥¢¥ë(&U)
-menutrans &How-to\ links	&How-to¥ê¥ó¥¯
+menutrans &How-To\ links	&How-to¥ê¥ó¥¯
 menutrans &Credits		¥¯¥ì¥¸¥Ã¥È(&C)
 menutrans Co&pying		Ãøºî¸¢¾ðÊó(&P)
 menutrans &Sponsor/Register	¥¹¥Ý¥ó¥µ¡¼/ÅÐÏ¿(&S)
@@ -37,7 +39,7 @@ let g:menutrans_help_dialog = "¥Ø¥ë¥×¤ò¸¡º÷¤·¤¿¤¤¥³¥Þ¥ó¥É¤â¤·¤¯¤ÏÃ±¸ì¤òÆþÎÏ¤·¤Æ¤
 menutrans &File				¥Õ¥¡¥¤¥ë(&F)
 menutrans &Open\.\.\.<Tab>:e		³«¤¯(&O)\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp	Ê¬³ä¤·¤Æ³«¤¯(&L)\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew	¥¿¥Ö¥Ú¡¼¥¸¤Ç³«¤¯<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew	¥¿¥Ö¥Ú¡¼¥¸¤Ç³«¤¯(&T)<Tab>:tabnew
 menutrans &New<Tab>:enew		¿·µ¬ºîÀ®(&N)<Tab>:enew
 menutrans &Close<Tab>:close		ÊÄ¤¸¤ë(&C)<Tab>:close
 menutrans &Save<Tab>:w			ÊÝÂ¸(&S)<Tab>:w
@@ -270,10 +272,9 @@ if has("toolbar")
     tmenu ToolBar.Cut		¥¯¥ê¥Ã¥×¥Ü¡¼¥É¤ØÀÚ¤ê¼è¤ê
     tmenu ToolBar.Copy		¥¯¥ê¥Ã¥×¥Ü¡¼¥É¤Ø¥³¥Ô¡¼
     tmenu ToolBar.Paste		¥¯¥ê¥Ã¥×¥Ü¡¼¥É¤«¤éÅ½¤êÉÕ¤±
-    tmenu ToolBar.Find		¸¡º÷...
+    tmenu ToolBar.Replace	¸¡º÷ / ÃÖ´¹...
     tmenu ToolBar.FindNext	¼¡¤ò¸¡º÷
     tmenu ToolBar.FindPrev	Á°¤ò¸¡º÷
-    tmenu ToolBar.Replace	ÃÖ´¹...
     if 0	" disabled; These are in the Windows menu
       tmenu ToolBar.New		¿·µ¬¥¦¥£¥ó¥É¥¦ºîÀ®
       tmenu ToolBar.WinSplit	¥¦¥£¥ó¥É¥¦Ê¬³ä

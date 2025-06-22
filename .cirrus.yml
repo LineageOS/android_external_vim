@@ -2,13 +2,15 @@ env:
   CIRRUS_CLONE_DEPTH: 3
   FEATURES: huge
 
-freebsd_12_task:
-  only_if: $CIRRUS_TAG == ''
+freebsd_task:
+  name: FreeBSD
+  matrix:
+    - name: FreeBSD 14.3
+      freebsd_instance:
+        image_family: freebsd-14-3
   timeout_in: 20m
-  freebsd_instance:
-    image: freebsd-12-1-release-amd64
   install_script:
-    pkg install -y gettext
+    - pkg install -y gettext
   build_script:
     - NPROC=$(getconf _NPROCESSORS_ONLN)
     - ./configure --with-features=${FEATURES}
@@ -19,3 +21,11 @@ freebsd_12_task:
     - pw useradd cirrus -m
     - chown -R cirrus:cirrus .
     - sudo -u cirrus make test
+  on_failure:
+    test_artifacts:
+      name: "Cirrus-CI-freebsd-failed-tests"
+      path: |
+        runtime/indent/testdir/*.fail
+        runtime/syntax/testdir/failed/*
+        src/testdir/failed/*
+      type: application/octet-stream

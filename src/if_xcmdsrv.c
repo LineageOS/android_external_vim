@@ -221,31 +221,32 @@ serverRegisterName(
     char_u	*p = NULL;
 
     res = DoRegisterName(dpy, name);
-    if (res < 0)
+    if (res >= 0)
+	return OK;
+
+    i = 1;
+    do
     {
-	i = 1;
-	do
+	if (res < -1 || i >= 1000)
 	{
-	    if (res < -1 || i >= 1000)
-	    {
-		msg_attr(_("Unable to register a command server name"),
-							      HL_ATTR(HLF_W));
-		return FAIL;
-	    }
-	    if (p == NULL)
-		p = alloc(STRLEN(name) + 10);
-	    if (p == NULL)
-	    {
-		res = -10;
-		continue;
-	    }
-	    sprintf((char *)p, "%s%d", name, i++);
-	    res = DoRegisterName(dpy, p);
+	    msg_attr(_("Unable to register a command server name"),
+		    HL_ATTR(HLF_W));
+	    return FAIL;
 	}
-	while (res < 0)
-	    ;
-	vim_free(p);
+	if (p == NULL)
+	    p = alloc(STRLEN(name) + 10);
+	if (p == NULL)
+	{
+	    res = -10;
+	    continue;
+	}
+	sprintf((char *)p, "%s%d", name, i++);
+	res = DoRegisterName(dpy, p);
     }
+    while (res < 0)
+	;
+    vim_free(p);
+
     return OK;
 }
 
@@ -388,11 +389,12 @@ serverSendToVim(
     if (name == NULL || *name == NUL)
 	name = (char_u *)"GVIM";    // use a default name
 
-    if (commProperty == None && dpy != NULL)
-    {
-	if (SendInit(dpy) < 0)
-	    return -1;
-    }
+    if (commProperty == None && dpy != NULL && SendInit(dpy) < 0)
+	return -1;
+
+#if defined(FEAT_EVAL)
+    ch_log(NULL, "serverSendToVim(%s, %s)", name, cmd);
+#endif
 
     // Execute locally if no display or target is ourselves
     if (dpy == NULL || (serverName != NULL && STRICMP(name, serverName) == 0))
@@ -494,6 +496,11 @@ serverSendToVim(
 		break;
 	    }
     }
+
+#if defined(FEAT_EVAL)
+    ch_log(NULL, "serverSendToVim() result: %s",
+	    pending.result == NULL ? "NULL" : (char *)pending.result);
+#endif
     if (result != NULL)
 	*result = pending.result;
     else
@@ -556,19 +563,16 @@ ServerWait(
 
 #define UI_MSEC_DELAY 53
 #define SEND_MSEC_POLL 500
-#ifndef HAVE_SELECT
+#ifdef HAVE_SELECT
+    fd_set	    fds;
+
+    FD_ZERO(&fds);
+    FD_SET(ConnectionNumber(dpy), &fds);
+#else
     struct pollfd   fds;
 
     fds.fd = ConnectionNumber(dpy);
     fds.events = POLLIN;
-#else
-    fd_set	    fds;
-    struct timeval  tv;
-
-    tv.tv_sec = 0;
-    tv.tv_usec =  SEND_MSEC_POLL * 1000;
-    FD_ZERO(&fds);
-    FD_SET(ConnectionNumber(dpy), &fds);
 #endif
 
     time(&start);
@@ -593,11 +597,17 @@ ServerWait(
 	// Just look out for the answer without calling back into Vim
 	if (localLoop)
 	{
-#ifndef HAVE_SELECT
-	    if (poll(&fds, 1, SEND_MSEC_POLL) < 0)
+#ifdef HAVE_SELECT
+	    struct timeval  tv;
+
+	    // Set the time every call, select() may change it to the remaining
+	    // time.
+	    tv.tv_sec = 0;
+	    tv.tv_usec =  SEND_MSEC_POLL * 1000;
+	    if (select(FD_SETSIZE, &fds, NULL, NULL, &tv) < 0)
 		break;
 #else
-	    if (select(FD_SETSIZE, &fds, NULL, NULL, &tv) < 0)
+	    if (poll(&fds, 1, SEND_MSEC_POLL) < 0)
 		break;
 #endif
 	}
@@ -647,7 +657,7 @@ serverGetVimNames(Display *dpy)
     for (p = regProp; (long_u)(p - regProp) < numItems; p++)
     {
 	entry = p;
-	while (*p != 0 && !isspace(*p))
+	while (*p != 0 && !SAFE_isspace(*p))
 	    p++;
 	if (*p != 0)
 	{
@@ -747,17 +757,17 @@ serverSendReply(char_u *name, char_u *str)
 	return -1;
 
     length = STRLEN(p_enc) + STRLEN(str) + 14;
-    if ((property = alloc(length + 30)) != NULL)
-    {
-	sprintf((char *)property, "%cn%c-E %s%c-n %s%c-w %x",
-			    0, 0, p_enc, 0, str, 0, (unsigned int)commWindow);
-	// Add length of what "%x" resulted in.
-	length += STRLEN(property + length);
-	res = AppendPropCarefully(dpy, win, commProperty, property, length + 1);
-	vim_free(property);
-	return res;
-    }
-    return -1;
+    if ((property = alloc(length + 30)) == NULL)
+	return -1;
+
+    sprintf((char *)property, "%cn%c-E %s%c-n %s%c-w %x",
+	    0, 0, p_enc, 0, str, 0, (unsigned int)commWindow);
+    // Add length of what "%x" resulted in.
+    length += STRLEN(property + length);
+    res = AppendPropCarefully(dpy, win, commProperty, property, length + 1);
+    vim_free(property);
+
+    return res;
 }
 
     static int
@@ -771,7 +781,7 @@ WaitForReply(void *p)
 /*
  * Wait for replies from id (win)
  * When "timeout" is non-zero wait up to this many seconds.
- * Return 0 and the malloc'ed string when a reply is available.
+ * Return 0 and the allocated string in "*str" when a reply is available.
  * Return -1 if the window becomes invalid while waiting.
  */
     int
@@ -918,7 +928,7 @@ LookupName(
     for (p = regProp; (long_u)(p - regProp) < numItems; )
     {
 	entry = p;
-	while (*p != 0 && !isspace(*p))
+	while (*p != 0 && !SAFE_isspace(*p))
 	    p++;
 	if (*p != 0 && STRICMP(name, p + 1) == 0)
 	{
@@ -935,7 +945,7 @@ LookupName(
 	for (p = regProp; (long_u)(p - regProp) < numItems; )
 	{
 	    entry = p;
-	    while (*p != 0 && !isspace(*p))
+	    while (*p != 0 && !SAFE_isspace(*p))
 		p++;
 	    if (*p != 0 && IsSerialName(p + 1)
 		    && STRNICMP(name, p + 1, STRLEN(name)) == 0)
@@ -1218,6 +1228,10 @@ server_parse_message(
     int		code;
     char_u	*tofree;
 
+#if defined(FEAT_EVAL)
+    ch_log(NULL, "server_parse_message() numItems: %ld", numItems);
+#endif
+
     /*
      * Several commands and results could arrive in the property at
      * one time;  each iteration through the outer loop handles a
@@ -1237,7 +1251,7 @@ server_parse_message(
 	    continue;
 	}
 
-	if ((*p == 'c' || *p == 'k') && (p[1] == 0))
+	if ((*p == 'c' || *p == 'k') && p[1] == 0)
 	{
 	    Window	resWindow;
 	    char_u	*name, *script, *serial, *end;
@@ -1258,6 +1272,9 @@ server_parse_message(
 	    enc = NULL;
 	    while ((long_u)(p - propInfo) < numItems && *p == '-')
 	    {
+#if defined(FEAT_EVAL)
+		ch_log(NULL, "server_parse_message() item: %c, %s", p[-2], p);
+#endif
 		switch (p[1])
 		{
 		    case 'r':
@@ -1323,7 +1340,8 @@ server_parse_message(
 			    ga_concat(&reply, res);
 			else
 			{
-			    ga_concat(&reply, (char_u *)_(e_invalid_expression_received));
+			    ga_concat(&reply,
+				   (char_u *)_(e_invalid_expression_received));
 			    ga_append(&reply, 0);
 			    ga_concat(&reply, (char_u *)"-c 1");
 			}

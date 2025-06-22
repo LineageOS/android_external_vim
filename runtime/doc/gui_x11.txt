@@ -1,11 +1,11 @@
-*gui_x11.txt*   For Vim version 8.2.  Last change: 2020 Jun 05
+*gui_x11.txt*   For Vim version 9.1.  Last change: 2024 Nov 17
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
 
 
 Vim's Graphical User Interface				*gui-x11* *GUI-X11*
-							*Athena* *Motif*
+							*Motif*
 1. Starting the X11 GUI		|gui-x11-start|
 2. GUI Resources		|gui-resources|
 3. Shell Commands		|gui-pty|
@@ -64,7 +64,7 @@ flag in 'guioptions'.  |-f|.
 ==============================================================================
 2. GUI Resources			*gui-resources* *.Xdefaults*
 
-If using the Motif or Athena version of the GUI (not for the KDE, GTK+ or Win32
+If using the Motif version of the GUI (not for the KDE, GTK+ or Win32
 version), a number of X resources are available.  You should use Vim's class
 "Vim" when setting these.  They are as follows:
 
@@ -96,7 +96,6 @@ version), a number of X resources are available.  You should use Vim's class
 			is same size as terminal that started it).
     scrollbarWidth	Thickness of scrollbars.
     borderWidth		Thickness of border around text area.
-    menuHeight		Height of the menu bar (only for Athena).
 
 A special font for italic, bold, and italic-bold text will only be used if
 the user has specified one via a resource.  No attempt is made to guess what
@@ -135,12 +134,9 @@ which make Motif applications look even better, highly recommended!
 
 The "Vim*fontList" is to set the menu font for Motif.  Example: >
 	Vim*menuBar*fontList:	     -*-courier-medium-r-*-*-10-*-*-*-*-*-*-*
-With Athena: >
-	Vim*menuBar*SmeBSB*font:     -*-courier-medium-r-*-*-10-*-*-*-*-*-*-*
-	Vim*menuBar*MenuButton*font: -*-courier-medium-r-*-*-10-*-*-*-*-*-*-*
 
 NOTE: A more portable, and indeed more correct, way to specify the menu font
-in either Motif or Athena is through the resource: >
+in Motif is through the resource: >
 	Vim.menuFont:	     -*-courier-medium-r-*-*-10-*-*-*-*-*-*-*
 Or, when compiled with the |+xfontset| feature: >
 	Vim.menuFontSet:     -*-courier-medium-r-*-*-10-*-*-*-*-*-*-*
@@ -255,7 +251,7 @@ For example: >
   :10vmenu File.Print :w !lpr -Php3
 <
 							*X11-icon*
-Vim uses a black&white icon by default when compiled with Motif or Athena.  A
+Vim uses a black&white icon by default when compiled with Motif.  A
 colored Vim icon is included as $VIMRUNTIME/vim32x32.xpm.  For GTK+, this is
 the builtin icon used.  Unfortunately, how you should install it depends on
 your window manager.  When you use this, remove the 'i' flag from
@@ -584,7 +580,8 @@ command line argument).
 							*gui-x11-kde*
 There is no KDE version of Vim.  There has been some work on a port using the
 Qt toolkit, but it never worked properly and it has been abandoned.  Work
-continues on Yzis: https://github.com/chrizel/Yzis.
+continues on Yzis: https://github.com/chrizel/Yzis but it seems also
+abandoned.
 
 ==============================================================================
 8. Compiling						*gui-x11-compiling*
@@ -594,8 +591,7 @@ GTK+ files on your system.  When both GTK+ 2 and GTK+ 3 are available, GTK+ 2
 will be chosen unless --enable-gui=gtk3 is passed explicitly to configure.
 
 If the GTK+ files cannot be found, then the Motif files will be searched for.
-Finally, if this fails, the Athena files will be searched for.  If all three
-fail, the GUI will be disabled.
+If both fail, the GUI will be disabled.
 
 For GTK+, Vim's configuration process uses pkg-config(1) to check if the
 GTK+ required for a specified build is properly installed and usable.
@@ -621,10 +617,10 @@ explicitly to configure, and avoid passing --enable-gnome-check to that, as
 the functionality of the GNOME 2 support has already been consolidated in
 GTK+ 3.
 
-Otherwise, if you are using Motif or Athena, when you have the Motif or Athena
-files in a directory where configure doesn't look, edit the Makefile to enter
-the names of the directories.  Search for "GUI_INC_LOC" for an example to set
-the Motif directories, "CONF_OPT_X" for Athena.
+Otherwise, if you are using Motif, when you have the Motif files in a
+directory where configure doesn't look, edit the Makefile to enter the names
+of the directories.  Search for "GUI_INC_LOC" for an example to set
+the Motif directories.
 
 							*gui-x11-gtk*
 Currently, Vim supports both GTK+ 2 and GTK+ 3.
@@ -640,24 +636,26 @@ that version.
 For Motif, you need at least Motif version 1.2 and/or X11R5.  Motif 2.0 and
 X11R6 are OK.  Motif 1.1 and X11R4 might work, no guarantee (there may be a
 few problems, but you might make it compile and run with a bit of work, please
-send me the patches if you do).  The newest releases of LessTif have been
-reported to work fine too.
+send patches if you do).  The newest releases of LessTif have been reported to
+work fine too.
 
-							*gui-x11-athena*
-The Athena version uses the Xaw widget set by default.  If you have the 3D
-version, you might want to link with Xaw3d instead.  This will make the
-menus look a bit better.  Edit the Makefile and look for "XAW_LIB".  The
-scrollbars will remain the same, because Vim has its own, which are already
-3D (in fact, they look more like Motif).
-
-							*gui-x11-neXtaw*
-The neXtaw version is mostly like Athena, but uses different widgets.
+					    *gui-x11-athena* *gui-x11-neXtaw*
+Support for the Athena GUI and neXtaw was removed in patch 8.2.4677.
 
 							*gui-x11-misc*
-In general, do not try to mix files from different GTK+, Motif, Athena and X11
+In general, do not try to mix files from different GTK+, Motif and X11
 versions.  This will cause problems.  For example, using header files for
 X11R5 with a library for X11R6 probably doesn't work (although the linking
 won't give an error message, Vim will crash later).
+
+							*gui-wayland*
+Initial support for the Wayland display server protocol has landed in patch
+9.1.0064. To enable it, you need to set the environment variable
+"$GVIM_ENABLE_WAYLAND" in your shell.
+
+Note: The Wayland protocol is subject to some restrictions, so the following
+functions won't work: |getwinpos()|, |getwinposx()|, |getwinposy()| and the
+|v:windowid| variable won't be available.
 
 ==============================================================================
 9. X11 selection mechanism				*x11-selection*
@@ -691,6 +689,9 @@ Of these three, Vim uses PRIMARY when reading and writing the "* register
 |'clipboard'| of "autoselect"), and CLIPBOARD when reading and writing the "+
 register.  Vim does not access the SECONDARY selection.
 
+This applies both to the GUI and the terminal version.  For non-X11 systems
+the plus and the star register both use the system clipboard.
+
 Examples: (assuming the default option values)
 - Select a URL in Visual mode in Vim.  Go to your browser and click the
   middle mouse button in the URL text field.  The selected text will be
@@ -707,6 +708,33 @@ Examples: (assuming the default option values)
 Note that the text in the "+ register remains available when making a Visual
 selection, which makes other text available in the "* register.  That allows
 overwriting selected text.
+
+								*W23*
+When you are yanking into the "* or "+ register and Vim cannot establish a
+connection to the X11 selection (or clipboard), it will use register 0 and
+output a warning:
+
+  Warning: Clipboard register not available, using register 0 ~
+
+								*W24*
+Vim comes in different flavors, from a tiny build, that just tries to be
+compatible to original Vi, to enhanced builds which include many improvements
+(like a GUI).  However, on servers and embedded systems, Vim is typically
+compiled without clipboard support, since this feature requires X11 libraries
+to be present.  Check the ":version" output for the flag |+clipboard| or
+-clipboard.  The former means clipboard support is present while the latter
+means your Vim does not contain clipboard support.
+
+In the case when you are trying to access the "* or "+ register and Vim has
+no clipboard support, you will see this warning:
+
+  Warning: Clipboard register not available. See :h W24~
+
+If you have a vim with no clipboard support but would like to use the
+clipboard, try to install a more enhanced Vim package like vim-enhanced or
+vim-gtk3 (the gui packages usually also come with a terminal Vim that has
+clipboard support included).
+
 							*x11-cut-buffer*
 There are, by default, 8 cut-buffers: CUT_BUFFER0 to CUT_BUFFER7.  Vim only
 uses CUT_BUFFER0, which is the one that xterm uses by default.

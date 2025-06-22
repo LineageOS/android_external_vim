@@ -1,6 +1,7 @@
 " Test for lambda and closure
 
 source check.vim
+import './vim9.vim' as v9
 
 func Test_lambda_feature()
   call assert_equal(1, has('lambda'))
@@ -54,6 +55,50 @@ func Test_lambda_with_timer()
   call assert_true(s:n > m)
 endfunc
 
+func Test_lambda_vim9cmd_linebreak()
+  CheckFeature timers
+
+  let g:test_is_flaky = 1
+  let lines =<< trim END
+      vim9cmd call timer_start(10, (x) => {
+          # comment
+          g:result = 'done'
+         })
+  END
+  call v9.CheckScriptSuccess(lines)
+  " sleep longer on a retry
+  exe 'sleep ' .. [20, 100, 500, 500, 500][g:run_nr] .. 'm'
+  call assert_equal('done', g:result)
+  unlet g:result
+
+  let lines =<< trim END
+      g:result = [0]->map((_, v) =>
+          1 # inline comment
+          +
+          2
+      )
+      assert_equal([3], g:result)
+  END
+  call v9.CheckDefAndScriptSuccess(lines)
+endfunc
+
+def Test_lamba_compiled_linebreak()
+  var lines =<< trim END
+      vim9script
+
+      def Echo(what: any)
+        assert_equal('hello world', what)
+      enddef
+      def That()
+        printf("hello ")
+          ->((x) => x .. "world")()
+          ->Echo()
+      enddef
+      That()
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
 func Test_lambda_with_partial()
   let l:Cb = function({... -> ['zero', a:1, a:2, a:3]}, ['one', 'two'])
   call assert_equal(['zero', 'one', 'two', 'three'], l:Cb('three'))
@@ -66,6 +111,10 @@ function Test_lambda_fails()
   echo assert_fails('echo 10->{a -> a + 2}', 'E107:')
 
   call assert_fails('eval 0->(', "E110: Missing ')'")
+  call assert_fails('eval 0->(3)()', "E1275:")
+  call assert_fails('eval 0->([3])()', "E1275:")
+  call assert_fails('eval 0->({"a": 3})()', "E1275:")
+  call assert_fails('eval 0->(xxx)()', "E121:")
 endfunc
 
 func Test_not_lamda()
@@ -219,9 +268,7 @@ endfunc
 func Test_lambda_combination()
   call assert_equal(2, {x -> {x -> x}}(1)(2))
   call assert_equal(10, {y -> {x -> x(y)(10)}({y -> y})}({z -> z}))
-  if has('float')
-    call assert_equal(5.0, {x -> {y -> x / y}}(10)(2.0))
-  endif
+  call assert_equal(5.0, {x -> {y -> x / y}}(10)(2.0))
   call assert_equal(6, {x -> {y -> {z -> x + y + z}}}(1)(2)(3))
 
   call assert_equal(6, {x -> {f -> f(x)}}(3)({x -> x * 2}))
@@ -315,7 +362,7 @@ endfunc
 
 func Test_lambda_error()
   " This was causing a crash
-  call assert_fails('ec{@{->{d->()()', 'E15:')
+  call assert_fails('ec{@{->{d->()()', 'E451:')
 endfunc
 
 func Test_closure_error()
@@ -324,7 +371,7 @@ func Test_closure_error()
       return 1
     endfunc
   END
-  call writefile(l, 'Xscript')
+  call writefile(l, 'Xscript', 'D')
   let caught_932 = 0
   try
     source Xscript
@@ -332,7 +379,6 @@ func Test_closure_error()
     let caught_932 = 1
   endtry
   call assert_equal(1, caught_932)
-  call delete('Xscript')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

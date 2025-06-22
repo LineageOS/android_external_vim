@@ -130,7 +130,12 @@ struct PyMethodDef { Py_ssize_t a; };
 #  define HINSTANCE long_u		// for generating prototypes
 # endif
 
-# ifndef MSWIN
+# ifdef MSWIN
+#  define load_dll vimLoadLib
+#  define close_dll FreeLibrary
+#  define symbol_from_dll GetProcAddress
+#  define load_dll_error GetWin32Error
+# else
 #  include <dlfcn.h>
 #  define FARPROC void*
 #  define HINSTANCE void*
@@ -142,11 +147,6 @@ struct PyMethodDef { Py_ssize_t a; };
 #  define close_dll dlclose
 #  define symbol_from_dll dlsym
 #  define load_dll_error dlerror
-# else
-#  define load_dll vimLoadLib
-#  define close_dll FreeLibrary
-#  define symbol_from_dll GetProcAddress
-#  define load_dll_error GetWin32Error
 # endif
 
 // This makes if_python.c compile without warnings against Python 2.5
@@ -201,13 +201,15 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyList_SetItem dll_PyList_SetItem
 # define PyList_Size dll_PyList_Size
 # define PyList_Type (*dll_PyList_Type)
+# define PyTuple_GetItem dll_PyTuple_GetItem
+# define PyTuple_SetItem dll_PyTuple_SetItem
+# define PyTuple_New dll_PyTuple_New
+# define PyTuple_Size dll_PyTuple_Size
+# define PyTuple_Type (*dll_PyTuple_Type)
 # define PySequence_Check dll_PySequence_Check
 # define PySequence_Size dll_PySequence_Size
 # define PySequence_GetItem dll_PySequence_GetItem
 # define PySequence_Fast dll_PySequence_Fast
-# define PyTuple_Size dll_PyTuple_Size
-# define PyTuple_GetItem dll_PyTuple_GetItem
-# define PyTuple_Type (*dll_PyTuple_Type)
 # define PySlice_GetIndicesEx dll_PySlice_GetIndicesEx
 # define PyImport_ImportModule dll_PyImport_ImportModule
 # define PyDict_New dll_PyDict_New
@@ -317,7 +319,7 @@ struct PyMethodDef { Py_ssize_t a; };
  */
 static int(*dll_PyArg_Parse)(PyObject *, char *, ...);
 static int(*dll_PyArg_ParseTuple)(PyObject *, char *, ...);
-static int(*dll_PyMem_Free)(void *);
+static void(*dll_PyMem_Free)(void *);
 static void* (*dll_PyMem_Malloc)(size_t);
 static int(*dll_PyDict_SetItemString)(PyObject *dp, char *key, PyObject *item);
 static int(*dll_PyErr_BadArgument)(void);
@@ -352,13 +354,15 @@ static PyObject*(*dll_PyList_New)(PyInt size);
 static int(*dll_PyList_SetItem)(PyObject *, PyInt, PyObject *);
 static PyInt(*dll_PyList_Size)(PyObject *);
 static PyTypeObject* dll_PyList_Type;
+static PyObject*(*dll_PyTuple_GetItem)(PyObject *, PyInt);
+static int(*dll_PyTuple_SetItem)(PyObject *, PyInt, PyObject *);
+static PyObject*(*dll_PyTuple_New)(PyInt size);
+static PyInt(*dll_PyTuple_Size)(PyObject *);
+static PyTypeObject* dll_PyTuple_Type;
 static int (*dll_PySequence_Check)(PyObject *);
 static PyInt(*dll_PySequence_Size)(PyObject *);
 static PyObject*(*dll_PySequence_GetItem)(PyObject *, PyInt);
 static PyObject*(*dll_PySequence_Fast)(PyObject *, const char *);
-static PyInt(*dll_PyTuple_Size)(PyObject *);
-static PyObject*(*dll_PyTuple_GetItem)(PyObject *, PyInt);
-static PyTypeObject* dll_PyTuple_Type;
 static int (*dll_PySlice_GetIndicesEx)(PySliceObject *r, PyInt length,
 		     PyInt *start, PyInt *stop, PyInt *step,
 		     PyInt *slicelen);
@@ -496,14 +500,14 @@ static struct
     PYTHON_PROC *ptr;
 } python_funcname_table[] =
 {
-# ifndef PY_SSIZE_T_CLEAN
-    {"PyArg_Parse", (PYTHON_PROC*)&dll_PyArg_Parse},
-    {"PyArg_ParseTuple", (PYTHON_PROC*)&dll_PyArg_ParseTuple},
-    {"Py_BuildValue", (PYTHON_PROC*)&dll_Py_BuildValue},
-# else
+# ifdef PY_SSIZE_T_CLEAN
     {"_PyArg_Parse_SizeT", (PYTHON_PROC*)&dll_PyArg_Parse},
     {"_PyArg_ParseTuple_SizeT", (PYTHON_PROC*)&dll_PyArg_ParseTuple},
     {"_Py_BuildValue_SizeT", (PYTHON_PROC*)&dll_Py_BuildValue},
+# else
+    {"PyArg_Parse", (PYTHON_PROC*)&dll_PyArg_Parse},
+    {"PyArg_ParseTuple", (PYTHON_PROC*)&dll_PyArg_ParseTuple},
+    {"Py_BuildValue", (PYTHON_PROC*)&dll_Py_BuildValue},
 # endif
     {"PyMem_Free", (PYTHON_PROC*)&dll_PyMem_Free},
     {"PyMem_Malloc", (PYTHON_PROC*)&dll_PyMem_Malloc},
@@ -540,13 +544,15 @@ static struct
     {"PyList_SetItem", (PYTHON_PROC*)&dll_PyList_SetItem},
     {"PyList_Size", (PYTHON_PROC*)&dll_PyList_Size},
     {"PyList_Type", (PYTHON_PROC*)&dll_PyList_Type},
+    {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
+    {"PyTuple_SetItem", (PYTHON_PROC*)&dll_PyTuple_SetItem},
+    {"PyTuple_New", (PYTHON_PROC*)&dll_PyTuple_New},
+    {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
+    {"PyTuple_Type", (PYTHON_PROC*)&dll_PyTuple_Type},
     {"PySequence_Size", (PYTHON_PROC*)&dll_PySequence_Size},
     {"PySequence_Check", (PYTHON_PROC*)&dll_PySequence_Check},
     {"PySequence_GetItem", (PYTHON_PROC*)&dll_PySequence_GetItem},
     {"PySequence_Fast", (PYTHON_PROC*)&dll_PySequence_Fast},
-    {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
-    {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
-    {"PyTuple_Type", (PYTHON_PROC*)&dll_PyTuple_Type},
     {"PySlice_GetIndicesEx", (PYTHON_PROC*)&dll_PySlice_GetIndicesEx},
     {"PyImport_ImportModule", (PYTHON_PROC*)&dll_PyImport_ImportModule},
     {"PyDict_GetItemString", (PYTHON_PROC*)&dll_PyDict_GetItemString},
@@ -786,6 +792,7 @@ static PyObject *TabPageGetattr(PyObject *, char *);
 static PyObject *RangeGetattr(PyObject *, char *);
 static PyObject *DictionaryGetattr(PyObject *, char*);
 static PyObject *ListGetattr(PyObject *, char *);
+static PyObject *TupleGetattr(PyObject *, char *);
 static PyObject *FunctionGetattr(PyObject *, char *);
 
 #ifndef Py_VISIT
@@ -1009,7 +1016,7 @@ fail:
  * External interface
  */
     static void
-DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
+DoPyCommand(const char *cmd, dict_T* locals, rangeinitializer init_range, runner run, void *arg)
 {
 #ifndef PY_CAN_RECURSE
     static int		recursive = 0;
@@ -1058,7 +1065,7 @@ DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
     Python_RestoreThread();	    // enter python
 #endif
 
-    run((char *) cmd, arg
+    run((char *) cmd, locals, arg
 #ifdef PY_CAN_RECURSE
 	    , &pygilstate
 #endif
@@ -1103,7 +1110,8 @@ ex_python(exarg_T *eap)
 	    p_pyx = 2;
 
 	DoPyCommand(script == NULL ? (char *) eap->arg : (char *) script,
-		(rangeinitializer) init_range_cmd,
+		NULL,
+		init_range_cmd,
 		(runner) run_cmd,
 		(void *) eap);
     }
@@ -1154,7 +1162,8 @@ ex_pyfile(exarg_T *eap)
 
     // Execute the file
     DoPyCommand(buffer,
-	    (rangeinitializer) init_range_cmd,
+	    NULL,
+	    init_range_cmd,
 	    (runner) run_cmd,
 	    (void *) eap);
 }
@@ -1166,7 +1175,8 @@ ex_pydo(exarg_T *eap)
 	p_pyx = 2;
 
     DoPyCommand((char *)eap->arg,
-	    (rangeinitializer) init_range_cmd,
+	    NULL,
+	    init_range_cmd,
 	    (runner)run_do,
 	    (void *)eap);
 }
@@ -1393,34 +1403,31 @@ static PySequenceMethods WinListAsSeq = {
     void
 python_buffer_free(buf_T *buf)
 {
-    if (BUF_PYTHON_REF(buf) != NULL)
-    {
-	BufferObject *bp = BUF_PYTHON_REF(buf);
-	bp->buf = INVALID_BUFFER_VALUE;
-	BUF_PYTHON_REF(buf) = NULL;
-    }
+    BufferObject *bp = BUF_PYTHON_REF(buf);
+    if (bp == NULL)
+	return;
+    bp->buf = INVALID_BUFFER_VALUE;
+    BUF_PYTHON_REF(buf) = NULL;
 }
 
     void
 python_window_free(win_T *win)
 {
-    if (WIN_PYTHON_REF(win) != NULL)
-    {
-	WindowObject *wp = WIN_PYTHON_REF(win);
-	wp->win = INVALID_WINDOW_VALUE;
-	WIN_PYTHON_REF(win) = NULL;
-    }
+    WindowObject *wp = WIN_PYTHON_REF(win);
+    if (wp == NULL)
+	return;
+    wp->win = INVALID_WINDOW_VALUE;
+    WIN_PYTHON_REF(win) = NULL;
 }
 
     void
 python_tabpage_free(tabpage_T *tab)
 {
-    if (TAB_PYTHON_REF(tab) != NULL)
-    {
-	TabPageObject *tp = TAB_PYTHON_REF(tab);
-	tp->tab = INVALID_TABPAGE_VALUE;
-	TAB_PYTHON_REF(tab) = NULL;
-    }
+    TabPageObject *tp = TAB_PYTHON_REF(tab);
+    if (tp == NULL)
+	return;
+    tp->tab = INVALID_TABPAGE_VALUE;
+    TAB_PYTHON_REF(tab) = NULL;
 }
 
     static int
@@ -1511,6 +1518,17 @@ ListGetattr(PyObject *self, char *name)
 }
 
     static PyObject *
+TupleGetattr(PyObject *self, char *name)
+{
+    if (strcmp(name, "locked") == 0)
+	return PyInt_FromLong(((TupleObject *)(self))->tuple->tv_lock);
+    else if (strcmp(name, "__members__") == 0)
+	return ObjectDir(NULL, TupleAttrs);
+
+    return Py_FindMethod(TupleMethods, self, name);
+}
+
+    static PyObject *
 FunctionGetattr(PyObject *self, char *name)
 {
     PyObject	*r;
@@ -1524,10 +1542,11 @@ FunctionGetattr(PyObject *self, char *name)
 }
 
     void
-do_pyeval(char_u *str, typval_T *rettv)
+do_pyeval(char_u *str, dict_T *locals, typval_T *rettv)
 {
     DoPyCommand((char *) str,
-	    (rangeinitializer) init_range_eval,
+	    locals,
+	    init_range_eval,
 	    (runner) run_eval,
 	    (void *) rettv);
     if (rettv->v_type == VAR_UNKNOWN)

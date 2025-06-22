@@ -3,8 +3,9 @@
 " Maintainer:  Debian Vim Maintainers
 " Former Maintainers: Gerfried Fuchs <alfie@ist.org>
 "                     Wichert Akkerman <wakkerma@debian.org>
-" Last Change: 2021 Nov 26
-" URL: https://salsa.debian.org/vim-team/vim-debian/blob/master/syntax/debcontrol.vim
+" Last Change: 2024 Mar 26
+"              2025 Jun 13 by Vim Project (add hurd-amd64 arch #17525)
+" URL: https://salsa.debian.org/vim-team/vim-debian/blob/main/syntax/debcontrol.vim
 
 " Standard syntax initialization
 if exists('b:current_syntax')
@@ -17,24 +18,24 @@ set cpo&vim
 " Should match case except for the keys of each field
 syn case match
 
-syn iskeyword @,48-57,-,/
+syn iskeyword @,48-57,-
 
 " Everything that is not explicitly matched by the rules below
 syn match debcontrolElse "^.*$"
 
-" Common seperators
+" Common separators
 syn match debControlComma ",[ \t]*"
 syn match debControlSpace "[ \t]"
 
 let s:kernels = ['linux', 'hurd', 'kfreebsd', 'knetbsd', 'kopensolaris', 'netbsd']
 let s:archs = [
       \ 'alpha', 'amd64', 'armeb', 'armel', 'armhf', 'arm64', 'avr32', 'hppa'
-      \, 'i386', 'ia64', 'lpia', 'm32r', 'm68k', 'mipsel', 'mips64el', 'mips'
+      \, 'i386', 'ia64', 'loong64', 'lpia', 'm32r', 'm68k', 'mipsel', 'mips64el', 'mips'
       \, 'powerpcspe', 'powerpc', 'ppc64el', 'ppc64', 'riscv64', 's390x', 's390', 'sh3eb'
       \, 'sh3', 'sh4eb', 'sh4', 'sh', 'sparc64', 'sparc', 'x32'
       \ ]
 let s:pairs = [
-      \ 'hurd-i386', 'kfreebsd-i386', 'kfreebsd-amd64', 'knetbsd-i386'
+      \ 'hurd-i386', 'hurd-amd64', 'kfreebsd-i386', 'kfreebsd-amd64', 'knetbsd-i386'
       \, 'kopensolaris-i386', 'netbsd-alpha', 'netbsd-i386'
       \ ]
 
@@ -93,7 +94,7 @@ syn case ignore
 
 " Catch-all for the legal fields
 syn region debcontrolField matchgroup=debcontrolKey start="^\%(\%(XSBC-Original-\)\=Maintainer\|Standards-Version\|Bugs\|Origin\|X[SB]-Python-Version\|\%(XS-\)\=Vcs-Mtn\|\%(XS-\)\=Testsuite\%(-Triggers\)\=\|Build-Profiles\|Tag\|Subarchitecture\|Kernel-Version\|Installer-Menu-Item\): " end="$" contains=debcontrolVariable,debcontrolEmail oneline
-syn region debcontrolMultiField matchgroup=debcontrolKey start="^\%(Build-\%(Conflicts\|Depends\)\%(-Arch\|-Indep\)\=\|\%(Pre-\)\=Depends\|Recommends\|Suggests\|Breaks\|Enhances\|Replaces\|Conflicts\|Provides\|Built-Using\|Uploaders\|X[SBC]\{0,3\}\%(Private-\)\=-[-a-zA-Z0-9]\+\): *" skip="^[ \t]" end="^$"me=s-1 end="^[^ \t#]"me=s-1 contains=debcontrolEmail,debcontrolVariable,debcontrolComment
+syn region debcontrolMultiField matchgroup=debcontrolKey start="^\%(Build-\%(Conflicts\|Depends\)\%(-Arch\|-Indep\)\=\|\%(Pre-\)\=Depends\|Recommends\|Suggests\|Breaks\|Enhances\|Replaces\|Conflicts\|Provides\|Built-Using\|Static-Built-Using\|Uploaders\|X[SBC]\{0,3\}\%(Private-\)\=-[-a-zA-Z0-9]\+\): *" skip="^[ \t]" end="^$"me=s-1 end="^[^ \t#]"me=s-1 contains=debcontrolEmail,debcontrolVariable,debcontrolComment
 syn region debcontrolMultiFieldSpell matchgroup=debcontrolKey start="^Description: *" skip="^[ \t]" end="^$"me=s-1 end="^[^ \t#]"me=s-1 contains=debcontrolEmail,debcontrolVariable,debcontrolComment,@Spell
 
 " Fields for which we do strict syntax checking

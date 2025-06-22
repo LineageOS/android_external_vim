@@ -116,6 +116,7 @@ enum
     TARGET_TEXT,
     TARGET_TEXT_URI_LIST,
     TARGET_TEXT_PLAIN,
+    TARGET_TEXT_PLAIN_UTF8,
     TARGET_VIM,
     TARGET_VIMENC
 };
@@ -132,7 +133,9 @@ static const GtkTargetEntry selection_targets[] =
     {"UTF8_STRING",	0, TARGET_UTF8_STRING},
     {"COMPOUND_TEXT",	0, TARGET_COMPOUND_TEXT},
     {"TEXT",		0, TARGET_TEXT},
-    {"STRING",		0, TARGET_STRING}
+    {"STRING",		0, TARGET_STRING},
+    {"text/plain;charset=utf-8", 0, TARGET_TEXT_PLAIN_UTF8},
+    {"text/plain",	0, TARGET_TEXT_PLAIN}
 };
 #define N_SELECTION_TARGETS ARRAY_LENGTH(selection_targets)
 
@@ -157,7 +160,7 @@ static const GtkTargetEntry dnd_targets[] =
  * "Monospace" is a standard font alias that should be present
  * on all proper Pango/fontconfig installations.
  */
-# define DEFAULT_FONT	"Monospace 10"
+# define DEFAULT_FONT	"Monospace 12"
 
 #if defined(FEAT_GUI_GNOME) && defined(FEAT_SESSION)
 # define USE_GNOME_SESSION
@@ -396,6 +399,134 @@ static int using_gnome = 0;
 # define using_gnome 0
 #endif
 
+// Comment out the following line to ignore code for resize history tracking.
+#define TRACK_RESIZE_HISTORY
+#ifdef TRACK_RESIZE_HISTORY
+/*
+ * Keep a short term resize history so that stale gtk responses can be
+ * discarded.
+ * When a gtk_window_resize() request is sent to gtk, the width/height of
+ * the request is saved. Recent stale requests are kept around in a list.
+ * See https://github.com/vim/vim/issues/10123
+ */
+# if 0  // Change to 1 to enable ch_log() calls for debugging.
+#  ifdef FEAT_EVAL
+#   define ENABLE_RESIZE_HISTORY_LOG
+#  endif
+# endif
+
+/*
+ * History item of a resize request.
+ * Width and height are of gui.mainwin.
+ */
+typedef struct resize_history {
+    int used;	    // If true, can't match for discard. Only matches once.
+    int width;
+    int height;
+# ifdef ENABLE_RESIZE_HISTORY_LOG
+    int seq;	    // for ch_log messages
+# endif
+    struct resize_history *next;
+} resize_hist_T;
+
+// never NULL during execution
+static resize_hist_T *latest_resize_hist;
+// list of stale resize requests
+static resize_hist_T *old_resize_hists;
+
+/*
+ * Used when calling gtk_window_resize().
+ * Create a resize request history item, put previous request on stale list.
+ * Width/height are the size of the request for the gui.mainwin.
+ */
+    static void
+alloc_resize_hist(int width, int height)
+{
+    // alloc a new resize hist, save current in list of old history
+    resize_hist_T *prev_hist = latest_resize_hist;
+    resize_hist_T *new_hist = ALLOC_CLEAR_ONE(resize_hist_T);
+
+    new_hist->width = width;
+    new_hist->height = height;
+    latest_resize_hist = new_hist;
+
+    // previous hist item becomes head of list
+    prev_hist->next = old_resize_hists;
+    old_resize_hists = prev_hist;
+
+# ifdef ENABLE_RESIZE_HISTORY_LOG
+    new_hist->seq = prev_hist->seq + 1;
+    ch_log(NULL, "gui_gtk: New resize seq %d (%d, %d) [%d, %d]",
+	   new_hist->seq, width, height, (int)Columns, (int)Rows);
+# endif
+}
+
+/*
+ * Free everything on the stale resize history list.
+ * This list is empty when there are no outstanding resize requests.
+ */
+    static void
+clear_resize_hists(void)
+{
+# ifdef ENABLE_RESIZE_HISTORY_LOG
+    int		    i = 0;
+# endif
+
+    if (latest_resize_hist)
+	latest_resize_hist->used = TRUE;
+    while (old_resize_hists != NULL)
+    {
+	resize_hist_T *next_hist = old_resize_hists->next;
+
+	vim_free(old_resize_hists);
+	old_resize_hists = next_hist;
+# ifdef ENABLE_RESIZE_HISTORY_LOG
+	i++;
+# endif
+    }
+# ifdef ENABLE_RESIZE_HISTORY_LOG
+    ch_log(NULL, "gui_gtk: free %d hists", i);
+# endif
+}
+
+// true if hist item is unused and matches w,h
+# define MATCH_WIDTH_HEIGHT(hist, w, h) \
+	  (!hist->used && hist->width == w && hist->height == h)
+
+/*
+ * Search the resize hist list.
+ * Return true if the specified width,height match an item in the list that
+ * has never matched before. Mark the matching item as used so it will
+ * not match again.
+ */
+    static int
+match_stale_width_height(int width, int height)
+{
+    resize_hist_T *hist = old_resize_hists;
+
+    for (hist = old_resize_hists; hist != NULL; hist = hist->next)
+	if (MATCH_WIDTH_HEIGHT(hist, width, height))
+	{
+# ifdef ENABLE_RESIZE_HISTORY_LOG
+	    ch_log(NULL, "gui_gtk: discard seq %d, cur seq %d",
+		   hist->seq, latest_resize_hist->seq);
+# endif
+	    hist->used = TRUE;
+	    return TRUE;
+	}
+    return FALSE;
+}
+
+# if defined(EXITFREE)
+    static void
+free_all_resize_hist(void)
+{
+    clear_resize_hists();
+    vim_free(latest_resize_hist);
+}
+# endif
+#endif
+
 /*
  * GTK doesn't set the GDK_BUTTON1_MASK state when dragging a touch. Add this
  * state when dragging.
@@ -593,6 +724,9 @@ gui_mch_free_all(void)
 #if defined(USE_GNOME_SESSION)
     vim_free(abs_restart_command);
 #endif
+#ifdef TRACK_RESIZE_HISTORY
+    free_all_resize_hist();
+#endif
 }
 #endif
 
@@ -649,7 +783,8 @@ draw_event(GtkWidget *widget UNUSED,
 	    for (i = 0; i < list->num_rectangles; i++)
 	    {
 		const cairo_rectangle_t *rect = &list->rectangles[i];
-		cairo_rectangle(cr, rect->x, rect->y, rect->width, rect->height);
+		cairo_rectangle(cr, rect->x, rect->y,
+						    rect->width, rect->height);
 		cairo_fill(cr);
 	    }
 	}
@@ -658,6 +793,36 @@ draw_event(GtkWidget *widget UNUSED,
 
     return FALSE;
 }
+
+# if GTK_CHECK_VERSION(3,10,0)
+    static gboolean
+scale_factor_event(GtkWidget *widget,
+		   GParamSpec* pspec UNUSED,
+		   gpointer   user_data UNUSED)
+{
+    if (gui.surface != NULL)
+	cairo_surface_destroy(gui.surface);
+
+    int	    w, h;
+    gtk_window_get_size(GTK_WINDOW(gui.mainwin), &w, &h);
+    gui.surface = gdk_window_create_similar_surface(
+	    gtk_widget_get_window(widget),
+	    CAIRO_CONTENT_COLOR_ALPHA,
+	    w, h);
+
+    int	    usable_height = h;
+    if (gtk_socket_id != 0)
+	usable_height -= (gui.char_height - (gui.char_height/2)); // sic.
+
+    gui_gtk_form_freeze(GTK_FORM(gui.formwin));
+    gui.force_redraw = 1;
+    gui_resize_shell(w, usable_height);
+    gui_gtk_form_thaw(GTK_FORM(gui.formwin));
+
+    return TRUE;
+}
+# endif // GTK_CHECK_VERSION(3,10,0)
+
 #else // !GTK_CHECK_VERSION(3,0,0)
     static gint
 expose_event(GtkWidget *widget UNUSED,
@@ -709,7 +874,7 @@ property_event(GtkWidget *widget,
 	xev.xproperty.window = commWindow;
 	xev.xproperty.state = PropertyNewValue;
 	serverEventProc(GDK_WINDOW_XDISPLAY(gtk_widget_get_window(widget)),
-		&xev, 0);
+								      &xev, 0);
     }
     return FALSE;
 }
@@ -720,8 +885,8 @@ property_event(GtkWidget *widget,
  */
     static void
 gtk_settings_xft_dpi_changed_cb(GtkSettings *gtk_settings UNUSED,
-                                GParamSpec *pspec UNUSED,
-                                gpointer data UNUSED)
+				    GParamSpec *pspec UNUSED,
+				    gpointer data UNUSED)
 {
     // Create a new PangoContext for this screen, and initialize it
     // with the current font if necessary.
@@ -987,11 +1152,14 @@ modifiers_gdk2vim(guint state)
     if (state & GDK_MOD1_MASK)
 	modifiers |= MOD_MASK_ALT;
 #if GTK_CHECK_VERSION(2,10,0)
+    if (state & GDK_META_MASK)
+	modifiers |= MOD_MASK_META;
     if (state & GDK_SUPER_MASK)
-	modifiers |= MOD_MASK_META;
-#endif
+	modifiers |= MOD_MASK_CMD;
+#else
     if (state & GDK_MOD4_MASK)
-	modifiers |= MOD_MASK_META;
+	modifiers |= MOD_MASK_CMD;
+#endif
 
     return modifiers;
 }
@@ -1029,6 +1197,7 @@ key_press_event(GtkWidget *widget UNUSED,
     int		key;
     guint	state;
     char_u	*s, *d;
+    int		ctrl_prefix_added = 0;
 
     gui.event_time = event->time;
     key_sym = event->keyval;
@@ -1114,6 +1283,22 @@ key_press_event(GtkWidget *widget UNUSED,
 	}
     }
 
+#ifdef GDK_KEY_dead_circumflex
+    // Belgian Ctrl+[ workaround
+    if (len == 0 && key_sym == GDK_KEY_dead_circumflex)
+    {
+	string[0] = CSI;
+	string[1] = KS_MODIFIER;
+	string[2] = MOD_MASK_CTRL;
+	string[3] = '[';
+	len = 4;
+	add_to_input_buf(string, len);
+	// workaround has to return here, otherwise our fake string[] entries
+	// are confusing code downstream
+	return TRUE;
+    }
+#endif
+
     if (len == 0)   // Unrecognized key
 	return TRUE;
 
@@ -1157,6 +1342,8 @@ key_press_event(GtkWidget *widget UNUSED,
 	string2[1] = KS_MODIFIER;
 	string2[2] = modifiers;
 	add_to_input_buf(string2, 3);
+	if (modifiers == 0x4)
+	    ctrl_prefix_added = 1;
     }
 
     // Check if the key interrupts.
@@ -1171,6 +1358,15 @@ key_press_event(GtkWidget *widget UNUSED,
 	}
     }
 
+    // workaround for German keyboard, where instead of '[' char we have code
+    // sequence of bytes 195, 188 (UTF-8 for "u-umlaut")
+    if (ctrl_prefix_added && len == 2
+		    && ((int)string[0]) == 195
+		    && ((int)string[1]) == 188)
+    {
+	string[0] = 91; // ASCII('[')
+	len = 1;
+    }
     add_to_input_buf(string, len);
 
     // blank out the pointer if necessary
@@ -1183,7 +1379,7 @@ key_press_event(GtkWidget *widget UNUSED,
 #if defined(FEAT_XIM) || GTK_CHECK_VERSION(3,0,0)
     static gboolean
 key_release_event(GtkWidget *widget UNUSED,
-		  GdkEventKey *event,
+		  GdkEventKey *event UNUSED,
 		  gpointer data UNUSED)
 {
 # if defined(FEAT_XIM)
@@ -1368,6 +1564,8 @@ selection_get_cb(GtkWidget	    *widget UNUSED,
 	    && info != (guint)TARGET_VIMENC
 	    && info != (guint)TARGET_VIM
 	    && info != (guint)TARGET_COMPOUND_TEXT
+	    && info != (guint)TARGET_TEXT_PLAIN
+	    && info != (guint)TARGET_TEXT_PLAIN_UTF8
 	    && info != (guint)TARGET_TEXT)
 	return;
 
@@ -1499,11 +1697,12 @@ selection_get_cb(GtkWidget	    *widget UNUSED,
     int
 gui_mch_early_init_check(int give_message)
 {
-    char_u *p;
+    char_u *p, *q;
 
     // Guess that when $DISPLAY isn't set the GUI can't start.
     p = mch_getenv((char_u *)"DISPLAY");
-    if (p == NULL || *p == NUL)
+    q = mch_getenv((char_u *)"WAYLAND_DISPLAY");
+    if ((p == NULL || *p == NUL) && (q == NULL || *q == NUL))
     {
 	gui.dying = TRUE;
 	if (give_message)
@@ -1536,7 +1735,10 @@ gui_mch_init_check(void)
 #if GTK_CHECK_VERSION(3,10,0)
     // Vim currently assumes that Gtk means X11, so it cannot use native Gtk
     // support for other backends such as Wayland.
-    gdk_set_allowed_backends ("x11");
+    //
+    // Use an environment variable to enable unfinished Wayland support.
+    if (getenv("GVIM_ENABLE_WAYLAND") == NULL)
+	gdk_set_allowed_backends ("x11");
 #endif
 
 #ifdef FEAT_GUI_GNOME
@@ -1847,15 +2049,26 @@ button_press_event(GtkWidget *widget,
 }
 
 /*
- * GTK+ 2 abstracts scrolling via the GdkEventScroll.
+ * GTK+ abstracts scrolling via the GdkEventScroll.
  */
     static gboolean
 scroll_event(GtkWidget *widget,
 	     GdkEventScroll *event,
 	     gpointer data UNUSED)
 {
-    int	    button;
+    int	    button = 0;  // silence gcc
     int_u   vim_modifiers;
+#if GTK_CHECK_VERSION(3,4,0)
+    static double  acc_x, acc_y;
+#if !GTK_CHECK_VERSION(3,22,0)
+    static guint32 last_smooth_event_time;
+#endif
+#define DT_X11     1
+#define DT_WAYLAND 2
+    static int display_type;
+    if (!display_type)
+	display_type = gui_mch_get_display() ? DT_X11 : DT_WAYLAND;
+#endif
 
     if (gtk_socket_id != 0 && !gtk_widget_has_focus(widget))
 	gtk_widget_grab_focus(widget);
@@ -1874,6 +2087,29 @@ scroll_event(GtkWidget *widget,
 	case GDK_SCROLL_RIGHT:
 	    button = MOUSE_6;
 	    break;
+#if GTK_CHECK_VERSION(3,4,0)
+	case GDK_SCROLL_SMOOTH:
+	    if (event->is_stop)
+	    {
+		acc_x = acc_y = 0;
+		// this event tells us to stop, without an actual moving
+		return FALSE;
+	    }
+#if GTK_CHECK_VERSION(3,22,0)
+	    if (gdk_device_get_axes(event->device) & GDK_AXIS_FLAG_WHEEL)
+		// this is from a wheel (as oppose to a touchpad / trackpoint)
+#else
+	    if (event->time - last_smooth_event_time > 50)
+		// reset our accumulations after 50ms of silence
+#endif
+		acc_x = acc_y = 0;
+	    acc_x += event->delta_x;
+	    acc_y += event->delta_y;
+#if !GTK_CHECK_VERSION(3,22,0)
+	    last_smooth_event_time = event->time;
+#endif
+	    break;
+#endif
 	default: // This shouldn't happen
 	    return FALSE;
     }
@@ -1886,8 +2122,45 @@ scroll_event(GtkWidget *widget,
 
     vim_modifiers = modifiers_gdk2mouse(event->state);
 
-    gui_send_mouse_event(button, (int)event->x, (int)event->y,
-							FALSE, vim_modifiers);
+#if GTK_CHECK_VERSION(3,4,0)
+    // on x11, despite not requested, when we copy into primary clipboard,
+    // we'll get smooth events. Unsmooth ones will also come along.
+    if (event->direction == GDK_SCROLL_SMOOTH && display_type == DT_WAYLAND)
+    {
+	while (acc_x >= 1.0)
+	{ // right
+	    acc_x = MAX(0.0, acc_x - 1.0);
+	    gui_send_mouse_event(MOUSE_6, (int)event->x, (int)event->y,
+		    FALSE, vim_modifiers);
+	}
+	while (acc_x <= -1.0)
+	{ // left
+	    acc_x = MIN(0.0, acc_x + 1.0);
+	    gui_send_mouse_event(MOUSE_7, (int)event->x, (int)event->y,
+		    FALSE, vim_modifiers);
+	}
+	while (acc_y >= 1.0)
+	{ // down
+	    acc_y = MAX(0.0, acc_y - 1.0);
+	    gui_send_mouse_event(MOUSE_5, (int)event->x, (int)event->y,
+		    FALSE, vim_modifiers);
+	}
+	while (acc_y <= -1.0)
+	{ // up
+	    acc_y = MIN(0.0, acc_y + 1.0);
+	    gui_send_mouse_event(MOUSE_4, (int)event->x, (int)event->y,
+		    FALSE, vim_modifiers);
+	}
+    }
+    else if (event->direction == GDK_SCROLL_SMOOTH && display_type == DT_X11)
+	// for X11 we deal with unsmooth events, and so ignore the smooth ones
+	;
+    else
+#undef DT_X11
+#undef DT_WAYLAND
+#endif
+	gui_send_mouse_event(button, (int)event->x, (int)event->y,
+		FALSE, vim_modifiers);
 
     return TRUE;
 }
@@ -2275,16 +2548,15 @@ setup_save_yourself(void)
     GnomeClient *client;
 
     client = gnome_master_client();
+    if (client == NULL)
+	return;
 
-    if (client != NULL)
-    {
-	// Must use the deprecated gtk_signal_connect() for compatibility
-	// with GNOME 1.  Arrgh, zombies!
-	gtk_signal_connect(GTK_OBJECT(client), "save_yourself",
-			   GTK_SIGNAL_FUNC(&sm_client_save_yourself), NULL);
-	gtk_signal_connect(GTK_OBJECT(client), "die",
-			   GTK_SIGNAL_FUNC(&sm_client_die), NULL);
-    }
+    // Must use the deprecated gtk_signal_connect() for compatibility
+    // with GNOME 1.  Arrgh, zombies!
+    gtk_signal_connect(GTK_OBJECT(client), "save_yourself",
+	    GTK_SIGNAL_FUNC(&sm_client_save_yourself), NULL);
+    gtk_signal_connect(GTK_OBJECT(client), "die",
+	    GTK_SIGNAL_FUNC(&sm_client_die), NULL);
 }
 
 #else // !USE_GNOME_SESSION
@@ -2342,10 +2614,12 @@ setup_save_yourself(void)
 	// Fall back to old method
 
 	// first get the existing value
-	GdkWindow * const mainwin_win = gtk_widget_get_window(gui.mainwin);
+	Display * dpy = gui_mch_get_display();
+	if (!dpy)
+	    return;
 
-	if (XGetWMProtocols(GDK_WINDOW_XDISPLAY(mainwin_win),
-		    GDK_WINDOW_XID(mainwin_win),
+	GdkWindow * const mainwin_win = gtk_widget_get_window(gui.mainwin);
+	if (XGetWMProtocols(dpy, GDK_WINDOW_XID(mainwin_win),
 		    &existing_atoms, &count))
 	{
 	    Atom	*new_atoms;
@@ -2430,30 +2704,15 @@ global_event_filter(GdkXEvent *xev,
     static void
 mainwin_realize(GtkWidget *widget UNUSED, gpointer data UNUSED)
 {
-// If you get an error message here, you still need to unpack the runtime
-// archive!
-#ifdef magick
-# undef magick
-#endif
-  // A bit hackish, but avoids casting later and allows optimization
-# define static static const
-#define magick vim32x32
-#include "../runtime/vim32x32.xpm"
-#undef magick
-#define magick vim16x16
-#include "../runtime/vim16x16.xpm"
-#undef magick
-#define magick vim48x48
-#include "../runtime/vim48x48.xpm"
-#undef magick
-# undef static
-
     GdkWindow * const mainwin_win = gtk_widget_get_window(gui.mainwin);
 
     // When started with "--echo-wid" argument, write window ID on stdout.
     if (echo_wid_arg)
     {
-	printf("WID: %ld\n", (long)GDK_WINDOW_XID(mainwin_win));
+	if (gui_mch_get_display())
+	    printf("WID: %ld\n", (long)GDK_WINDOW_XID(mainwin_win));
+	else
+	    printf("WID: 0\n");
 	fflush(stdout);
     }
 
@@ -2462,17 +2721,7 @@ mainwin_realize(GtkWidget *widget UNUSED, gpointer data UNUSED)
 	/*
 	 * Add an icon to the main window. For fun and convenience of the user.
 	 */
-	GList *icons = NULL;
-
-	icons = g_list_prepend(icons, gdk_pixbuf_new_from_xpm_data(vim16x16));
-	icons = g_list_prepend(icons, gdk_pixbuf_new_from_xpm_data(vim32x32));
-	icons = g_list_prepend(icons, gdk_pixbuf_new_from_xpm_data(vim48x48));
-
-	gtk_window_set_icon_list(GTK_WINDOW(gui.mainwin), icons);
-
-	// TODO: is this type cast OK?
-	g_list_foreach(icons, (GFunc)(void *)&g_object_unref, NULL);
-	g_list_free(icons);
+	gtk_window_set_icon_name(GTK_WINDOW(gui.mainwin), "gvim");
     }
 
 #if !defined(USE_GNOME_SESSION)
@@ -2488,84 +2737,49 @@ mainwin_realize(GtkWidget *widget UNUSED, gpointer data UNUSED)
 	setup_save_yourself();
 
 #ifdef FEAT_CLIENTSERVER
-    if (serverName == NULL && serverDelayedStartName != NULL)
+    if (gui_mch_get_display())
     {
-	// This is a :gui command in a plain vim with no previous server
-	commWindow = GDK_WINDOW_XID(mainwin_win);
+	if (serverName == NULL && serverDelayedStartName != NULL)
+	{
+	    // This is a :gui command in a plain vim with no previous server
+	    commWindow = GDK_WINDOW_XID(mainwin_win);
 
-	(void)serverRegisterName(GDK_WINDOW_XDISPLAY(mainwin_win),
-				 serverDelayedStartName);
+	    (void)serverRegisterName(GDK_WINDOW_XDISPLAY(mainwin_win),
+				    serverDelayedStartName);
+	}
+	else
+	{
+	    /*
+	    * Cannot handle "XLib-only" windows with gtk event routines, we'll
+	    * have to change the "server" registration to that of the main window
+	    * If we have not registered a name yet, remember the window.
+	    */
+	    serverChangeRegisteredWindow(GDK_WINDOW_XDISPLAY(mainwin_win),
+					GDK_WINDOW_XID(mainwin_win));
+	}
+	gtk_widget_add_events(gui.mainwin, GDK_PROPERTY_CHANGE_MASK);
+	g_signal_connect(G_OBJECT(gui.mainwin), "property-notify-event",
+			G_CALLBACK(property_event), NULL);
     }
-    else
-    {
-	/*
-	 * Cannot handle "XLib-only" windows with gtk event routines, we'll
-	 * have to change the "server" registration to that of the main window
-	 * If we have not registered a name yet, remember the window.
-	 */
-	serverChangeRegisteredWindow(GDK_WINDOW_XDISPLAY(mainwin_win),
-				     GDK_WINDOW_XID(mainwin_win));
-    }
-    gtk_widget_add_events(gui.mainwin, GDK_PROPERTY_CHANGE_MASK);
-    g_signal_connect(G_OBJECT(gui.mainwin), "property-notify-event",
-		     G_CALLBACK(property_event), NULL);
 #endif
 }
 
     static GdkCursor *
 create_blank_pointer(void)
 {
-    GdkWindow	*root_window = NULL;
-#if GTK_CHECK_VERSION(3,0,0)
-    GdkPixbuf   *blank_mask;
-#else
-    GdkPixmap	*blank_mask;
-#endif
     GdkCursor	*cursor;
+
 #if GTK_CHECK_VERSION(3,0,0)
-    GdkRGBA	color = { 0.0, 0.0, 0.0, 1.0 };
+    GdkDisplay  *disp = gtk_widget_get_display(gui.mainwin);
+    cursor = gdk_cursor_new_from_name(disp, "none");
 #else
-    GdkColor	color = { 0, 0, 0, 0 };
-    char	blank_data[] = { 0x0 };
-#endif
-
-#if GTK_CHECK_VERSION(3,12,0)
-    {
-	GdkWindow * const win = gtk_widget_get_window(gui.mainwin);
-	GdkScreen * const scrn = gdk_window_get_screen(win);
-	root_window = gdk_screen_get_root_window(scrn);
-    }
-#else
-    root_window = gtk_widget_get_root_window(gui.mainwin);
-#endif
-
     // Create a pseudo blank pointer, which is in fact one pixel by one pixel
     // in size.
-#if GTK_CHECK_VERSION(3,0,0)
-    {
-	cairo_surface_t *surf;
-	cairo_t		*cr;
-
-	surf = cairo_image_surface_create(CAIRO_FORMAT_A1, 1, 1);
-	cr = cairo_create(surf);
-
-	cairo_set_source_rgba(cr,
-			     color.red,
-			     color.green,
-			     color.blue,
-			     color.alpha);
-	cairo_rectangle(cr, 0, 0, 1, 1);
-	cairo_fill(cr);
-	cairo_destroy(cr);
-
-	blank_mask = gdk_pixbuf_get_from_surface(surf, 0, 0, 1, 1);
-	cairo_surface_destroy(surf);
-
-	cursor = gdk_cursor_new_from_pixbuf(gdk_window_get_display(root_window),
-					    blank_mask, 0, 0);
-	g_object_unref(blank_mask);
-    }
-#else
+    GdkWindow	*root_window = NULL;
+    GdkColor	color = { 0, 0, 0, 0 };
+    GdkPixmap	*blank_mask;
+    char	blank_data[] = { 0x0 };
+    root_window = gtk_widget_get_root_window(gui.mainwin);
     blank_mask = gdk_bitmap_create_from_data(root_window, blank_data, 1, 1);
     cursor = gdk_cursor_new_from_pixmap(blank_mask, blank_mask,
 					&color, &color, 0, 0);
@@ -2962,8 +3176,10 @@ update_window_manager_hints(int force_width, int force_height)
 			       |GDK_HINT_MIN_SIZE;
 	// Using gui.formwin as geometry widget doesn't work as expected
 	// with GTK+ 2 -- dunno why.  Presumably all the resizing hacks
-	// in Vim confuse GTK+.
-	gtk_window_set_geometry_hints(GTK_WINDOW(gui.mainwin), gui.mainwin,
+	// in Vim confuse GTK+.  For GTK 3 the second argument should be NULL
+	// to make the width/height inc works, despite the docs saying
+	// something else.
+	gtk_window_set_geometry_hints(GTK_WINDOW(gui.mainwin), NULL,
 				      &geometry, geometry_mask);
 	old_width       = width;
 	old_height      = height;
@@ -3152,11 +3368,7 @@ on_tabline_menu(GtkWidget *widget, GdkEvent *event)
 
 	// When ignoring events return TRUE so that the selected page doesn't
 	// change.
-	if (hold_gui_events
-# ifdef FEAT_CMDWIN
-		|| cmdwin_type != 0
-# endif
-	   )
+	if (hold_gui_events || cmdwin_type != 0)
 	    return TRUE;
 
 	tabwin = gui_gtk_window_at_position(gui.mainwin, &x, &y);
@@ -3185,6 +3397,12 @@ on_tabline_menu(GtkWidget *widget, GdkEvent *event)
 		// small guess it's the left button.
 		send_tabline_event(x < 50 ? -1 : 0);
 	    }
+	}
+	else if (bevent->button == 2)
+	{
+	    if (clicked_page != 0)
+		// Middle mouse click on tabpage label closes that tab.
+		send_tabline_menu_event(clicked_page, TABLINE_MENU_CLOSE);
 	}
     }
 
@@ -3217,13 +3435,13 @@ on_tab_reordered(
 	gint		idx,
 	gpointer	data UNUSED)
 {
-    if (!ignore_tabline_evt)
-    {
-	if ((tabpage_index(curtab) - 1) < idx)
-	    tabpage_move(idx + 1);
-	else
-	    tabpage_move(idx);
-    }
+    if (ignore_tabline_evt)
+	return;
+
+    if ((tabpage_index(curtab) - 1) < idx)
+	tabpage_move(idx + 1);
+    else
+	tabpage_move(idx);
 }
 # endif
 
@@ -3370,30 +3588,28 @@ gui_mch_set_curtab(int nr)
  * Add selection targets for PRIMARY and CLIPBOARD selections.
  */
     void
-gui_gtk_set_selection_targets(void)
+gui_gtk_set_selection_targets(GdkAtom selection)
 {
     int		    i, j = 0;
-    int		    n_targets = N_SELECTION_TARGETS;
-    GtkTargetEntry  targets[N_SELECTION_TARGETS];
+    static int	    n_targets = N_SELECTION_TARGETS;
+    static GtkTargetEntry  targets[N_SELECTION_TARGETS];
 
-    for (i = 0; i < (int)N_SELECTION_TARGETS; ++i)
+    if (targets[0].target == NULL)
     {
-	// OpenOffice tries to use TARGET_HTML and fails when we don't
-	// return something, instead of trying another target. Therefore only
-	// offer TARGET_HTML when it works.
-	if (!clip_html && selection_targets[i].info == TARGET_HTML)
-	    n_targets--;
-	else
-	    targets[j++] = selection_targets[i];
+	for (i = 0; i < (int)N_SELECTION_TARGETS; ++i)
+	{
+	    // OpenOffice tries to use TARGET_HTML and fails when we don't
+	    // return something, instead of trying another target. Therefore only
+	    // offer TARGET_HTML when it works.
+	    if (!clip_html && selection_targets[i].info == TARGET_HTML)
+		n_targets--;
+	    else
+		targets[j++] = selection_targets[i];
+	}
     }
 
-    gtk_selection_clear_targets(gui.drawarea, (GdkAtom)GDK_SELECTION_PRIMARY);
-    gtk_selection_clear_targets(gui.drawarea, (GdkAtom)clip_plus.gtk_sel_atom);
-    gtk_selection_add_targets(gui.drawarea,
-			      (GdkAtom)GDK_SELECTION_PRIMARY,
-			      targets, n_targets);
-    gtk_selection_add_targets(gui.drawarea,
-			      (GdkAtom)clip_plus.gtk_sel_atom,
+    gtk_selection_clear_targets(gui.drawarea, selection);
+    gtk_selection_add_targets(gui.drawarea, selection,
 			      targets, n_targets);
 }
 
@@ -3439,7 +3655,7 @@ gui_mch_init(void)
     {
 	gnome_program_init(VIMPACKAGE, VIM_VERSION_SHORT,
 			   LIBGNOMEUI_MODULE, gui_argc, gui_argv, NULL);
-# if defined(FEAT_FLOAT) && defined(LC_NUMERIC)
+# if defined(LC_NUMERIC)
 	{
 	    char *p = setlocale(LC_NUMERIC, NULL);
 
@@ -3462,7 +3678,8 @@ gui_mch_init(void)
      * did_set_string_option() in option.c prohibits changing 'termencoding'
      * to something else than UTF-8 if the GUI is in use.
      */
-    set_option_value((char_u *)"termencoding", 0L, (char_u *)"utf-8", 0);
+    set_option_value_give_err((char_u *)"termencoding",
+						     0L, (char_u *)"utf-8", 0);
 
 #ifdef FEAT_TOOLBAR
     gui_gtk_register_stock_icons();
@@ -3742,17 +3959,37 @@ gui_mch_init(void)
 #endif
 
     // Determine which events we will filter.
-    gtk_widget_set_events(gui.drawarea,
-			  GDK_EXPOSURE_MASK |
-			  GDK_ENTER_NOTIFY_MASK |
-			  GDK_LEAVE_NOTIFY_MASK |
-			  GDK_BUTTON_PRESS_MASK |
-			  GDK_BUTTON_RELEASE_MASK |
-			  GDK_SCROLL_MASK |
-			  GDK_KEY_PRESS_MASK |
-			  GDK_KEY_RELEASE_MASK |
-			  GDK_POINTER_MOTION_MASK |
-			  GDK_POINTER_MOTION_HINT_MASK);
+    gint event_mask =
+	GDK_EXPOSURE_MASK |
+	GDK_ENTER_NOTIFY_MASK |
+	GDK_LEAVE_NOTIFY_MASK |
+	GDK_BUTTON_PRESS_MASK |
+	GDK_BUTTON_RELEASE_MASK |
+	GDK_KEY_PRESS_MASK |
+	GDK_KEY_RELEASE_MASK |
+	GDK_POINTER_MOTION_MASK |
+	GDK_POINTER_MOTION_HINT_MASK;
+#if GTK_CHECK_VERSION(3,4,0)
+    if (GDK_IS_X11_DISPLAY(gdk_display_get_default()))
+    {
+	// for X11, if we were using smooth scroll events, we
+	// would get an scroll without deltas on the very first user scroll* and
+	// get both "unsmooth" scroll and smooth scroll events after
+	// copying into the primary selection
+	//
+	// *: https://bugzilla.gnome.org/show_bug.cgi?id=675959
+	event_mask |= GDK_SCROLL_MASK;
+    }
+    else
+    {
+	// for Wayland, touchpads don't generate "unsmooth" scroll events. Both
+	// touchpads and wheels generate smooth scroll events expectedly.
+	event_mask |= GDK_SMOOTH_SCROLL_MASK;
+    }
+#else
+    event_mask |= GDK_SCROLL_MASK;
+#endif
+    gtk_widget_set_events(gui.drawarea, event_mask);
 
     gtk_widget_show(gui.drawarea);
     gui_gtk_form_put(GTK_FORM(gui.formwin), gui.drawarea, 0, 0);
@@ -3838,8 +4075,8 @@ gui_mch_init(void)
     }
 
     // Real windows can get focus ... GtkPlug, being a mere container can't,
-    // only its widgets.  Arguably, this could be common code and we not use
-    // the window focus at all, but let's be safe.
+    // only its widgets.  Arguably, this could be common code and we do not
+    // use the window focus at all, but let's be safe.
     if (gtk_socket_id == 0)
     {
 	g_signal_connect(G_OBJECT(gui.mainwin), "focus-out-event",
@@ -3868,20 +4105,7 @@ gui_mch_init(void)
     g_signal_connect(G_OBJECT(gui.drawarea), "button-release-event",
 		     G_CALLBACK(button_release_event), NULL);
     g_signal_connect(G_OBJECT(gui.drawarea), "scroll-event",
-		     G_CALLBACK(&scroll_event), NULL);
-
-    /*
-     * Add selection handler functions.
-     */
-    g_signal_connect(G_OBJECT(gui.drawarea), "selection-clear-event",
-		     G_CALLBACK(selection_clear_event), NULL);
-    g_signal_connect(G_OBJECT(gui.drawarea), "selection-received",
-		     G_CALLBACK(selection_received_cb), NULL);
-
-    gui_gtk_set_selection_targets();
-
-    g_signal_connect(G_OBJECT(gui.drawarea), "selection-get",
-		     G_CALLBACK(selection_get_cb), NULL);
+		     G_CALLBACK(scroll_event), NULL);
 
     // Pretend we don't have input focus, we will get an event if we do.
     gui.in_focus = FALSE;
@@ -3906,15 +4130,15 @@ gui_mch_init(void)
     void
 gui_mch_forked(void)
 {
-    if (using_gnome)
-    {
-	GnomeClient *client;
+    if (!using_gnome)
+	return;
 
-	client = gnome_master_client();
+    GnomeClient *client;
 
-	if (client != NULL)
-	    gnome_client_set_process_id(client, getpid());
-    }
+    client = gnome_master_client();
+
+    if (client != NULL)
+	gnome_client_set_process_id(client, getpid());
 }
 #endif // USE_GNOME_SESSION
 
@@ -4005,7 +4229,37 @@ form_configure_event(GtkWidget *widget UNUSED,
 		     GdkEventConfigure *event,
 		     gpointer data UNUSED)
 {
-    int usable_height = event->height;
+    int	    usable_height = event->height;
+#ifdef TRACK_RESIZE_HISTORY
+    // Resize requests are made for gui.mainwin;
+    // get its dimensions for searching if this event
+    // is a response to a vim request.
+    int	    w, h;
+    gtk_window_get_size(GTK_WINDOW(gui.mainwin), &w, &h);
+
+# ifdef ENABLE_RESIZE_HISTORY_LOG
+    ch_log(NULL, "gui_gtk: form_configure_event: (%d, %d) [%d, %d]",
+	   w, h, (int)Columns, (int)Rows);
+# endif
+
+    // Look through history of recent vim resize requests.
+    // If this event matches:
+    //	    - "latest resize hist" We're caught up;
+    //		clear the history and process this event.
+    //		If history is, old to new, 100, 99, 100, 99. If this event is
+    //		99 for the stale, it is matched against the current. History
+    //		is cleared, we may bounce, but no worse than before.
+    //	    - "older/stale hist" If match an unused event in history,
+    //		then discard this event, and mark the matching event as used.
+    //	    - "no match" Figure it's a user resize event, clear history.
+    // NOTE: clear history is default, then all incoming events are processed
+
+    if (!MATCH_WIDTH_HEIGHT(latest_resize_hist, w, h)
+					     && match_stale_width_height(w, h))
+	// discard stale event
+	return TRUE;
+    clear_resize_hists();
+#endif
 
 #if GTK_CHECK_VERSION(3,22,2) && !GTK_CHECK_VERSION(3,22,4)
     // As of 3.22.2, GdkWindows have started distributing configure events to
@@ -4277,6 +4531,7 @@ gui_mch_open(void)
 
     pixel_width = (guint)(gui_get_base_width() + Columns * gui.char_width);
     pixel_height = (guint)(gui_get_base_height() + Rows * gui.char_height);
+
     // For GTK2 changing the size of the form widget doesn't cause window
     // resizing.
     if (gtk_socket_id == 0)
@@ -4328,15 +4583,22 @@ gui_mch_open(void)
      * manager upon us and should not interfere with what VIM is requesting
      * upon startup.
      */
+#ifdef TRACK_RESIZE_HISTORY
+    latest_resize_hist = ALLOC_CLEAR_ONE(resize_hist_T);
+#endif
     g_signal_connect(G_OBJECT(gui.formwin), "configure-event",
-		     G_CALLBACK(form_configure_event), NULL);
+				       G_CALLBACK(form_configure_event), NULL);
+#if GTK_CHECK_VERSION(3,10,0)
+    g_signal_connect(G_OBJECT(gui.formwin), "notify::scale-factor",
+		     G_CALLBACK(scale_factor_event), NULL);
+#endif
 
 #ifdef FEAT_DND
     // Set up for receiving DND items.
     gui_gtk_set_dnd_targets();
 
     g_signal_connect(G_OBJECT(gui.drawarea), "drag-data-received",
-		     G_CALLBACK(drag_data_received_cb), NULL);
+				      G_CALLBACK(drag_data_received_cb), NULL);
 #endif
 
 	// With GTK+ 2, we need to iconify the window before calling show()
@@ -4382,6 +4644,17 @@ gui_mch_open(void)
 #endif
     }
 
+    /*
+     * Add selection handler functions.
+     */
+    g_signal_connect(G_OBJECT(gui.drawarea), "selection-clear-event",
+		     G_CALLBACK(selection_clear_event), NULL);
+    g_signal_connect(G_OBJECT(gui.drawarea), "selection-received",
+		     G_CALLBACK(selection_received_cb), NULL);
+
+    g_signal_connect(G_OBJECT(gui.drawarea), "selection-get",
+		     G_CALLBACK(selection_get_cb), NULL);
+
     return OK;
 }
 
@@ -4402,8 +4675,12 @@ gui_mch_exit(int rc UNUSED)
     int
 gui_mch_get_winpos(int *x, int *y)
 {
-    gtk_window_get_position(GTK_WINDOW(gui.mainwin), x, y);
-    return OK;
+    if (gui_mch_get_display())
+    {
+	gtk_window_get_position(GTK_WINDOW(gui.mainwin), x, y);
+	return OK;
+    }
+    return FAIL;
 }
 
 /*
@@ -4515,6 +4792,9 @@ gui_mch_set_shellsize(int width, int height,
     width  += get_menu_tool_width();
     height += get_menu_tool_height();
 
+#ifdef TRACK_RESIZE_HISTORY
+    alloc_resize_hist(width, height); // track the resize request
+#endif
     if (gtk_socket_id == 0)
 	gtk_window_resize(GTK_WINDOW(gui.mainwin), width, height);
     else
@@ -4645,7 +4925,11 @@ is_cjk_font(PangoFontDescription *font_desc)
 	{
 	    uc = (cjk_langs[i][0] == 'k') ? 0xAC00 : 0x4E00;
 	    is_cjk = (pango_coverage_get(coverage, uc) == PANGO_COVERAGE_EXACT);
+#if PANGO_VERSION_CHECK(1, 52, 0)
+	    g_object_unref(coverage);
+#else
 	    pango_coverage_unref(coverage);
+#endif
 	}
     }
 
@@ -4844,7 +5128,8 @@ get_styled_font_variants(void)
     }
 
     pango_font_description_free(bold_font_desc);
-    g_object_unref(plain_font);
+    if (bold_font != NULL && gui.font_can_bold)
+	g_object_unref(plain_font);
 }
 
 static PangoEngineShape *default_shape_engine = NULL;
@@ -5109,6 +5394,62 @@ gui_mch_free_font(GuiFont font)
 {
     if (font != NOFONT)
 	pango_font_description_free(font);
+}
+
+/*
+ * Cmdline expansion for setting 'guifont' / 'guifontwide'. Will enumerate
+ * through all fonts for completion. When setting 'guifont' it will only show
+ * monospace fonts as it's unlikely other fonts would be useful.
+ */
+    void
+gui_mch_expand_font(optexpand_T *args, void *param, int (*add_match)(char_u *val))
+{
+    PangoFontFamily	**font_families = NULL;
+    int			n_families = 0;
+    int			wide = *(int *)param;
+
+    if (args->oe_include_orig_val && *args->oe_opt_value == NUL && !wide)
+    {
+	// If guifont is empty, and we want to fill in the orig value, suggest
+	// the default so the user can modify it.
+	if (add_match((char_u *)DEFAULT_FONT) != OK)
+	    return;
+    }
+
+    pango_context_list_families(
+	    gui.text_context,
+	    &font_families,
+	    &n_families);
+
+    for (int i = 0; i < n_families; i++)
+    {
+	if (!wide && !pango_font_family_is_monospace(font_families[i]))
+	    continue;
+
+	const char* fam_name = pango_font_family_get_name(font_families[i]);
+	if (input_conv.vc_type != CONV_NONE)
+	{
+	    char_u *buf = string_convert(&input_conv, (char_u*)fam_name, NULL);
+	    if (buf != NULL)
+	    {
+		if (add_match(buf) != OK)
+		{
+		    vim_free(buf);
+		    break;
+		}
+		vim_free(buf);
+	    }
+	    else
+		break;
+	}
+	else
+	{
+	    if (add_match((char_u *)fam_name) != OK)
+		break;
+	}
+    }
+
+    g_free(font_families);
 }
 
 /*
@@ -5574,7 +5915,7 @@ gui_gtk2_draw_string(int row, int col, char_u *s, int len, int flags)
      * String received to output to screen can print using pre-cached glyphs
      * (fast) or Pango (slow). Ligatures and multibype utf-8 must use Pango.
      * Since we receive mixed content string, split it into logical segments
-     * that are guaranteed to go trough glyphs as much as possible. Since
+     * that are guaranteed to go through glyphs as much as possible. Since
      * single ligature char prints as ascii, print it that way.
      */
     len_sum = 0;    // return value needs to add up since we are printing
@@ -5583,7 +5924,7 @@ gui_gtk2_draw_string(int row, int col, char_u *s, int len, int flags)
     cs = s;
     // First char decides starting needs_pango mode, 0=ascii 1=utf8/ligatures.
     // Even if it is ligature char, two chars or more make ligature.
-    // Ascii followed by utf8 is also going trough pango.
+    // Ascii followed by utf8 is also going through pango.
     is_utf8 = (*cs & 0x80);
     is_ligature = gui.ligatures_map[*cs] && (len > 1);
     if (is_ligature)
@@ -5610,7 +5951,7 @@ gui_gtk2_draw_string(int row, int col, char_u *s, int len, int flags)
 	    }
 	    is_utf8 = *(cs + slen) & 0x80;
 	    // ascii followed by utf8 could be combining
-	    // if so send it trough pango
+	    // if so send it through pango
 	    if ((!is_utf8) && ((slen + 1) < (len - byte_sum)))
 		is_utf8 = (*(cs + slen + 1) & 0x80);
 	    should_need_pango = (is_ligature || is_utf8);
@@ -5957,16 +6298,17 @@ gui_mch_haskey(char_u *name)
     return FAIL;
 }
 
-#if defined(FEAT_TITLE) || defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * Return the text window-id and display.  Only required for X-based GUI's
  */
     int
 gui_get_x11_windis(Window *win, Display **dis)
 {
-    if (gui.mainwin != NULL && gtk_widget_get_window(gui.mainwin) != NULL)
+    Display * dpy = gui_mch_get_display();
+    if (dpy)
     {
-	*dis = GDK_WINDOW_XDISPLAY(gtk_widget_get_window(gui.mainwin));
+	*dis = dpy;
 	*win = GDK_WINDOW_XID(gtk_widget_get_window(gui.mainwin));
 	return OK;
     }
@@ -5977,18 +6319,18 @@ gui_get_x11_windis(Window *win, Display **dis)
 }
 #endif
 
-#if defined(FEAT_CLIENTSERVER) \
-	|| (defined(FEAT_X11) && defined(FEAT_CLIPBOARD)) || defined(PROTO)
-
     Display *
 gui_mch_get_display(void)
 {
-    if (gui.mainwin != NULL && gtk_widget_get_window(gui.mainwin) != NULL)
+    if (gui.mainwin != NULL && gtk_widget_get_window(gui.mainwin) != NULL
+#if GTK_CHECK_VERSION(3,0,0)
+	    && GDK_IS_X11_DISPLAY(gtk_widget_get_display(gui.mainwin))
+#endif
+	)
 	return GDK_WINDOW_XDISPLAY(gtk_widget_get_window(gui.mainwin));
     else
 	return NULL;
 }
-#endif
 
     void
 gui_mch_beep(void)
@@ -6065,7 +6407,7 @@ gui_mch_invert_rectangle(int r, int c, int nr, int nc)
     };
     cairo_t * const cr = cairo_create(gui.surface);
 
-    set_cairo_source_rgba_from_color(cr, gui.norm_pixel ^ gui.back_pixel);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
 # if CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1,9,2)
     cairo_set_operator(cr, CAIRO_OPERATOR_DIFFERENCE);
 # else
@@ -6085,13 +6427,9 @@ gui_mch_invert_rectangle(int r, int c, int nr, int nc)
     if (gui.drawarea->window == NULL)
 	return;
 
-    values.foreground.pixel = gui.norm_pixel ^ gui.back_pixel;
-    values.background.pixel = gui.norm_pixel ^ gui.back_pixel;
-    values.function = GDK_XOR;
+    values.function = GDK_INVERT;
     invert_gc = gdk_gc_new_with_values(gui.drawarea->window,
 				       &values,
-				       GDK_GC_FOREGROUND |
-				       GDK_GC_BACKGROUND |
 				       GDK_GC_FUNCTION);
     gdk_gc_set_exposures(invert_gc, gui.visibility !=
 						   GDK_VISIBILITY_UNOBSCURED);
@@ -6119,7 +6457,17 @@ gui_mch_iconify(void)
     void
 gui_mch_set_foreground(void)
 {
+    // Just calling gtk_window_present() used to work in the past, but now this
+    // sequence appears to be needed:
+    // - Show the window on top of others.
+    // - Present the window (also shows it above others).
+    // - Do not the window on top of others (otherwise it would be stuck there).
+    gtk_window_set_keep_above(GTK_WINDOW(gui.mainwin), TRUE);
+    gui_may_flush();
     gtk_window_present(GTK_WINDOW(gui.mainwin));
+    gui_may_flush();
+    gtk_window_set_keep_above(GTK_WINDOW(gui.mainwin), FALSE);
+    gui_may_flush();
 }
 #endif
 
@@ -6222,7 +6570,9 @@ gui_mch_draw_part_cursor(int w, int h, guicolor_T color)
     void
 gui_mch_update(void)
 {
-    while (g_main_context_pending(NULL) && !vim_is_input_buf_full())
+    int cnt = 0;	// prevent endless loop
+    while (g_main_context_pending(NULL) && !vim_is_input_buf_full()
+								&& ++cnt < 100)
 	g_main_context_iteration(NULL, TRUE);
 }
 
@@ -6644,9 +6994,10 @@ clip_mch_request_selection(Clipboard_T *cbd)
 	    return;
     }
 
-    // Final fallback position - use the X CUT_BUFFER0 store
-    yank_cut_buffer0(GDK_WINDOW_XDISPLAY(gtk_widget_get_window(gui.mainwin)),
-	    cbd);
+    if (gui_mch_get_display())
+	// Final fallback position - use the X CUT_BUFFER0 store
+	yank_cut_buffer0(GDK_WINDOW_XDISPLAY(gtk_widget_get_window(gui.mainwin)),
+		cbd);
 }
 
 /*
@@ -6655,11 +7006,11 @@ clip_mch_request_selection(Clipboard_T *cbd)
     void
 clip_mch_lose_selection(Clipboard_T *cbd UNUSED)
 {
-    if (!in_selection_clear_event)
-    {
-	gtk_selection_owner_set(NULL, cbd->gtk_sel_atom, gui.event_time);
-	gui_mch_update();
-    }
+    if (in_selection_clear_event)
+	return;
+
+    gtk_selection_owner_set(NULL, cbd->gtk_sel_atom, gui.event_time);
+    gui_mch_update();
 }
 
 /*
@@ -6668,10 +7019,18 @@ clip_mch_lose_selection(Clipboard_T *cbd UNUSED)
     int
 clip_mch_own_selection(Clipboard_T *cbd)
 {
+    // If we're blocking autocmds, we are filling the register to offer the
+    // selection (inside selection-get)
+    if (is_autocmd_blocked())
+	return OK;
+
     int success;
 
     success = gtk_selection_owner_set(gui.drawarea, cbd->gtk_sel_atom,
 				      gui.event_time);
+    // don't update on every visual selection change
+    if (!(cbd->owned && VIsual_active))
+	gui_gtk_set_selection_targets(cbd->gtk_sel_atom);
     gui_mch_update();
     return (success) ? OK : FAIL;
 }
@@ -6804,9 +7163,11 @@ gui_mch_setmouse(int x, int y)
     // Sorry for the Xlib call, but we can't avoid it, since there is no
     // internal GDK mechanism present to accomplish this.  (and for good
     // reason...)
-    XWarpPointer(GDK_WINDOW_XDISPLAY(gtk_widget_get_window(gui.drawarea)),
-		 (Window)0, GDK_WINDOW_XID(gtk_widget_get_window(gui.drawarea)),
-		 0, 0, 0U, 0U, x, y);
+    Display * dpy = gui_mch_get_display();
+    if (dpy)
+	XWarpPointer(dpy, (Window)0,
+		GDK_WINDOW_XID(gtk_widget_get_window(gui.drawarea)),
+		0, 0, 0U, 0U, x, y);
 }
 
 
@@ -6824,26 +7185,48 @@ static int last_shape = 0;
     void
 gui_mch_mousehide(int hide)
 {
-    if (gui.pointer_hidden != hide)
+    if (gui.pointer_hidden == hide)
+	return;
+
+    gui.pointer_hidden = hide;
+    if (gtk_widget_get_window(gui.drawarea) && gui.blank_pointer != NULL)
     {
-	gui.pointer_hidden = hide;
-	if (gtk_widget_get_window(gui.drawarea) && gui.blank_pointer != NULL)
-	{
-	    if (hide)
-		gdk_window_set_cursor(gtk_widget_get_window(gui.drawarea),
-			gui.blank_pointer);
-	    else
+	if (hide)
+	    gdk_window_set_cursor(gtk_widget_get_window(gui.drawarea),
+		    gui.blank_pointer);
+	else
 #ifdef FEAT_MOUSESHAPE
-		mch_set_mouse_shape(last_shape);
+	    mch_set_mouse_shape(last_shape);
 #else
-		gdk_window_set_cursor(gtk_widget_get_window(gui.drawarea), NULL);
+	gdk_window_set_cursor(gtk_widget_get_window(gui.drawarea), NULL);
 #endif
-	}
     }
 }
 
 #if defined(FEAT_MOUSESHAPE) || defined(PROTO)
 
+# if GTK_CHECK_VERSION(3,0,0)
+static const char * mshape_css_names[] =
+{
+    "default",                  // arrow aka GDK_LEFT_PTR
+    "blank",                    // blank aka GDK_CURSOR_IS_PIXMAP
+    "text",                     // beam aka GDK_XTERM
+    "ns-resize",                // updown aka GDK_SB_V_DOUBLE_ARROW
+    "nwse-resize",              // udsizing aka GDK_SIZING
+    "ew-resize",                // leftright aka GDK_SB_H_DOUBLE_ARROW
+    "ew-resize",                // lrsizing aka GDK_SIZING
+    "progress",                 // busy aka GDK_WATCH
+    "not-allowed",              // no aka GDK_X_CURSOR
+    "crosshair",                // crosshair aka GDK_CROSSHAIR
+    "pointer",                  // hand1 aka GDK_HAND1
+    "pointer",                  // hand2 aka GDK_HAND2
+    "default",                  // pencil aka GDK_PENCIL (no css analogue)
+    "help",                     // question aka GDK_QUESTION_ARROW
+    "default",                  // right-arrow aka GDK_RIGHT_PTR (no css analogue)
+    "default",                  // up-arrow aka GDK_CENTER_PTR (no css analogue)
+    "default"                   // GDK_LEFT_PTR (no css analogue)
+};
+# else
 // Table for shape IDs.  Keep in sync with the mshape_names[] table in
 // misc2.c!
 static const int mshape_ids[] =
@@ -6866,12 +7249,17 @@ static const int mshape_ids[] =
     GDK_CENTER_PTR,		// up-arrow
     GDK_LEFT_PTR		// last one
 };
+# endif // GTK_CHECK_VERSION(3,0,0)
 
     void
 mch_set_mouse_shape(int shape)
 {
-    int		   id;
     GdkCursor	   *c;
+    int		   id;                    // Only id or css_name is used.
+# if GTK_CHECK_VERSION(3,0,0)
+    const char     *css_name = "default";
+    GdkDisplay     *disp;
+# endif
 
     if (gtk_widget_get_window(gui.drawarea) == NULL)
 	return;
@@ -6889,12 +7277,22 @@ mch_set_mouse_shape(int shape)
 	    else
 		id &= ~1;	// they are always even (why?)
 	}
+# if GTK_CHECK_VERSION(3,0,0)
+	else if (shape < (int)ARRAY_LENGTH(mshape_css_names))
+	    css_name = mshape_css_names[shape];
+# else
 	else if (shape < (int)ARRAY_LENGTH(mshape_ids))
 	    id = mshape_ids[shape];
+# endif
 	else
 	    return;
+# if GTK_CHECK_VERSION(3,0,0)
+	disp = gtk_widget_get_display(gui.drawarea);
+	c = gdk_cursor_new_from_name(disp, css_name);
+# else
 	c = gdk_cursor_new_for_display(
 		gtk_widget_get_display(gui.drawarea), (GdkCursorType)id);
+# endif
 	gdk_window_set_cursor(gtk_widget_get_window(gui.drawarea), c);
 # if GTK_CHECK_VERSION(3,0,0)
 	g_object_unref(G_OBJECT(c));
@@ -6927,141 +7325,141 @@ gui_mch_drawsign(int row, int col, int typenr)
 
     sign = (GdkPixbuf *)sign_get_image(typenr);
 
-    if (sign != NULL && gui.drawarea != NULL
-	    && gtk_widget_get_window(gui.drawarea) != NULL)
+    if (sign == NULL || gui.drawarea == NULL
+	    || gtk_widget_get_window(gui.drawarea) == NULL)
+	return;
+
+    int width;
+    int height;
+    int xoffset;
+    int yoffset;
+    int need_scale;
+
+    width  = gdk_pixbuf_get_width(sign);
+    height = gdk_pixbuf_get_height(sign);
+    /*
+     * Decide whether we need to scale.  Allow one pixel of border
+     * width to be cut off, in order to avoid excessive scaling for
+     * tiny differences in font size.
+     * Do scale to fit the height to avoid gaps because of linespacing.
+     */
+    need_scale = (width > SIGN_WIDTH + 2
+	    || height != SIGN_HEIGHT
+	    || (width < 3 * SIGN_WIDTH / 4
+		&& height < 3 * SIGN_HEIGHT / 4));
+    if (need_scale)
     {
-	int width;
-	int height;
-	int xoffset;
-	int yoffset;
-	int need_scale;
+	double  aspect;
+	int	    w = width;
+	int	    h = height;
 
-	width  = gdk_pixbuf_get_width(sign);
-	height = gdk_pixbuf_get_height(sign);
-	/*
-	 * Decide whether we need to scale.  Allow one pixel of border
-	 * width to be cut off, in order to avoid excessive scaling for
-	 * tiny differences in font size.
-	 * Do scale to fit the height to avoid gaps because of linespacing.
-	 */
-	need_scale = (width > SIGN_WIDTH + 2
-		      || height != SIGN_HEIGHT
-		      || (width < 3 * SIGN_WIDTH / 4
-			  && height < 3 * SIGN_HEIGHT / 4));
-	if (need_scale)
+	// Keep the original aspect ratio
+	aspect = (double)height / (double)width;
+	width  = (double)SIGN_WIDTH * SIGN_ASPECT / aspect;
+	width  = MIN(width, SIGN_WIDTH);
+	if (((double)(MAX(height, SIGN_HEIGHT)) /
+		    (double)(MIN(height, SIGN_HEIGHT))) < 1.15)
 	{
-	    double  aspect;
-	    int	    w = width;
-	    int	    h = height;
-
-	    // Keep the original aspect ratio
-	    aspect = (double)height / (double)width;
-	    width  = (double)SIGN_WIDTH * SIGN_ASPECT / aspect;
-	    width  = MIN(width, SIGN_WIDTH);
-	    if (((double)(MAX(height, SIGN_HEIGHT)) /
-		 (double)(MIN(height, SIGN_HEIGHT))) < 1.15)
-	    {
-		// Change the aspect ratio by at most 15% to fill the
-		// available space completely.
-		height = (double)SIGN_HEIGHT * SIGN_ASPECT / aspect;
-		height = MIN(height, SIGN_HEIGHT);
-	    }
-	    else
-		height = (double)width * aspect;
-
-	    if (w == width && h == height)
-	    {
-		// no change in dimensions; don't decrease reference counter
-		// (below)
-		need_scale = FALSE;
-	    }
-	    else
-	    {
-		// This doesn't seem to be worth caching, and doing so would
-		// complicate the code quite a bit.
-		sign = gdk_pixbuf_scale_simple(sign, width, height,
-							 GDK_INTERP_BILINEAR);
-		if (sign == NULL)
-		    return; // out of memory
-	    }
+	    // Change the aspect ratio by at most 15% to fill the
+	    // available space completely.
+	    height = (double)SIGN_HEIGHT * SIGN_ASPECT / aspect;
+	    height = MIN(height, SIGN_HEIGHT);
 	}
+	else
+	    height = (double)width * aspect;
 
-	// The origin is the upper-left corner of the pixmap.  Therefore
-	// these offset may become negative if the pixmap is smaller than
-	// the 2x1 cells reserved for the sign icon.
-	xoffset = (width  - SIGN_WIDTH)  / 2;
-	yoffset = (height - SIGN_HEIGHT) / 2;
+	if (w == width && h == height)
+	{
+	    // no change in dimensions; don't decrease reference counter
+	    // (below)
+	    need_scale = FALSE;
+	}
+	else
+	{
+	    // This doesn't seem to be worth caching, and doing so would
+	    // complicate the code quite a bit.
+	    sign = gdk_pixbuf_scale_simple(sign, width, height,
+		    GDK_INTERP_BILINEAR);
+	    if (sign == NULL)
+		return; // out of memory
+	}
+    }
+
+    // The origin is the upper-left corner of the pixmap.  Therefore
+    // these offset may become negative if the pixmap is smaller than
+    // the 2x1 cells reserved for the sign icon.
+    xoffset = (width  - SIGN_WIDTH)  / 2;
+    yoffset = (height - SIGN_HEIGHT) / 2;
 
 # if GTK_CHECK_VERSION(3,0,0)
-	{
-	    cairo_t	    *cr;
-	    cairo_surface_t *bg_surf;
-	    cairo_t	    *bg_cr;
-	    cairo_surface_t *sign_surf;
-	    cairo_t	    *sign_cr;
+    {
+	cairo_t	    *cr;
+	cairo_surface_t *bg_surf;
+	cairo_t	    *bg_cr;
+	cairo_surface_t *sign_surf;
+	cairo_t	    *sign_cr;
 
-	    cr = cairo_create(gui.surface);
+	cr = cairo_create(gui.surface);
 
-	    bg_surf = cairo_surface_create_similar(gui.surface,
-		    cairo_surface_get_content(gui.surface),
-		    SIGN_WIDTH, SIGN_HEIGHT);
-	    bg_cr = cairo_create(bg_surf);
-	    cairo_set_source_rgba(bg_cr,
-		    gui.bgcolor->red, gui.bgcolor->green, gui.bgcolor->blue,
-		    gui.bgcolor->alpha);
-	    cairo_paint(bg_cr);
+	bg_surf = cairo_surface_create_similar(gui.surface,
+		cairo_surface_get_content(gui.surface),
+		SIGN_WIDTH, SIGN_HEIGHT);
+	bg_cr = cairo_create(bg_surf);
+	cairo_set_source_rgba(bg_cr,
+		gui.bgcolor->red, gui.bgcolor->green, gui.bgcolor->blue,
+		gui.bgcolor->alpha);
+	cairo_paint(bg_cr);
 
-	    sign_surf = cairo_surface_create_similar(gui.surface,
-		    cairo_surface_get_content(gui.surface),
-		    SIGN_WIDTH, SIGN_HEIGHT);
-	    sign_cr = cairo_create(sign_surf);
-	    gdk_cairo_set_source_pixbuf(sign_cr, sign, -xoffset, -yoffset);
-	    cairo_paint(sign_cr);
+	sign_surf = cairo_surface_create_similar(gui.surface,
+		cairo_surface_get_content(gui.surface),
+		SIGN_WIDTH, SIGN_HEIGHT);
+	sign_cr = cairo_create(sign_surf);
+	gdk_cairo_set_source_pixbuf(sign_cr, sign, -xoffset, -yoffset);
+	cairo_paint(sign_cr);
 
-	    cairo_set_operator(sign_cr, CAIRO_OPERATOR_DEST_OVER);
-	    cairo_set_source_surface(sign_cr, bg_surf, 0, 0);
-	    cairo_paint(sign_cr);
+	cairo_set_operator(sign_cr, CAIRO_OPERATOR_DEST_OVER);
+	cairo_set_source_surface(sign_cr, bg_surf, 0, 0);
+	cairo_paint(sign_cr);
 
-	    cairo_set_source_surface(cr, sign_surf, FILL_X(col), FILL_Y(row));
-	    cairo_paint(cr);
+	cairo_set_source_surface(cr, sign_surf, FILL_X(col), FILL_Y(row));
+	cairo_paint(cr);
 
-	    cairo_destroy(sign_cr);
-	    cairo_surface_destroy(sign_surf);
-	    cairo_destroy(bg_cr);
-	    cairo_surface_destroy(bg_surf);
-	    cairo_destroy(cr);
+	cairo_destroy(sign_cr);
+	cairo_surface_destroy(sign_surf);
+	cairo_destroy(bg_cr);
+	cairo_surface_destroy(bg_surf);
+	cairo_destroy(cr);
 
-	    gtk_widget_queue_draw_area(gui.drawarea,
-		    FILL_X(col), FILL_Y(col), width, height);
+	gtk_widget_queue_draw_area(gui.drawarea,
+		FILL_X(col), FILL_Y(col), width, height);
 
-	}
-# else // !GTK_CHECK_VERSION(3,0,0)
-	gdk_gc_set_foreground(gui.text_gc, gui.bgcolor);
-
-	gdk_draw_rectangle(gui.drawarea->window,
-			   gui.text_gc,
-			   TRUE,
-			   FILL_X(col),
-			   FILL_Y(row),
-			   SIGN_WIDTH,
-			   SIGN_HEIGHT);
-
-	gdk_pixbuf_render_to_drawable_alpha(sign,
-					    gui.drawarea->window,
-					    MAX(0, xoffset),
-					    MAX(0, yoffset),
-					    FILL_X(col) - MIN(0, xoffset),
-					    FILL_Y(row) - MIN(0, yoffset),
-					    MIN(width,	SIGN_WIDTH),
-					    MIN(height, SIGN_HEIGHT),
-					    GDK_PIXBUF_ALPHA_BILEVEL,
-					    127,
-					    GDK_RGB_DITHER_NORMAL,
-					    0, 0);
-# endif // !GTK_CHECK_VERSION(3,0,0)
-	if (need_scale)
-	    g_object_unref(sign);
     }
+# else // !GTK_CHECK_VERSION(3,0,0)
+    gdk_gc_set_foreground(gui.text_gc, gui.bgcolor);
+
+    gdk_draw_rectangle(gui.drawarea->window,
+	    gui.text_gc,
+	    TRUE,
+	    FILL_X(col),
+	    FILL_Y(row),
+	    SIGN_WIDTH,
+	    SIGN_HEIGHT);
+
+    gdk_pixbuf_render_to_drawable_alpha(sign,
+	    gui.drawarea->window,
+	    MAX(0, xoffset),
+	    MAX(0, yoffset),
+	    FILL_X(col) - MIN(0, xoffset),
+	    FILL_Y(row) - MIN(0, yoffset),
+	    MIN(width,	SIGN_WIDTH),
+	    MIN(height, SIGN_HEIGHT),
+	    GDK_PIXBUF_ALPHA_BILEVEL,
+	    127,
+	    GDK_RGB_DITHER_NORMAL,
+	    0, 0);
+# endif // !GTK_CHECK_VERSION(3,0,0)
+    if (need_scale)
+	g_object_unref(sign);
 }
 
     void *

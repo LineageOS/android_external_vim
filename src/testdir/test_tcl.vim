@@ -11,10 +11,25 @@ func TclEval(tcl_expr)
 endfunc
 
 func Test_tcldo()
-  " Check deleting lines does not trigger ml_get error.
   new
+
+  " Check deleting lines does not trigger ml_get error.
   call setline(1, ['one', 'two', 'three'])
   tcldo ::vim::command %d_
+  call assert_equal(['one'], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  tcldo ::vim::command 1,2d_
+  call assert_equal(['one'], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  tcldo ::vim::command 2,3d_ ; set line REPLACED
+  call assert_equal(['REPLACED'], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  2,3tcldo ::vim::command 1,2d_ ; set line REPLACED
+  call assert_equal(['three'], getline(1, '$'))
+
   bwipe!
 
   " Check that switching to another buffer does not trigger ml_get error.
@@ -684,25 +699,22 @@ endfunc
 " Test :tclfile
 func Test_tclfile()
   call delete('Xtcl_file')
-  call writefile(['set pi [format "%.2f" [expr acos(-1.0)]]'], 'Xtcl_file')
+  call writefile(['set pi [format "%.2f" [expr acos(-1.0)]]'], 'Xtcl_file', 'D')
   call setfperm('Xtcl_file', 'r-xr-xr-x')
 
   tclfile Xtcl_file
   call assert_equal('3.14', TclEval('set pi'))
 
   tcl unset pi
-  call delete('Xtcl_file')
 endfunc
 
 " Test :tclfile with syntax error in tcl script
 func Test_tclfile_error()
   call delete('Xtcl_file')
-  call writefile(['xyz'], 'Xtcl_file')
+  call writefile(['xyz'], 'Xtcl_file', 'D')
   call setfperm('Xtcl_file', 'r-xr-xr-x')
 
   call assert_fails('tclfile Xtcl_file', 'invalid command name "xyz"')
-
-  call delete('Xtcl_file')
 endfunc
 
 " Test exiting current Tcl interpreter and re-creating one.
@@ -711,7 +723,7 @@ func Test_tcl_exit()
   call assert_fails('tcl exit x', 'expected integer but got "x"')
 
   tcl set foo "foo"
-  call assert_fails('tcl exit 3', 'E572: exit code 3')
+  call assert_fails('tcl exit 3', 'E572: Exit code 3')
 
   " The Tcl interpreter should have been deleted and a new one
   " is re-created with the next :tcl command.

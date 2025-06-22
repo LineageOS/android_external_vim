@@ -57,7 +57,6 @@
 extern int dos2;			// this is in os_amiga.c
 # endif
 # ifdef SASC
-#  include <proto/dos.h>
 #  include <ios1.h>			// for chkufb()
 # endif
 #endif
@@ -151,7 +150,7 @@ mf_open(char_u *fname, int flags)
     mfp->mf_free_first = NULL;		// free list is empty
     mfp->mf_used_first = NULL;		// used list is empty
     mfp->mf_used_last = NULL;
-    mfp->mf_dirty = FALSE;
+    mfp->mf_dirty = MF_DIRTY_NO;
     mfp->mf_used_count = 0;
     mf_hash_init(&mfp->mf_hash);
     mf_hash_init(&mfp->mf_trans);
@@ -225,7 +224,7 @@ mf_open_file(memfile_T *mfp, char_u *fname)
     if (mfp->mf_fd < 0)
 	return FAIL;
 
-    mfp->mf_dirty = TRUE;
+    mfp->mf_dirty = MF_DIRTY_YES;
     return OK;
 }
 
@@ -387,7 +386,7 @@ mf_new(memfile_T *mfp, int negative, int page_count)
 	}
     }
     hp->bh_flags = BH_LOCKED | BH_DIRTY;	// new block is always dirty
-    mfp->mf_dirty = TRUE;
+    mfp->mf_dirty = MF_DIRTY_YES;
     hp->bh_page_count = page_count;
     mf_ins_used(mfp, hp);
     mf_ins_hash(mfp, hp);
@@ -432,7 +431,9 @@ mf_get(memfile_T *mfp, blocknr_T nr, int page_count)
 	 * If not, allocate a new block.
 	 */
 	hp = mf_release(mfp, page_count);
-	if (hp == NULL && (hp = mf_alloc_bhdr(mfp, page_count)) == NULL)
+	if (hp == NULL && page_count > 0)
+	    hp = mf_alloc_bhdr(mfp, page_count);
+	if (hp == NULL)
 	    return NULL;
 
 	hp->bh_bnum = nr;
@@ -477,12 +478,13 @@ mf_put(
     flags = hp->bh_flags;
 
     if ((flags & BH_LOCKED) == 0)
-	iemsg(_(e_block_was_not_locked));
+	iemsg(e_block_was_not_locked);
     flags &= ~BH_LOCKED;
     if (dirty)
     {
 	flags |= BH_DIRTY;
-	mfp->mf_dirty = TRUE;
+	if (mfp->mf_dirty != MF_DIRTY_YES_NOSYNC)
+	    mfp->mf_dirty = MF_DIRTY_YES;
     }
     hp->bh_flags = flags;
     if (infile)
@@ -527,9 +529,10 @@ mf_sync(memfile_T *mfp, int flags)
     bhdr_T	*hp;
     int		got_int_save = got_int;
 
-    if (mfp->mf_fd < 0)	    // there is no file, nothing to do
+    if (mfp->mf_fd < 0)
     {
-	mfp->mf_dirty = FALSE;
+	// there is no file, nothing to do
+	mfp->mf_dirty = MF_DIRTY_NO;
 	return FAIL;
     }
 
@@ -575,7 +578,7 @@ mf_sync(memfile_T *mfp, int flags)
      * In case of an error this flag is also set, to avoid trying all the time.
      */
     if (hp == NULL || status == FAIL)
-	mfp->mf_dirty = FALSE;
+	mfp->mf_dirty = MF_DIRTY_NO;
 
     if ((flags & MFS_FLUSH) && *p_sws != NUL)
     {
@@ -591,13 +594,10 @@ mf_sync(memfile_T *mfp, int flags)
 	}
 	else
 # endif
-	    // OpenNT is strictly POSIX (Benzinger)
-	    // Tandem/Himalaya NSK-OSS doesn't have sync()
-	    // No sync() on Stratus VOS
-# if defined(__OPENNT) || defined(__TANDEM) || defined(__VOS__)
-	    fflush(NULL);
-# else
+# ifdef HAVE_SYNC
 	    sync();
+# else
+	    fflush(NULL);
 # endif
 #endif
 #ifdef VMS
@@ -674,7 +674,7 @@ mf_set_dirty(memfile_T *mfp)
     for (hp = mfp->mf_used_last; hp != NULL; hp = hp->bh_prev)
 	if (hp->bh_bnum > 0)
 	    hp->bh_flags |= BH_DIRTY;
-    mfp->mf_dirty = TRUE;
+    mfp->mf_dirty = MF_DIRTY_YES;
 }
 
 /*
@@ -813,9 +813,10 @@ mf_release(memfile_T *mfp, int page_count)
      */
     if (hp->bh_page_count != page_count)
     {
-	vim_free(hp->bh_data);
-	if ((hp->bh_data = alloc((size_t)mfp->mf_page_size * page_count))
-								       == NULL)
+	VIM_CLEAR(hp->bh_data);
+	if (page_count > 0)
+	    hp->bh_data = alloc((size_t)mfp->mf_page_size * page_count);
+	if (hp->bh_data == NULL)
 	{
 	    vim_free(hp);
 	    return NULL;
@@ -873,28 +874,27 @@ mf_release_all(void)
 }
 
 /*
- * Allocate a block header and a block of memory for it
+ * Allocate a block header and a block of memory for it.
  */
     static bhdr_T *
 mf_alloc_bhdr(memfile_T *mfp, int page_count)
 {
     bhdr_T	*hp;
 
-    if ((hp = ALLOC_ONE(bhdr_T)) != NULL)
+    if ((hp = ALLOC_ONE(bhdr_T)) == NULL)
+	return NULL;
+
+    if ((hp->bh_data = alloc((size_t)mfp->mf_page_size * page_count)) == NULL)
     {
-	if ((hp->bh_data = alloc((size_t)mfp->mf_page_size * page_count))
-								       == NULL)
-	{
-	    vim_free(hp);	    // not enough memory
-	    return NULL;
-	}
-	hp->bh_page_count = page_count;
+	vim_free(hp);	    // not enough memory
+	return NULL;
     }
+    hp->bh_page_count = page_count;
     return hp;
 }
 
 /*
- * Free a block header and the block of memory for it
+ * Free a block header and the block of memory for it.
  */
     static void
 mf_free_bhdr(bhdr_T *hp)
@@ -904,7 +904,7 @@ mf_free_bhdr(bhdr_T *hp)
 }
 
 /*
- * insert entry *hp in the free list
+ * Insert entry *hp in the free list.
  */
     static void
 mf_ins_free(memfile_T *mfp, bhdr_T *hp)
@@ -1210,12 +1210,12 @@ mf_set_ffname(memfile_T *mfp)
     void
 mf_fullname(memfile_T *mfp)
 {
-    if (mfp != NULL && mfp->mf_fname != NULL && mfp->mf_ffname != NULL)
-    {
-	vim_free(mfp->mf_fname);
-	mfp->mf_fname = mfp->mf_ffname;
-	mfp->mf_ffname = NULL;
-    }
+    if (mfp == NULL || mfp->mf_fname == NULL || mfp->mf_ffname == NULL)
+	return;
+
+    vim_free(mfp->mf_fname);
+    mfp->mf_fname = mfp->mf_ffname;
+    mfp->mf_ffname = NULL;
 }
 
 /*

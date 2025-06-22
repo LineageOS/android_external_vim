@@ -18,14 +18,14 @@ VIMRUNTIME = ../../runtime
 endif
 endif
 
-# get LANGUAGES, MOFILES and MOCONVERTED
+# get LANGUAGES, MOFILES, MOCONVERTED and others
 include Make_all.mak
 
 PACKAGE = vim
 ifeq (sh.exe, $(SHELL))
-VIM = ..\vim
+VIMPROG = ..\vim
 else
-VIM = ../vim
+VIMPROG = ../vim
 endif
 
 # Uncomment one of the lines below or modify it to put the path to your
@@ -76,25 +76,19 @@ PO_INPUTLIST = \
 	gvim.desktop.in \
 	vim.desktop.in
 
-PO_VIM_INPUTLIST = \
-	../../runtime/optwin.vim
-
-PO_VIM_JSLIST = \
-	optwin.js
-
 first_time: $(PO_INPUTLIST) $(PO_VIM_INPUTLIST)
-	$(VIM) -u NONE --not-a-term -S tojavascript.vim $(LANGUAGE).pot $(PO_VIM_INPUTLIST)
+	$(VIMPROG) -u NONE --not-a-term -S tojavascript.vim $(LANGUAGE).pot $(PO_VIM_INPUTLIST)
 	$(XGETTEXT) --default-domain=$(LANGUAGE) \
-		--add-comments --keyword=_ --keyword=N_ --keyword=NGETTEXT:1,2 $(PO_INPUTLIST) $(PO_VIM_JSLIST)
-	$(VIM) -u NONE --not-a-term -S fixfilenames.vim $(LANGUAGE).pot $(PO_VIM_INPUTLIST)
+		--add-comments $(XGETTEXT_KEYWORDS) $(PO_INPUTLIST) $(PO_VIM_JSLIST)
+	$(VIMPROG) -u NONE --not-a-term -S fixfilenames.vim $(LANGUAGE).pot $(PO_VIM_INPUTLIST)
 	$(RM) *.js
 
 $(PACKAGE).pot: $(PO_INPUTLIST) $(PO_VIM_INPUTLIST)
-	$(VIM) -u NONE --not-a-term -S tojavascript.vim $(PACKAGE).pot $(PO_VIM_INPUTLIST)
+	$(VIMPROG) -u NONE --not-a-term -S tojavascript.vim $(PACKAGE).pot $(PO_VIM_INPUTLIST)
 	$(XGETTEXT) --default-domain=$(PACKAGE) \
-		--add-comments --keyword=_ --keyword=N_ --keyword=NGETTEXT:1,2 $(PO_INPUTLIST) $(PO_VIM_JSLIST)
+		--add-comments $(XGETTEXT_KEYWORDS) $(PO_INPUTLIST) $(PO_VIM_JSLIST)
 	$(MV) $(PACKAGE).po $(PACKAGE).pot
-	$(VIM) -u NONE --not-a-term -S fixfilenames.vim $(PACKAGE).pot $(PO_VIM_INPUTLIST)
+	$(VIMPROG) -u NONE --not-a-term -S fixfilenames.vim $(PACKAGE).pot $(PO_VIM_INPUTLIST)
 	$(RM) *.js
 
 # Don't add a dependency here, we only want to update the .po files manually

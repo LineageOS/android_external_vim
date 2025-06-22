@@ -8,7 +8,7 @@
  * See README.txt for an overview of the Vim source code.
  */
 /*
- * Common code for the Motif and Athena GUI.
+ * Code for the Motif GUI.
  * Not used for GTK.
  */
 
@@ -66,22 +66,13 @@
 #endif
 #define DFLT_TOOLTIP_FONT	XtDefaultFontSet
 
-#ifdef FEAT_GUI_ATHENA
-# define DFLT_MENU_BG_COLOR	"gray77"
-# define DFLT_MENU_FG_COLOR	"black"
-# define DFLT_SCROLL_BG_COLOR	"gray60"
-# define DFLT_SCROLL_FG_COLOR	"gray77"
-# define DFLT_TOOLTIP_BG_COLOR	"#ffff91"
-# define DFLT_TOOLTIP_FG_COLOR	"#000000"
-#else
 // use the default (CDE) colors
-# define DFLT_MENU_BG_COLOR	""
-# define DFLT_MENU_FG_COLOR	""
-# define DFLT_SCROLL_BG_COLOR	""
-# define DFLT_SCROLL_FG_COLOR	""
-# define DFLT_TOOLTIP_BG_COLOR	"#ffff91"
-# define DFLT_TOOLTIP_FG_COLOR	"#000000"
-#endif
+#define DFLT_MENU_BG_COLOR	""
+#define DFLT_MENU_FG_COLOR	""
+#define DFLT_SCROLL_BG_COLOR	""
+#define DFLT_SCROLL_FG_COLOR	""
+#define DFLT_TOOLTIP_BG_COLOR	"#ffff91"
+#define DFLT_TOOLTIP_FG_COLOR	"#000000"
 
 Widget vimShell = (Widget)0;
 
@@ -385,17 +376,6 @@ static XtResource vim_resources[] =
 	(XtPointer)SB_DEFAULT_WIDTH
     },
 #ifdef FEAT_MENU
-# ifdef FEAT_GUI_ATHENA		// with Motif the height is always computed
-    {
-	XtNmenuHeight,
-	XtCMenuHeight,
-	XtRInt,
-	sizeof(int),
-	XtOffsetOf(gui_T, menu_height),
-	XtRImmediate,
-	(XtPointer)MENU_DEFAULT_HEIGHT	    // Should figure out at run time
-    },
-# endif
     {
 # ifdef FONTSET_ALWAYS
 	XtNmenuFontSet,
@@ -956,10 +936,10 @@ gui_x11_key_hit_cb(
     }
     else
     {
-	len = mb_char2bytes(key, string);
-
 	// Some keys need adjustment when the Ctrl modifier is used.
 	key = may_adjust_key_for_ctrl(modifiers, key);
+
+	len = mb_char2bytes(key, string);
 
 	// Remove the SHIFT modifier for keys where it's already included,
 	// e.g., '(', '!' and '*'.
@@ -1204,7 +1184,7 @@ gui_mch_init_check(void)
 		cmdline_options, XtNumber(cmdline_options),
 		CARDINAL &gui_argc, gui_argv);
 
-# if defined(FEAT_FLOAT) && defined(LC_NUMERIC)
+# if defined(LC_NUMERIC)
     {
 	// The call to XtOpenDisplay() may have set the locale from the
 	// environment. Set LC_NUMERIC to "C" to make sure that strtod() uses a
@@ -1275,8 +1255,6 @@ gui_mch_init(void)
      * Get the colors ourselves.  Using the automatic conversion doesn't
      * handle looking for approximate colors.
      */
-    // NOTE: These next few lines are an exact duplicate of gui_athena.c's
-    // gui_mch_def_colors().  Why?
     gui.menu_fg_pixel = gui_get_color((char_u *)gui.rsrc_menu_fg_name);
     gui.menu_bg_pixel = gui_get_color((char_u *)gui.rsrc_menu_bg_name);
     gui.scroll_fg_pixel = gui_get_color((char_u *)gui.rsrc_scroll_fg_name);
@@ -1284,12 +1262,6 @@ gui_mch_init(void)
 #ifdef FEAT_BEVAL_GUI
     gui.tooltip_fg_pixel = gui_get_color((char_u *)gui.rsrc_tooltip_fg_name);
     gui.tooltip_bg_pixel = gui_get_color((char_u *)gui.rsrc_tooltip_bg_name);
-#endif
-
-#if defined(FEAT_MENU) && defined(FEAT_GUI_ATHENA)
-    // If the menu height was set, don't change it at runtime
-    if (gui.menu_height != MENU_DEFAULT_HEIGHT)
-	gui.menu_height_fixed = TRUE;
 #endif
 
     // Set default foreground and background colours
@@ -1391,20 +1363,9 @@ gui_mch_init(void)
 #else
 // Use Pixmaps, looking much nicer.
 
-// If you get an error message here, you still need to unpack the runtime
-// archive!
-# ifdef magick
-#  undef magick
-# endif
-# define magick vim32x32
 # include "../runtime/vim32x32.xpm"
-# undef magick
-# define magick vim16x16
 # include "../runtime/vim16x16.xpm"
-# undef magick
-# define magick vim48x48
 # include "../runtime/vim48x48.xpm"
-# undef magick
 
     static Pixmap	icon = 0;
     static Pixmap	icon_mask = 0;
@@ -1454,11 +1415,7 @@ gui_mch_init(void)
 	XpmFreeAttributes(&attr);
     }
 
-# ifdef FEAT_GUI_ATHENA
-    XtVaSetValues(vimShell, XtNiconPixmap, icon, XtNiconMask, icon_mask, NULL);
-# else
     XtVaSetValues(vimShell, XmNiconPixmap, icon, XmNiconMask, icon_mask, NULL);
-# endif
 #endif
     }
 
@@ -1576,16 +1533,6 @@ gui_mch_open(void)
     }
     XtAddEventHandler(vimShell, PropertyChangeMask, False,
 		      gui_x11_send_event_handler, NULL);
-#endif
-
-
-#if defined(FEAT_MENU) && defined(FEAT_GUI_ATHENA)
-    // The Athena GUI needs this again after opening the window
-    gui_position_menu();
-# ifdef FEAT_TOOLBAR
-    gui_mch_set_toolbar_pos(0, gui.menu_height, gui.menu_width,
-			    gui.toolbar_height);
-# endif
 #endif
 
     // Get the colors for the highlight groups (gui_check_colors() might have
@@ -2154,22 +2101,6 @@ fontset_height(
     return extents->max_logical_extent.height;
 }
 
-#if (defined(FONTSET_ALWAYS) && defined(FEAT_GUI_ATHENA) \
-	    && defined(FEAT_MENU)) || defined(PROTO)
-/*
- * Returns the bounding box height around the actual glyph image of all
- * characters in all fonts of the fontset.
- */
-    int
-fontset_height2(XFontSet fs)
-{
-    XFontSetExtents *extents;
-
-    extents = XExtentsOfFontSet(fs);
-    return extents->max_ink_extent.height;
-}
-#endif
-
 #if 0
 // NOT USED YET
     static int
@@ -2252,11 +2183,11 @@ gui_mch_get_rgb_color(int r, int g, int b)
     void
 gui_mch_set_fg_color(guicolor_T color)
 {
-    if (color != prev_fg_color)
-    {
-	XSetForeground(gui.dpy, gui.text_gc, (Pixel)color);
-	prev_fg_color = color;
-    }
+    if (color == prev_fg_color)
+	return;
+
+    XSetForeground(gui.dpy, gui.text_gc, (Pixel)color);
+    prev_fg_color = color;
 }
 
 /*
@@ -2265,11 +2196,11 @@ gui_mch_set_fg_color(guicolor_T color)
     void
 gui_mch_set_bg_color(guicolor_T color)
 {
-    if (color != prev_bg_color)
-    {
-	XSetBackground(gui.dpy, gui.text_gc, (Pixel)color);
-	prev_bg_color = color;
-    }
+    if (color == prev_bg_color)
+	return;
+
+    XSetBackground(gui.dpy, gui.text_gc, (Pixel)color);
+    prev_bg_color = color;
 }
 
 /*
@@ -2289,10 +2220,14 @@ gui_x11_create_blank_mouse(void)
 {
     Pixmap blank_pixmap = XCreatePixmap(gui.dpy, gui.wid, 1, 1, 1);
     GC gc = XCreateGC(gui.dpy, blank_pixmap, (unsigned long)0, (XGCValues*)0);
-    XDrawPoint(gui.dpy, blank_pixmap, gc, 0, 0);
-    XFreeGC(gui.dpy, gc);
+
+    if (gc != NULL)
+    {
+	XDrawPoint(gui.dpy, blank_pixmap, gc, 0, 0);
+	XFreeGC(gui.dpy, gc);
+    }
     return XCreatePixmapCursor(gui.dpy, blank_pixmap, blank_pixmap,
-	    (XColor*)&gui.norm_pixel, (XColor*)&gui.norm_pixel, 0, 0);
+		     (XColor*)&gui.norm_pixel, (XColor*)&gui.norm_pixel, 0, 0);
 }
 
 /*
@@ -2868,18 +2803,18 @@ clip_mch_set_selection(
     void
 gui_mch_menu_grey(vimmenu_T *menu, int grey)
 {
-    if (menu->id != (Widget)0)
-    {
-	gui_mch_menu_hidden(menu, False);
-	if (grey
+    if (menu->id == (Widget)0)
+	return;
+
+    gui_mch_menu_hidden(menu, False);
+    if (grey
 #ifdef FEAT_GUI_MOTIF
-		|| !menu->sensitive
+	    || !menu->sensitive
 #endif
-		)
-	    XtSetSensitive(menu->id, False);
-	else
-	    XtSetSensitive(menu->id, True);
-    }
+       )
+	XtSetSensitive(menu->id, False);
+    else
+	XtSetSensitive(menu->id, True);
 }
 
 /*
@@ -2888,13 +2823,13 @@ gui_mch_menu_grey(vimmenu_T *menu, int grey)
     void
 gui_mch_menu_hidden(vimmenu_T *menu, int hidden)
 {
-    if (menu->id != (Widget)0)
-    {
-	if (hidden)
-	    XtUnmanageChild(menu->id);
-	else
-	    XtManageChild(menu->id);
-    }
+    if (menu->id == (Widget)0)
+	return;
+
+    if (hidden)
+	XtUnmanageChild(menu->id);
+    else
+	XtManageChild(menu->id);
 }
 
 /*
@@ -3149,10 +3084,13 @@ gui_mch_getmouse(int *x, int *y)
     unsigned int mask;
 
     if (gui.wid && XQueryPointer(gui.dpy, gui.wid, &root, &child,
-					 &rootx, &rooty, &winx, &winy, &mask)) {
+					 &rootx, &rooty, &winx, &winy, &mask))
+    {
 	*x = winx;
 	*y = winy;
-    } else {
+    }
+    else
+    {
 	*x = -1;
 	*y = -1;
     }
@@ -3184,15 +3122,15 @@ gui_mch_drawsign(int row, int col, int typenr)
 {
     XImage	*sign;
 
-    if (gui.in_use && (sign = (XImage *)sign_get_image(typenr)) != NULL)
-    {
-	XClearArea(gui.dpy, gui.wid, TEXT_X(col), TEXT_Y(row) - sign->height,
-		SIGN_WIDTH, gui.char_height, FALSE);
-	XPutImage(gui.dpy, gui.wid, gui.text_gc, sign, 0, 0,
-		TEXT_X(col) + (SIGN_WIDTH - sign->width) / 2,
-		TEXT_Y(row) - sign->height,
-		sign->width, sign->height);
-    }
+    if (!gui.in_use || (sign = (XImage *)sign_get_image(typenr)) == NULL)
+	return;
+
+    XClearArea(gui.dpy, gui.wid, TEXT_X(col), TEXT_Y(row) - sign->height,
+	    SIGN_WIDTH, gui.char_height, FALSE);
+    XPutImage(gui.dpy, gui.wid, gui.text_gc, sign, 0, 0,
+	    TEXT_X(col) + (SIGN_WIDTH - sign->width) / 2,
+	    TEXT_Y(row) - sign->height,
+	    sign->width, sign->height);
 }
 
     void *
@@ -3256,18 +3194,18 @@ static int last_shape = 0;
 gui_mch_mousehide(
     int		hide)	// TRUE = use blank ptr, FALSE = use parent ptr
 {
-    if (gui.pointer_hidden != hide)
-    {
-	gui.pointer_hidden = hide;
-	if (hide)
-	    XDefineCursor(gui.dpy, gui.wid, gui.blank_pointer);
-	else
+    if (gui.pointer_hidden == hide)
+	return;
+
+    gui.pointer_hidden = hide;
+    if (hide)
+	XDefineCursor(gui.dpy, gui.wid, gui.blank_pointer);
+    else
 #ifdef FEAT_MOUSESHAPE
-	    mch_set_mouse_shape(last_shape);
+	mch_set_mouse_shape(last_shape);
 #else
-	    XUndefineCursor(gui.dpy, gui.wid);
+    XUndefineCursor(gui.dpy, gui.wid);
 #endif
-    }
 }
 
 #if defined(FEAT_MOUSESHAPE) || defined(PROTO)
@@ -3334,22 +3272,22 @@ mch_set_mouse_shape(int shape)
     void
 gui_mch_menu_set_tip(vimmenu_T *menu)
 {
-    if (menu->id != NULL && menu->parent != NULL
-				       && menu_is_toolbar(menu->parent->name))
+    if (menu->id == NULL || menu->parent == NULL
+				|| !menu_is_toolbar(menu->parent->name))
+	return;
+
+    // Always destroy and create the balloon, in case the string was
+    // changed.
+    if (menu->tip != NULL)
     {
-	// Always destroy and create the balloon, in case the string was
-	// changed.
-	if (menu->tip != NULL)
-	{
-	    gui_mch_destroy_beval_area(menu->tip);
-	    menu->tip = NULL;
-	}
-	if (menu->strings[MENU_INDEX_TIP] != NULL)
-	    menu->tip = gui_mch_create_beval_area(
-		    menu->id,
-		    menu->strings[MENU_INDEX_TIP],
-		    NULL,
-		    NULL);
+	gui_mch_destroy_beval_area(menu->tip);
+	menu->tip = NULL;
     }
+    if (menu->strings[MENU_INDEX_TIP] != NULL)
+	menu->tip = gui_mch_create_beval_area(
+		menu->id,
+		menu->strings[MENU_INDEX_TIP],
+		NULL,
+		NULL);
 }
 #endif

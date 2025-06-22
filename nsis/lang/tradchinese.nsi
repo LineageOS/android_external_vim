@@ -4,6 +4,7 @@
 # installer.
 #
 # Locale ID    : 1028
+# Locale Name  : tw
 # fileencoding : UTF-8
 # Author       : Guopeng Wen
 
@@ -16,6 +17,21 @@ LangString ^SetupCaption     ${LANG_TRADCHINESE} \
         "$(^Name) Setup"
 LangString ^UninstallCaption ${LANG_TRADCHINESE} \
         "$(^Name) Uninstall"
+
+##############################################################################
+# Translated license file for the license page                            {{{1
+##############################################################################
+
+LicenseLangString page_lic_file 0 "..\lang\LICENSE.nsis.txt"
+#LicenseLangString page_lic_file ${LANG_TRADCHINESE} \
+#        "..\lang\LICENSE.zh_tw.nsis.txt"
+
+##############################################################################
+# Translated README.txt file, which is opened after installation          {{{1
+##############################################################################
+
+LangString vim_readme_file 0 "README.txt"
+#LangString vim_readme_file ${LANG_TRADCHINESE} "README.zh_tw.txt"
 
 ##############################################################################
 # MUI Configuration Strings                                               {{{1
@@ -120,11 +136,6 @@ LangString str_section_plugin_vim   ${LANG_TRADCHINESE} \
 LangString str_desc_plugin_vim      ${LANG_TRADCHINESE} \
     "在 Vim 安裝資料夾下建立(空的)插件資料夾結構，電腦上所有用戶都能使用安裝\
      在該資料夾里的擴展插件。"
-
-LangString str_section_vis_vim      ${LANG_TRADCHINESE} \
-    "安裝 VisVim 插件"
-LangString str_desc_vis_vim         ${LANG_TRADCHINESE} \
-    "VisVim 是用于與微軟 Microsoft Visual Studio 軟體進行整合的插件。"
 
 LangString str_section_nls          ${LANG_TRADCHINESE} \
     "安裝本地語言支持"

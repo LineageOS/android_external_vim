@@ -6,15 +6,16 @@ at ":help indent-expression".  Looking at the existing files should give you
 inspiration.
 
 If you make a new indent file which would be useful for others, please send it
-to Bram@vim.org.  Include instructions for detecting the file type for this
-language, by file name extension or by checking a few lines in the file.
-And please stick to the rules below.
+to the vim-dev mailing list <vim-dev@vim.org>.  Include instructions for
+detecting the file type for this language, by file name extension or by
+checking a few lines in the file. And please stick to the rules below.
 
 If you have remarks about an existing file, send them to the maintainer of
-that file.  Only when you get no response send a message to Bram@vim.org.
+that file.  Only when you get no response send a message to the vim-dev
+mailing list: <vim-dev@vim.org>.
 
 If you are the maintainer of an indent file and make improvements, e-mail the
-new version to Bram@vim.org.
+new version to the vim-dev mailing list: <vim-dev@vim.org>.
 
 
 Rules for making an indent file:
@@ -31,7 +32,7 @@ Always use ":setlocal" to set 'indentexpr'.  This avoids it being carried over
 to other buffers.
 
 To trigger the indenting after typing a word like "endif", add the word to the
-'cinkeys' option with "+=".
+'indentkeys' option with "+=".
 
 You normally set 'indentexpr' to evaluate a function and then define that
 function.  That function only needs to be defined once for as long as Vim is

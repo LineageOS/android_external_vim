@@ -160,7 +160,13 @@ static struct ref refsdeleted;	// dummy object for deleted ref list
 typedef int HANDLE;
 # endif
 
-# ifndef MSWIN
+# ifdef MSWIN
+#  define TCL_PROC FARPROC
+#  define load_dll vimLoadLib
+#  define symbol_from_dll GetProcAddress
+#  define close_dll FreeLibrary
+#  define load_dll_error GetWin32Error
+# else
 #  include <dlfcn.h>
 #  define HANDLE void*
 #  define TCL_PROC void*
@@ -168,19 +174,13 @@ typedef int HANDLE;
 #  define symbol_from_dll dlsym
 #  define close_dll dlclose
 #  define load_dll_error dlerror
-# else
-#  define TCL_PROC FARPROC
-#  define load_dll vimLoadLib
-#  define symbol_from_dll GetProcAddress
-#  define close_dll FreeLibrary
-#  define load_dll_error GetWin32Error
 # endif
 
 /*
  * Declare HANDLE for tcl.dll and function pointers.
  */
 static HANDLE hTclLib = NULL;
-Tcl_Interp* (*dll_Tcl_CreateInterp)();
+Tcl_Interp* (*dll_Tcl_CreateInterp)(void);
 void (*dll_Tcl_FindExecutable)(const void *);
 
 /*
@@ -221,12 +221,13 @@ tcl_runtime_link_init(char *libname, int verbose)
     for (i = 0; tcl_funcname_table[i].ptr; ++i)
     {
 	if (!(*tcl_funcname_table[i].ptr = symbol_from_dll(hTclLib,
-			tcl_funcname_table[i].name)))
+						  tcl_funcname_table[i].name)))
 	{
 	    close_dll(hTclLib);
 	    hTclLib = NULL;
 	    if (verbose)
-		semsg(_(e_could_not_load_library_function_str), tcl_funcname_table[i].name);
+		semsg(_(e_could_not_load_library_function_str),
+						   tcl_funcname_table[i].name);
 	    return FAIL;
 	}
     }
@@ -241,10 +242,10 @@ static char *find_executable_arg = NULL;
     void
 vim_tcl_init(char *arg)
 {
-#ifndef DYNAMIC_TCL
-    Tcl_FindExecutable(arg);
-#else
+#ifdef DYNAMIC_TCL
     find_executable_arg = arg;
+#else
+    Tcl_FindExecutable(arg);
 #endif
 }
 
@@ -263,11 +264,13 @@ tcl_enabled(int verbose)
     {
 	Tcl_Interp *interp;
 
+	// Note: the library will allocate memory to store the executable name,
+	// which will be reported as possibly leaked by valgrind.
 	dll_Tcl_FindExecutable(find_executable_arg);
 
 	if ((interp = dll_Tcl_CreateInterp()) != NULL)
 	{
-	    if (Tcl_InitStubs(interp, DYNAMIC_TCL_VER, 0))
+	    if (Tcl_InitStubs(interp, DYNAMIC_TCL_VER, 0) != NULL)
 	    {
 		Tcl_DeleteInterp(interp);
 		stubs_initialized = TRUE;
@@ -280,6 +283,9 @@ tcl_enabled(int verbose)
 #endif
 
 #if defined(EXITFREE) || defined(PROTO)
+/*
+ * Called once when exiting.
+ */
     void
 vim_tcl_finalize(void)
 {
@@ -645,7 +651,8 @@ bufselfcmd(
 			err = TCL_ERROR;
 		}
 	    }
-	    else {  // objc == 3
+	    else
+	    {  // objc == 3
 		line = (char *)ml_get_buf(buf, (linenr_T)val1, FALSE);
 		Tcl_SetResult(interp, line, TCL_VOLATILE);
 	    }
@@ -924,13 +931,13 @@ bufselfcmd(
     }
 
     if (flags & FL_UPDATE_CURBUF)
-	redraw_curbuf_later(NOT_VALID);
+	redraw_curbuf_later(UPD_NOT_VALID);
     curbuf = savebuf;
     curwin = savewin;
     if (flags & FL_ADJUST_CURSOR)
 	check_cursor();
     if (flags & (FL_UPDATE_SCREEN | FL_UPDATE_CURBUF))
-	update_screen(NOT_VALID);
+	update_screen(UPD_NOT_VALID);
 
     return err;
 }
@@ -1084,7 +1091,8 @@ winselfcmd(
 		if (err != TCL_OK)
 		    break;
 	    }
-	    else {  // objc == 4
+	    else
+	    {  // objc == 4
 		err = tclgetlinenum(interp, objv[2], &val1, win->w_buffer);
 		if (err != TCL_OK)
 		    break;
@@ -1107,7 +1115,7 @@ winselfcmd(
     curwin = savewin;
     curbuf = savebuf;
     if (flags & FL_UPDATE_SCREEN)
-	update_screen(NOT_VALID);
+	update_screen(UPD_NOT_VALID);
 
     return err;
 }
@@ -1123,7 +1131,7 @@ commandcmd(
     int		err;
 
     err = tcldoexcommand(interp, objc, objv, 1);
-    update_screen(VALID);
+    update_screen(UPD_VALID);
     return err;
 }
 
@@ -1137,7 +1145,7 @@ optioncmd(
     int		err;
 
     err = tclsetoption(interp, objc, objv, 1);
-    update_screen(VALID);
+    update_screen(UPD_VALID);
     return err;
 }
 
@@ -1359,7 +1367,7 @@ tclsetoption(
 	    sval = (char_u *)Tcl_GetStringFromObj(objv[objn], NULL);
 	if (err == TCL_OK)
 	{
-	    set_option_value(option, lval, sval, OPT_LOCAL);
+	    set_option_value_give_err(option, lval, sval, OPT_LOCAL);
 	    err = vimerror(interp);
 	}
     }
@@ -1389,7 +1397,7 @@ tclvimexpr(
 
 #ifdef FEAT_EVAL
     expr = Tcl_GetStringFromObj(objv[objn], NULL);
-    str = (char *)eval_to_string((char_u *)expr, TRUE);
+    str = (char *)eval_to_string((char_u *)expr, TRUE, FALSE);
     if (str == NULL)
 	Tcl_SetResult(interp, _("invalid expression"), TCL_STATIC);
     else
@@ -1544,7 +1552,7 @@ tclsetdelcmd(
 	reflist = reflist->next;
     }
     // This should never happen.  Famous last word?
-    iemsg(_(e_tcl_fatal_error_reflist_corrupt_please_report_this));
+    iemsg(e_tcl_fatal_error_reflist_corrupt_please_report_this);
     Tcl_SetResult(interp, _("cannot register callback command: buffer/window reference not found"), TCL_STATIC);
     return TCL_ERROR;
 }
@@ -2004,7 +2012,8 @@ ex_tcldo(exarg_T *eap)
 #if (TCL_MAJOR_VERSION == 8 && TCL_MINOR_VERSION >= 5) || TCL_MAJOR_VERSION > 8
 	    || Tcl_LimitExceeded(tclinfo.interp)
 #endif
-	    || curbuf != was_curbuf)
+	    || curbuf != was_curbuf
+	    || (linenr_T)rs > curbuf->b_ml.ml_line_count)
 	    break;
 	line = (char *)Tcl_GetVar(tclinfo.interp, var_line, 0);
 	if (line)

@@ -281,21 +281,21 @@ static char * blank_xpm[] =
 // width height ncolors cpp [x_hot y_hot]
 "12 12 4 1 0 0",
 // colors
-" 	s iconColor1	m black	c #000000",
+"#	s iconColor1	m black	c #000000",
 ".	s none	m none	c none",
 "X	s topShadowColor	m none	c #DCDEE5",
 "o	s bottomShadowColor	m black	c #5D6069",
 // pixels
-"          ..",
-" XXXXXXXX ..",
-" X....... o.",
-" X....... o.",
-" X....... o.",
-" X....... o.",
-" X....... o.",
-" X....... o.",
-" X....... o.",
-"          o.",
+"##########..",
+"#XXXXXXXX#..",
+"#X.......#o.",
+"#X.......#o.",
+"#X.......#o.",
+"#X.......#o.",
+"#X.......#o.",
+"#X.......#o.",
+"#X.......#o.",
+"##########o.",
 "..ooooooooo.",
 "............"};
 
@@ -505,7 +505,7 @@ draw_shadows(XmEnhancedButtonWidget eb)
     Boolean	etched_in;
 
     if (!eb->primitive.shadow_thickness)
-       return;
+	return;
 
     if ((eb->core.width <= 2 * eb->primitive.highlight_thickness)
 	    || (eb->core.height <= 2 * eb->primitive.highlight_thickness))
@@ -748,9 +748,9 @@ draw_label(XmEnhancedButtonWidget eb, XEvent *event, Region region)
 
     static void
 Enter(Widget wid,
-      XEvent *event,
-      String *params UNUSED,
-      Cardinal *num_params UNUSED)
+    XEvent *event,
+    String *params UNUSED,
+    Cardinal *num_params UNUSED)
 {
     XmEnhancedButtonWidget eb = (XmEnhancedButtonWidget) wid;
     XmPushButtonCallbackStruct call_value;
@@ -837,9 +837,9 @@ Enter(Widget wid,
 
     static void
 Leave(Widget wid,
-      XEvent *event,
-      String *params UNUSED,
-      Cardinal *num_params UNUSED)
+    XEvent *event,
+    String *params UNUSED,
+    Cardinal *num_params UNUSED)
 {
     XmEnhancedButtonWidget eb = (XmEnhancedButtonWidget)wid;
     XmPushButtonCallbackStruct call_value;

@@ -86,39 +86,100 @@ json_encode_nr_expr(int nr, typval_T *val, int options)
     ga_append(&ga, NUL);
     return ga.ga_data;
 }
+
+/*
+ * Encode "val" into a JSON format string prefixed by the LSP HTTP header.
+ * Returns NULL when out of memory.
+ */
+    char_u *
+json_encode_lsp_msg(typval_T *val)
+{
+    garray_T	ga;
+    garray_T	lspga;
+
+    ga_init2(&ga, 1, 4000);
+    if (json_encode_gap(&ga, val, 0) == FAIL)
+	return NULL;
+    ga_append(&ga, NUL);
+
+    ga_init2(&lspga, 1, 4000);
+    // Header according to LSP specification.
+    vim_snprintf((char *)IObuff, IOSIZE,
+	    "Content-Length: %u\r\n\r\n",
+	    ga.ga_len - 1);
+    ga_concat(&lspga, IObuff);
+    ga_concat_len(&lspga, ga.ga_data, ga.ga_len);
+    ga_clear(&ga);
+    return lspga.ga_data;
+}
 #endif
 
+/*
+ * Lookup table to quickly know if the given ASCII character must be escaped.
+ */
+static const char ascii_needs_escape[128] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x0.
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x1.
+    0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x2.
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x3.
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x4.
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, // 0x5.
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x6.
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x7.
+};
+
+/*
+ * Encode the utf-8 encoded string "str" into "gap".
+ */
     static void
 write_string(garray_T *gap, char_u *str)
 {
     char_u	*res = str;
     char_u	numbuf[NUMBUFLEN];
+    char_u	*from;
+#if defined(USE_ICONV)
+    vimconv_T   conv;
+    char_u	*converted = NULL;
+#endif
+    int		c;
 
     if (res == NULL)
-	ga_concat(gap, (char_u *)"\"\"");
-    else
     {
-#if defined(USE_ICONV)
-	vimconv_T   conv;
-	char_u	    *converted = NULL;
+	ga_concat(gap, (char_u *)"\"\"");
+	return;
+    }
 
-	if (!enc_utf8)
-	{
-	    // Convert the text from 'encoding' to utf-8, the JSON string is
-	    // always utf-8.
-	    conv.vc_type = CONV_NONE;
-	    convert_setup(&conv, p_enc, (char_u*)"utf-8");
-	    if (conv.vc_type != CONV_NONE)
-		converted = res = string_convert(&conv, res, NULL);
-	    convert_setup(&conv, NULL, NULL);
-	}
+#if defined(USE_ICONV)
+    if (!enc_utf8)
+    {
+	// Convert the text from 'encoding' to utf-8, because a JSON string is
+	// always utf-8.
+	conv.vc_type = CONV_NONE;
+	convert_setup(&conv, p_enc, (char_u*)"utf-8");
+	if (conv.vc_type != CONV_NONE)
+	    converted = res = string_convert(&conv, res, NULL);
+	convert_setup(&conv, NULL, NULL);
+    }
 #endif
-	ga_append(gap, '"');
-	while (*res != NUL)
+    ga_append(gap, '"');
+    // `from` is the beginning of a sequence of bytes we can directly copy from
+    // the input string, avoiding the overhead associated to decoding/encoding
+    // them.
+    from = res;
+    while ((c = *res) != NUL)
+    {
+	// always use utf-8 encoding, ignore 'encoding'
+	if (c < 0x80)
 	{
-	    int c;
-	    // always use utf-8 encoding, ignore 'encoding'
-	    c = utf_ptr2char(res);
+	    if (!ascii_needs_escape[c])
+	    {
+		res += 1;
+		continue;
+	    }
+
+	    if (res != from)
+		ga_concat_len(gap, from, res - from);
+	    from = res + 1;
 
 	    switch (c)
 	    {
@@ -138,25 +199,43 @@ write_string(garray_T *gap, char_u *str)
 		    ga_append(gap, c);
 		    break;
 		default:
-		    if (c >= 0x20)
-		    {
-			numbuf[utf_char2bytes(c, numbuf)] = NUL;
-			ga_concat(gap, numbuf);
-		    }
-		    else
-		    {
-			vim_snprintf((char *)numbuf, NUMBUFLEN,
-							 "\\u%04lx", (long)c);
-			ga_concat(gap, numbuf);
-		    }
+		    vim_snprintf((char *)numbuf, NUMBUFLEN, "\\u%04lx",
+								      (long)c);
+		    ga_concat(gap, numbuf);
 	    }
-	    res += utf_ptr2len(res);
+
+	    res += 1;
 	}
-	ga_append(gap, '"');
-#if defined(USE_ICONV)
-	vim_free(converted);
-#endif
+	else
+	{
+	    int l = utf_ptr2len(res);
+
+	    if (l > 1)
+	    {
+		res += l;
+		continue;
+	    }
+
+	    // Invalid utf-8 sequence, replace it with the Unicode replacement
+	    // character U+FFFD.
+	    if (res != from)
+		ga_concat_len(gap, from, res - from);
+	    from = res + 1;
+
+	    numbuf[utf_char2bytes(0xFFFD, numbuf)] = NUL;
+	    ga_concat(gap, numbuf);
+
+	    res += l;
+	}
     }
+
+    if (res != from)
+	ga_concat_len(gap, from, res - from);
+
+    ga_append(gap, '"');
+#if defined(USE_ICONV)
+    vim_free(converted);
+#endif
 }
 
 /*
@@ -188,6 +267,7 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
     char_u	*res;
     blob_T	*b;
     list_T	*l;
+    tuple_T	*tuple;
     dict_T	*d;
     int		i;
 
@@ -229,6 +309,9 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 	case VAR_JOB:
 	case VAR_CHANNEL:
 	case VAR_INSTR:
+	case VAR_CLASS:
+	case VAR_OBJECT:
+	case VAR_TYPEALIAS:
 	    semsg(_(e_cannot_json_encode_str), vartype_name(val->v_type));
 	    return FAIL;
 
@@ -287,6 +370,42 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 	    }
 	    break;
 
+	case VAR_TUPLE:
+	    tuple = val->vval.v_tuple;
+	    if (tuple == NULL)
+		ga_concat(gap, (char_u *)"[]");
+	    else
+	    {
+		if (tuple->tv_copyID == copyID)
+		    ga_concat(gap, (char_u *)"[]");
+		else
+		{
+		    int		len = TUPLE_LEN(tuple);
+
+		    tuple->tv_copyID = copyID;
+		    ga_append(gap, '[');
+		    for (i = 0; i < len && !got_int; i++)
+		    {
+			typval_T	*t_item = TUPLE_ITEM(tuple, i);
+			if (json_encode_item(gap, t_item, copyID,
+						   options & JSON_JS) == FAIL)
+			    return FAIL;
+
+			if ((options & JSON_JS)
+				&& i == len - 1
+				&& t_item->v_type == VAR_SPECIAL
+				&& t_item->vval.v_number == VVAL_NONE)
+			    // add an extra comma if the last item is v:none
+			    ga_append(gap, ',');
+			if (i <= len - 2)
+			    ga_append(gap, ',');
+		    }
+		    ga_append(gap, ']');
+		    tuple->tv_copyID = 0;
+		}
+	    }
+	    break;
+
 	case VAR_DICT:
 	    d = val->vval.v_dict;
 	    if (d == NULL)
@@ -330,8 +449,7 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 	    break;
 
 	case VAR_FLOAT:
-#ifdef FEAT_FLOAT
-# if defined(HAVE_MATH_H)
+#if defined(HAVE_MATH_H)
 	    if (isnan(val->vval.v_float))
 		ga_concat(gap, (char_u *)"NaN");
 	    else if (isinf(val->vval.v_float))
@@ -342,14 +460,13 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 		    ga_concat(gap, (char_u *)"Infinity");
 	    }
 	    else
-# endif
+#endif
 	    {
 		vim_snprintf((char *)numbuf, NUMBUFLEN, "%g",
 							   val->vval.v_float);
 		ga_concat(gap, numbuf);
 	    }
 	    break;
-#endif
 	case VAR_UNKNOWN:
 	case VAR_ANY:
 	case VAR_VOID:
@@ -461,7 +578,7 @@ json_decode_string(js_read_T *reader, typval_T *res, int quote)
 		    nr = 0;
 		    len = 0;
 		    vim_str2nr(p + 2, NULL, &len,
-			     STR2NR_HEX + STR2NR_FORCE, &nr, NULL, 4, TRUE);
+			     STR2NR_HEX + STR2NR_FORCE, &nr, NULL, 4, TRUE, NULL);
 		    if (len == 0)
 		    {
 			if (res != NULL)
@@ -477,8 +594,8 @@ json_decode_string(js_read_T *reader, typval_T *res, int quote)
 
 			// decode surrogate pair: \ud812\u3456
 			len = 0;
-			vim_str2nr(p + 2, NULL, &len,
-			     STR2NR_HEX + STR2NR_FORCE, &nr2, NULL, 4, TRUE);
+			vim_str2nr(p + 2, NULL, &len, STR2NR_HEX + STR2NR_FORCE,
+						    &nr2, NULL, 4, TRUE, NULL);
 			if (len == 0)
 			{
 			    if (res != NULL)
@@ -782,7 +899,6 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 			    }
 			}
 			sp = skipdigits(sp);
-#ifdef FEAT_FLOAT
 			if (*sp == '.' || *sp == 'e' || *sp == 'E')
 			{
 			    if (cur_item == NULL)
@@ -799,13 +915,12 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 			    }
 			}
 			else
-#endif
 			{
 			    varnumber_T nr;
 
 			    vim_str2nr(reader->js_buf + reader->js_used,
 				    NULL, &len, 0, // what
-				    &nr, NULL, 0, TRUE);
+				    &nr, NULL, 0, TRUE, NULL);
 			    if (len == 0)
 			    {
 				semsg(_(e_json_decode_error_at_str), p);
@@ -855,7 +970,6 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 			retval = OK;
 			break;
 		    }
-#ifdef FEAT_FLOAT
 		    if (STRNICMP((char *)p, "NaN", 3) == 0)
 		    {
 			reader->js_used += 3;
@@ -889,19 +1003,19 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 			retval = OK;
 			break;
 		    }
-#endif
 		    // check for truncated name
 		    len = (int)(reader->js_end
 					 - (reader->js_buf + reader->js_used));
 		    if (
 			    (len < 5 && STRNICMP((char *)p, "false", len) == 0)
-#ifdef FEAT_FLOAT
-			    || (len < 9 && STRNICMP((char *)p, "-Infinity", len) == 0)
-			    || (len < 8 && STRNICMP((char *)p, "Infinity", len) == 0)
+			    || (len < 9
+				 && STRNICMP((char *)p, "-Infinity", len) == 0)
+			    || (len < 8
+				  && STRNICMP((char *)p, "Infinity", len) == 0)
 			    || (len < 3 && STRNICMP((char *)p, "NaN", len) == 0)
-#endif
-			    || (len < 4 && (STRNICMP((char *)p, "true", len) == 0
-				       ||  STRNICMP((char *)p, "null", len) == 0)))
+			    || (len < 4
+				  && (STRNICMP((char *)p, "true", len) == 0
+				    || STRNICMP((char *)p, "null", len) == 0)))
 
 			retval = MAYBE;
 		    else
@@ -919,7 +1033,6 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 	    if (top_item != NULL && top_item->jd_type == JSON_OBJECT_KEY
 		    && cur_item != NULL)
 	    {
-#ifdef FEAT_FLOAT
 		if (cur_item->v_type == VAR_FLOAT)
 		{
 		    // cannot use a float as a key
@@ -927,7 +1040,6 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 		    retval = FAIL;
 		    goto theend;
 		}
-#endif
 		top_item->jd_key = tv_get_string_buf_chk(cur_item, key_buf);
 		if (top_item->jd_key == NULL)
 		{
@@ -1001,8 +1113,8 @@ item_end:
 
 	    case JSON_OBJECT:
 		if (cur_item != NULL
-			&& dict_find(top_item->jd_tv.vval.v_dict,
-						 top_item->jd_key, -1) != NULL)
+			&& dict_has_key(top_item->jd_tv.vval.v_dict,
+						(char *)top_item->jd_key))
 		{
 		    semsg(_(e_duplicate_key_in_json_str), top_item->jd_key);
 		    clear_tv(cur_item);

@@ -1,7 +1,8 @@
 " vim: set ft=vim sw=4 :
 
 " START_INDENT
-
+" INDENT_EXE let g:vim_indent = {'searchpair_timeout': 1024}
+" INDENT_EXE runtime autoload/dist/vimindent.vim
 func Some()
     let x = 1
 endfunc
@@ -15,21 +16,24 @@ if 1
 		\ ]
 endif
 
-" TODO: add searchpair() to find matching {
-"for x in [
-"{
-"key: 'value'
-"},
-"]
-"eval 0
-"endfor
-
 for x in [
 	{key: 'value'},
 	]
     eval 0
 endfor
 
+let t = [
+	    \ {
+	    \ 'k': 'val',
+	    \ },
+	    \  ]
+
+def Func()
+    var d = dd
+	->extend({
+	})
+    eval 0
+enddef
 " END_INDENT
 
 " START_INDENT
@@ -56,7 +60,7 @@ let list = [
 let list = [
     'one',
     'two',
-    ]
+]
 echo
 
 " END_INDENT
@@ -71,8 +75,8 @@ endfunc
 " START_INDENT
 " INDENT_NEXT  next-line
 func Some()
-     " next-line
-     let f = x
+    " next-line
+    let f = x
 endfunc
 " END_INDENT
 
@@ -86,6 +90,12 @@ endfunc
 
 " START_INDENT
 let a =<< END
+nothing
+END
+" END_INDENT
+
+" START_INDENT
+let a =<< trim END
     nothing
 END
 " END_INDENT
@@ -97,4 +107,92 @@ let a=<< trim END
       blah
       blah this-line
 END
+" END_INDENT
+
+" START_INDENT
+if v:true
+    echo 0
+end
+" END_INDENT
+
+" START_INDENT
+augroup Name
+    autocmd!
+augroup END
+" END_INDENT
+
+" START_INDENT
+substitute/pat /rep /
+echo
+" END_INDENT
+
+" START_INDENT
+try
+    echo 1
+catch /pat /  # comment
+    echo 2
+endtry
+" END_INDENT
+
+" START_INDENT
+if end == 'xxx' || end == 'yyy'
+    echo
+endif
+" END_INDENT
+
+" START_INDENT
+nunmap <buffer> (
+nunmap <buffer> )
+inoremap [ {
+inoremap ] }
+silent! xunmap i{
+silent! xunmap a{
+" END_INDENT
+
+" START_INDENT
+make_job = job_start([&shell, &shellcmdflag, make_cmd], {
+    callback: function(MakeProcessOutput, [qfid]),
+    close_cb: function(MakeCloseCb, [qfid]),
+    exit_cb: MakeCompleted,
+    in_io: 'null'
+})
+" END_INDENT
+
+" START_INDENT
+setlocal iskeyword+=[
+cword = expand('<cword>')
+" END_INDENT
+
+" START_INDENT
+if winsz == 0|let winsz= ""|endif
+exe "noswapfile ".winsz."wincmd s"
+" END_INDENT
+
+" START_INDENT
+function Func()
+    if v:true
+	+
+	echo
+	-
+    endif
+endfunction
+" END_INDENT
+
+" START_INDENT
+silent! argdel *
+edit file
+" END_INDENT
+
+" START_INDENT
+call prop_type_add('indent_after_literal_dict', #{ foo: 'bar' })
+call prop_type_delete('indent_after_literal_dict')
+" END_INDENT
+
+" START_INDENT
+silent function Foo()
+    return 42
+endfunction
+silent! function Bar()
+    return 42
+endfunction
 " END_INDENT

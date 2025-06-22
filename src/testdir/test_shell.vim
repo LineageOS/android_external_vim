@@ -5,6 +5,11 @@ source check.vim
 source shared.vim
 
 func Test_shell_options()
+  if has('win32')
+    " FIXME: This test is flaky on MS-Windows.
+    let g:test_is_flaky = 1
+  endif
+
   " The expected value of 'shellcmdflag', 'shellpipe', 'shellquote',
   " 'shellredir', 'shellxescape', 'shellxquote' for the supported shells.
   let shells = []
@@ -92,6 +97,18 @@ func Test_shell_options()
       finally
         bwipe!
       endtry
+
+      " filter buffer contents through an external command
+      new
+      call setline(1, ['tom', 'sam', 'andy'])
+      try
+        %!sort
+        call assert_equal(['andy', 'sam', 'tom'], getline(1, '$'), e[0])
+      catch
+        call assert_report($'Failed to filter buffer contents, shell: {e[0]}, caught {v:exception}')
+      finally
+        bwipe!
+      endtry
     endif
   endfor
   set shell& shellcmdflag& shellpipe& shellquote&
@@ -141,6 +158,10 @@ func Test_shellescape()
   call assert_equal("'te\\#xt'", shellescape("te#xt", 1))
   call assert_equal("'te!xt'", shellescape("te!xt"))
   call assert_equal("'te\\!xt'", shellescape("te!xt", 1))
+  call assert_equal("'te<cword>xt'", shellescape("te<cword>xt"))
+  call assert_equal("'te\\<cword>xt'", shellescape("te<cword>xt", 1))
+  call assert_equal("'te<cword>%xt'", shellescape("te<cword>%xt"))
+  call assert_equal("'te\\<cword>\\%xt'", shellescape("te<cword>%xt", 1))
 
   call assert_equal("'te\nxt'", shellescape("te\nxt"))
   call assert_equal("'te\\\nxt'", shellescape("te\nxt", 1))
@@ -185,7 +206,7 @@ func Test_shellxquote()
   let save_sxq = &shellxquote
   let save_sxe = &shellxescape
 
-  call writefile(['#!/bin/sh', 'echo "Cmd: [$*]" > Xlog'], 'Xtestshell')
+  call writefile(['#!/bin/sh', 'echo "Cmd: [$*]" > Xlog'], 'Xtestshell', 'D')
   call setfperm('Xtestshell', "r-x------")
   set shell=./Xtestshell
 
@@ -209,7 +230,6 @@ func Test_shellxquote()
   let &shell = save_shell
   let &shellxquote = save_sxq
   let &shellxescape = save_sxe
-  call delete('Xtestshell')
   call delete('Xlog')
 endfunc
 
@@ -233,6 +253,64 @@ func Test_set_shell()
     call assert_equal(expected, lines[0])
   endif
   call delete('Xtestout')
+endfunc
+
+func Test_shell_repeat()
+  CheckUnix
+
+  let save_shell = &shell
+
+  call writefile(['#!/bin/sh', 'echo "Cmd: [$*]" > Xlog'], 'Xtestshell', 'D')
+  call setfperm('Xtestshell', "r-x------")
+  set shell=./Xtestshell
+  defer delete('Xlog')
+
+  call feedkeys(":!echo coconut\<CR>", 'xt')   " Run command
+  call assert_equal(['Cmd: [-c echo coconut]'], readfile('Xlog'))
+
+  call feedkeys(":!!\<CR>", 'xt')              " Re-run previous
+  call assert_equal(['Cmd: [-c echo coconut]'], readfile('Xlog'))
+
+  call writefile(['empty'], 'Xlog')
+  call feedkeys(":!\<CR>", 'xt')               " :!
+  call assert_equal(['Cmd: [-c ]'], readfile('Xlog'))
+
+  call feedkeys(":!!\<CR>", 'xt')              " :! doesn't clear previous command
+  call assert_equal(['Cmd: [-c echo coconut]'], readfile('Xlog'))
+
+  call feedkeys(":!echo banana\<CR>", 'xt')    " Make sure setting previous command keeps working after a :! no-op
+  call assert_equal(['Cmd: [-c echo banana]'], readfile('Xlog'))
+  call feedkeys(":!!\<CR>", 'xt')
+  call assert_equal(['Cmd: [-c echo banana]'], readfile('Xlog'))
+
+  let &shell = save_shell
+endfunc
+
+func Test_shell_no_prevcmd()
+  " this doesn't do anything, just check it doesn't crash
+  let after =<< trim END
+    exe "normal !!\<CR>"
+    call writefile([v:errmsg, 'done'], 'Xtestdone')
+    qall!
+  END
+  if RunVim([], after, '--clean')
+    call assert_equal(['E34: No previous command', 'done'], readfile('Xtestdone'))
+  endif
+  call delete('Xtestdone')
+endfunc
+
+func Test_shell_filter_buffer_with_nul_bytes()
+  CheckUnix
+  new
+  set noshelltemp
+  " \n is a NUL byte
+  let lines = ["aaa\nbbb\nccc\nddd\neee", "fff\nggg\nhhh\niii\njjj"]
+  call setline(1, lines)
+  %!cat
+  call assert_equal(lines, getline(1, '$'))
+
+  set shelltemp&
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

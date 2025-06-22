@@ -1,7 +1,7 @@
 INSTALLvms.txt - Installation of Vim on OpenVMS
 
-Maintainer:   Zoltan Arpadffy <arpadffy@polarhome.com>
-Last change:  2008 Jan 06
+Maintainer:   Zoltan Arpadffy <zoltan.arpadffy@gmail.com>
+Last change:  2023 Nov 29
 
 This file contains instructions for compiling Vim on Openvms.
 If you already have an executable version of Vim, you don't need this.
@@ -40,6 +40,9 @@ Contents:
 
      where X.X is the version number.
 
+You may want to clone the latest source code from https://github/vim/vim
+Or the last tested on OpenVMS from http://polarhome.com/vim/files/source/vms/
+
 1.2. Expand the three archives.
 
 1.3. Apply patches if they exist.  (Patch files are found in the ftp
@@ -77,15 +80,12 @@ from CVS mirror ftp://ftp.polarhome.com/pub/cvs/SOURCE/
 
 	Parameter name	: MODEL
 	Description	: Build model selection
-	Options:	: TINY	  - Almost no features enabled, not even
-			  multiple windows
-			  SMALL   - Few features enabled, as basic as possible
+	Options:	: TINY	  - No optional features enabled
 			  NORMAL  - A default selection of features enabled
-			  BIG	  - Many features enabled, as rich as possible.
-			  (OpenVMS default)
+				    (OpenVMS default)
 			  HUGE	  - All possible features enabled.
-			  Uncommented - will default to BIG
-	Default		: MODEL = BIG
+			  Uncommented - will default to HUGE
+	Default		: MODEL = NORMAL
 
 	Parameter name	: GUI
 	Description	: GUI or terminal mode executable
@@ -120,7 +120,7 @@ from CVS mirror ftp://ftp.polarhome.com/pub/cvs/SOURCE/
 	Default		: CCVER = YES
 
 	Parameter name	: DEBUG
-	Description	: Building a debug version
+	Description	: Building a debug version (DVIM.EXE)
 	Options:	: YES - debug version will be built
 			  Uncommented - building normal executable
 	Default		: Uncommented
@@ -166,6 +166,36 @@ from CVS mirror ftp://ftp.polarhome.com/pub/cvs/SOURCE/
 			  Uncommented - build without support.
 	Default		: Uncommented
 
+	Parameter name	: VIM_RUBY
+	Description	: Add Ruby support
+	Options:	: YES - Build with support
+			  Uncommented - build without support.
+	Default		: Uncommented
+
+	Parameter name	: VIM_LUA
+	Description	: Add Lua support
+	Options:	: YES - Build with support
+			  Uncommented - build without support.
+	Default		: Uncommented     
+
+	Parameter name	: VIM_MZSCHEME
+	Description	: Add support for FEATURE_MZSCHEM
+	Options:	: YES - Build with support
+			  Uncommented - build without FEATURE_MZSCHEM.
+	Default		: Uncommented
+
+	Parameter name	: VIM_ICONV
+	Description	: Build with using the ICONV library 
+	Options:	: YES - Build with support
+			  Uncommented - build without support.
+	Default		: Uncommented     
+
+	Parameter name	: MODIFIED_BY
+	Description	: Add note if you modified the code
+	Options:	: YES - Build with adding the MODIFIED_BY define
+			  Uncommented - build without the define
+	Default		: Uncommented
+
      You can edit the *_INC and *_LIB qualifiers, but it is really
      not recommended for beginners.
 
@@ -186,6 +216,11 @@ from CVS mirror ftp://ftp.polarhome.com/pub/cvs/SOURCE/
      development. The command is:
 
 	mms /descrip=Make_vms.mms clean
+
+     The build will stop if any error or warning is encontered. In some cases
+     the warnings can be ignored. Use:
+
+     mms /descrip=Make_vms.mms /ignore=warning
 
 4. Compilation VAXC
 

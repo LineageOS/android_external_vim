@@ -95,7 +95,7 @@ func CheckUnix()
   endif
 endfunc
 
-" Command to check for running on Linix
+" Command to check for running on Linux
 command CheckLinux call CheckLinux()
 func CheckLinux()
   if !has('linux')
@@ -111,12 +111,54 @@ func CheckNotBSD()
   endif
 endfunc
 
+" Command to check for not running on a MacOS
+command CheckNotMac call CheckNotMac()
+func CheckNotMac()
+  if has('mac')
+    throw 'Skipped: does not work on MacOS'
+  endif
+endfunc
+
+" Command to check for not running on a MacOS M1 system.
+command CheckNotMacM1 call CheckNotMacM1()
+func CheckNotMacM1()
+  if has('mac') && system('uname -a') =~ '\<arm64\>'
+    throw 'Skipped: does not work on MacOS M1'
+  endif
+endfunc
+
+func SetupWindowSizeToForVisualDumps()
+  " The dumps used as reference in these tests were created with a terminal
+  " width of 75 columns. The vim window that uses the remainder of the GUI
+  " window width must be at least 3 columns. In theory this means we need the
+  " GUI shell to provide 78+ columns. However the GTK3 resize logic is flaky,
+  " sometimes resulting in X11 Configure events that are narrower than
+  " expected by a number of pixels equal to 2 column widths. Therefore
+  " setting 80 columns ensures that the GUI shell can still provide 78+
+  " columns. This is very likely papering over a GTK3 resize bug but one that
+  " has existed for a very long time. Establishing this workaround is meant to
+  " get the GTK3 code working under CI so that we can focus on removing this
+  " over the long term.
+  if &columns != 80
+    set columns=80
+  endif
+  " Without resetting lines, some GTK3 resize events can carry over between
+  " tests, which invalidate assumptions in the scrollbar offset calculations.
+  if &lines != 25
+    set lines=25
+  endif
+endfunc
+
 " Command to check that making screendumps is supported.
 " Caller must source screendump.vim
 command CheckScreendump call CheckScreendump()
 func CheckScreendump()
+  let g:check_screendump_called = v:true
   if !CanRunVimInTerminal()
     throw 'Skipped: cannot make screendumps'
+  endif
+  if has('gui_running')
+    call SetupWindowSizeToForVisualDumps()
   endif
 endfunc
 
@@ -141,6 +183,14 @@ command -nargs=1 CheckEnv call CheckEnv(<f-args>)
 func CheckEnv(name)
   if empty(eval('$' .. a:name))
     throw 'Skipped: Environment variable ' .. a:name .. ' is not set'
+  endif
+endfunc
+
+" Command to Check for pure X11 (no Wayland)
+command -nargs=0 CheckX11 call CheckX11()
+func CheckX11()
+  if !empty($WAYLAND_DISPLAY) || empty($DISPLAY)
+    throw 'Skipped: not pure X11 environment'
   endif
 endfunc
 
@@ -217,11 +267,28 @@ func CheckNotAsan()
   endif
 endfunc
 
+" Command to check for not running under valgrind
+command CheckNotValgrind call CheckNotValgrind()
+func CheckNotValgrind()
+  if RunningWithValgrind()
+    throw 'Skipped: does not work well with valgrind'
+  endif
+endfunc
+
 " Command to check for X11 based GUI
 command CheckX11BasedGui call CheckX11BasedGui()
 func CheckX11BasedGui()
   if !g:x11_based_gui
     throw 'Skipped: requires X11 based GUI'
+  endif
+endfunc
+
+" Command to check that there are two clipboards
+command CheckTwoClipboards call CheckTwoClipboards()
+func CheckTwoClipboards()
+  " avoid changing the clipboard here, only X11 supports both
+  if !has('X11')
+    throw 'Skipped: requires two clipboards'
   endif
 endfunc
 
@@ -250,4 +317,11 @@ func CheckAllOf(...)
   endfor
 endfunc
 
+" Check if running under Github Actions
+command CheckGithubActions call CheckGithubActions()
+func CheckGithubActions()
+  if expand('$GITHUB_ACTIONS') ==# 'true'
+    throw "Skipped: FIXME: this test doesn't work on Github Actions CI"
+  endif
+endfunc
 " vim: shiftwidth=2 sts=2 expandtab

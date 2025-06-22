@@ -1,8 +1,10 @@
 " Vim indent file
 " Language:	R Documentation (Help), *.Rd
-" Author:	Jakson Alves de Aquino <jalvesaq@gmail.com>
-" Homepage:     https://github.com/jalvesaq/R-Vim-runtime
-" Last Change:	Tue Apr 07, 2015  04:38PM
+" Maintainer: This runtime file is looking for a new maintainer.
+" Former Maintainer: Jakson Alves de Aquino <jalvesaq@gmail.com>
+" Former Repository: https://github.com/jalvesaq/R-Vim-runtime
+" Last Change:	2023 Feb 27  07:01PM
+"		2024 Feb 19 by Vim Project (announce adoption)
 
 
 " Only load this indent file when no other was loaded.
@@ -19,6 +21,8 @@ setlocal nosmartindent
 setlocal nolisp
 setlocal indentkeys=0{,0},:,!^F,o,O,e
 setlocal indentexpr=GetCorrectRHelpIndent()
+
+let b:undo_indent = "setl ai< cin< inde< indk< lisp< si<"
 
 " Only define the functions once.
 if exists("*GetRHelpIndent")

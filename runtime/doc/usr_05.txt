@@ -1,4 +1,4 @@
-*usr_05.txt*	For Vim version 8.2.  Last change: 2019 May 23
+*usr_05.txt*	For Vim version 9.1.  Last change: 2025 Apr 10
 
 		     VIM USER MANUAL - by Bram Moolenaar
 
@@ -270,7 +270,7 @@ line break.  Revert with ":iunmap <C-U>".
 Enable using the mouse if available.  See 'mouse'.
 
 >
-	vnoremap _g y:exe "grep /" . escape(@", '\\/') . "/ *.c *.h"<CR>
+	vnoremap _g y:exe "grep /" .. escape(@", '\\/') .. "/ *.c *.h"<CR>
 
 This mapping yanks the visually selected text and searches for it in C files.
 You can see that a mapping can be used to do quite complicated things.  Still,
@@ -307,18 +307,32 @@ This switches on three very clever mechanisms:
    filetypes.  See |:filetype-indent-on| and 'indentexpr'.
 
 
-				*restore-cursor* *last-position-jump*  >
-    autocmd BufReadPost *
-      \ if line("'\"") >= 1 && line("'\"") <= line("$") && &ft !~# 'commit'
-      \ |   exe "normal! g`\""
-      \ | endif
+				*restore-cursor* *last-position-jump*  >vim
+    augroup RestoreCursor
+      autocmd!
+      autocmd BufReadPost *
+        \ let line = line("'\"")
+        \ | if line >= 1 && line <= line("$") && &filetype !~# 'commit'
+        \      && index(['xxd', 'gitrebase'], &filetype) == -1
+        \      && !&diff
+        \ |   execute "normal! g`\""
+        \ | endif
+    augroup END
 
 Another autocommand.  This time it is used after reading any file.  The
 complicated stuff after it checks if the '" mark is defined, and jumps to it
-if so.  The backslash at the start of a line is used to continue the command
-from the previous line.  That avoids a line getting very long.
-See |line-continuation|.  This only works in a Vim script file, not when
-typing commands at the command-line.
+if so.  It doesn't do that when:
+ - editing a commit or rebase message, which are likely a different one than
+   last time,
+ - using xxd(1) to filter and edit binary files, which transforms input files
+   back and forth, causing them to have dual nature, so to speak (see also
+   |using-xxd|) and
+ - Vim is in diff mode
+
+The backslash at the start of a line is used to continue the command from the
+previous line.  That avoids a line getting very long.  See |line-continuation|.
+This only works in a Vim script file, not when typing commands at the
+command line.
 
 >
 	command DiffOrig vert new | set bt=nofile | r ++edit # | 0d_ | diffthis
@@ -382,7 +396,7 @@ The ":map" command (with no arguments) lists your current mappings.  At
 least the ones for Normal mode.  More about mappings in section |40.1|.
 
 ==============================================================================
-*05.5*	Adding a package			*add-package* *matchit-install*
+*05.5*	Adding a package  *add-package* *matchit-install* *package-matchit*
 
 A package is a set of files that you can add to Vim.  There are two kinds of
 packages: optional and automatically loaded on startup.
@@ -409,13 +423,76 @@ an archive or as a repository.  For an archive you can follow these steps:
 	   package.
 	2. unpack the archive in that directory.  This assumes the top
 	   directory in the archive is "start": >
-	   	cd ~/.vim/pack/fancy
+		cd ~/.vim/pack/fancy
 		unzip /tmp/fancy.zip
 <	   If the archive layout is different make sure that you end up with a
 	   path like this:
 		~/.vim/pack/fancy/start/fancytext/plugin/fancy.vim ~
 	   Here "fancytext" is the name of the package, it can be anything
 	   else.
+
+Adding the editorconfig package *editorconfig-install* *package-editorconfig*
+
+Similar to the matchit package, to load the distributed editorconfig plugin
+when Vim starts, add the following line to your vimrc file: >
+	packadd! editorconfig
+
+After restarting your Vim, the plugin is active and you can read about it at: >
+	:h editorconfig.txt
+
+
+Adding the comment package		*comment-install* *package-comment*
+
+Load the plugin with this command: >
+	packadd comment
+<
+This way you can use the plugin with the default key bindings `gc` and similar
+for commenting (which is a well-established mapping in the Vim community).
+
+If you add this line to your vimrc file, then you need to restart Vim to have
+the package loaded.  Once the package is loaded, read about it at: >
+	:h comment.txt
+
+
+Adding the nohlsearch package	*nohlsearch-install* *package-nohlsearch*
+
+Load the plugin with this command: >
+	packadd nohlsearch
+<
+Automatically execute |:nohlsearch| after 'updatetime' or getting into
+|Insert| mode.
+Thus assuming default updatetime, hlsearch would be suspended/turned off after
+4 seconds of idle time.
+
+To disable the effect of the plugin after it has been loaded: >
+	au! nohlsearch
+<
+
+Adding the highlight-yank package	*hlyank-install* *package-hlyank*
+
+Load the plugin with this command: >
+	packadd hlyank
+<
+This package briefly highlights the affected region of the last |yank|
+command.  See |52.6| for a simplified implementation using the
+|getregionpos()| function.
+
+The plugin understands the following configuration variables (the settings
+show the default values).
+
+To specify a different highlighting group, use: >
+	:let g:hlyank_hlgroup = 'IncSearch'
+<
+To use a different highlighting duration, use: >
+	:let g:hlyank_duration = 300
+The unit is milliseconds, and the upper limit is 3000 ms.  If you set a value
+higher than this, the highlighting duration will be 3000 ms.
+
+To highlight in visual mode, use: >
+	:let g:hlyank_invisual = v:true
+
+To disable the effect of the plugin after it has been loaded: >
+	au! hlyank
 
 More information about packages can be found here: |packages|.
 
@@ -436,13 +513,18 @@ The global plugins will be discussed first, then the filetype ones
 |add-filetype-plugin|.
 
 
-GLOBAL PLUGINS						*standard-plugin*
+GLOBAL PLUGINS				*standard-plugin* *distributed-plugins*
 
 When you start Vim, it will automatically load a number of global plugins.
 You don't have to do anything for this.  They add functionality that most
 people will want to use, but which was implemented as a Vim script instead of
 being compiled into Vim.  You can find them listed in the help index
-|standard-plugin-list|.  Also see |load-plugins|.
+|standard-plugin-list|.
+
+For locally installed plugins and packages (which come with a separated help
+file) a similar list can be found in the help section |local-additions|.
+
+Also see |load-plugins|.
 
 							*add-global-plugin*
 You can add a global plugin to add functionality that will always be present

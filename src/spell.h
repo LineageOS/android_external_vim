@@ -17,10 +17,10 @@
 # define SPELL_PRINTTREE
 #endif
 
-// Use SPELL_COMPRESS_ALLWAYS for debugging: compress the word tree after
+// Use SPELL_COMPRESS_ALWAYS for debugging: compress the word tree after
 // adding a word.  Only use it for small word lists!
 #if 0
-# define SPELL_COMPRESS_ALLWAYS
+# define SPELL_COMPRESS_ALWAYS
 #endif
 
 // Use DEBUG_TRIEWALK to print the changes made in suggest_trie_walk() for a
@@ -211,9 +211,9 @@ typedef struct salitem_S
 
 // Values for SP_*ERROR are negative, positive values are used by
 // read_cnt_string().
-#define	SP_TRUNCERROR	-1	// spell file truncated error
-#define	SP_FORMERROR	-2	// format error in spell file
-#define SP_OTHERERROR	-3	// other error while reading spell file
+#define	SP_TRUNCERROR	(-1)	// spell file truncated error
+#define	SP_FORMERROR	(-2)	// format error in spell file
+#define SP_OTHERERROR	(-3)	// other error while reading spell file
 
 /*
  * Structure used in "b_langp", filled from 'spelllang'.
@@ -280,8 +280,6 @@ typedef struct spelltab_S
 #endif
 
 #ifdef FEAT_SPELL
-// First language that is loaded, start of the linked list of loaded
-// languages.
 # ifdef IN_SPELL_C
 #  define SPELL_EXTERN
 #  define SPELL_INIT(x) x
@@ -290,6 +288,8 @@ typedef struct spelltab_S
 #  define SPELL_INIT(x)
 # endif
 
+// First language that is loaded, start of the linked list of loaded
+// languages.
 SPELL_EXTERN slang_T	*first_lang SPELL_INIT(= NULL);
 
 // file used for "zG" and "zW"

@@ -1,4 +1,4 @@
-*motion.txt*    For Vim version 8.2.  Last change: 2021 Dec 27
+*motion.txt*    For Vim version 9.1.  Last change: 2025 Apr 03
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -33,7 +33,8 @@ know what the hjkl keys do.  The mnemonic value of hjkl is clear from looking
 at the keyboard.  Think of j as an arrow pointing downwards.
 
 The 'virtualedit' option can be set to make it possible to move the cursor to
-positions where there is no character or halfway a character.
+positions where there is no character or within a multi-column character (like
+a tab).
 
 ==============================================================================
 1. Motions and operators				*operator*
@@ -67,10 +68,12 @@ When doubling the operator it operates on a line.  When using a count, before
 or after the first character, that many lines are operated upon.  Thus `3dd`
 deletes three lines. A count before and after the first character is
 multiplied, thus `2y3y` yanks six lines.
-
+						*operator-resulting-pos*
 After applying the operator the cursor is mostly left at the start of the text
 that was operated upon.  For example, "yfe" doesn't move the cursor, but "yFe"
 moves the cursor leftwards to the "e" where the yank started.
+The 'startofline' option applies only to the "d", "<<", "==" and ">>" linewise
+operations.
 
 						*linewise* *characterwise*
 The operator either affects whole lines, or the characters between the start
@@ -118,6 +121,12 @@ This cannot be repeated: >
 	   call search("f")<CR>
 	endif<CR>
 Note that when using ":" any motion becomes characterwise exclusive.
+
+					*inclusive-motion-selection-exclusive*
+When 'selection' is "exclusive", |Visual| mode is active and an inclusive
+motion has been used, the cursor position will be adjusted by another
+character to the right, so that the Visual selection includes the expected
+text and can be acted upon.
 
 								*forced-motion*
 FORCING A MOTION TO BE LINEWISE, CHARACTERWISE OR BLOCKWISE
@@ -168,9 +177,9 @@ h		or					*h*
 CTRL-H		or					*CTRL-H* *<BS>*
 <BS>			[count] characters to the left.  |exclusive| motion.
 			Note: If you prefer <BS> to delete a character, use
-			the mapping:
+			the mapping: >
 				:map CTRL-V<BS>		X
-			(to enter "CTRL-V<BS>" type the CTRL-V key, followed
+<			(to enter "CTRL-V<BS>" type the CTRL-V key, followed
 			by the <BS> key)
 			See |:fixdel| if the <BS> key does not do what you
 			want.
@@ -241,8 +250,8 @@ gM			Like "g0", but to halfway the text of the line.
 			Thus "10gM" is near the start of the text and "90gM"
 			is near the end of the text.
 
-							*g$* *g<End>*
-g$ or g<End>		When lines wrap ('wrap' on): To the last character of
+							*g$*
+g$			When lines wrap ('wrap' on): To the last character of
 			the screen line and [count - 1] screen lines downward
 			|inclusive|.  Differs from "$" when a line is wider
 			than the screen.
@@ -254,6 +263,10 @@ g$ or g<End>		When lines wrap ('wrap' on): To the last character of
 			instead of going to the end of the line.
 			When 'virtualedit' is enabled moves to the end of the
 			screen line.
+
+							*g<End>* *g<kEnd>*
+g<End>			Like |g$| but to the last non-blank character
+			instead of the last character.
 
 							*bar*
 |			To screen column [count] in the current line.
@@ -346,6 +359,7 @@ gg			Goto line [count], default first line, on the first
 
 							*:[range]*
 :[range]		Set the cursor on the last line number in [range].
+			In Ex mode, print the lines in [range].
 			[range] can also be just one line number, e.g., ":1"
 			or ":'m".
 			In contrast with |G| this command does not modify the
@@ -358,11 +372,11 @@ gg			Goto line [count], default first line, on the first
 			See also 'startofline' option.
 
 :[range]go[to] [count]					*:go* *:goto* *go*
-[count]go		Go to [count] byte in the buffer.  Default [count] is
-			one, start of the file.  When giving [range], the
-			last number in it used as the byte count.  End-of-line
-			characters are counted depending on the current
-			'fileformat' setting.
+[count]go		Go to [count] byte in the buffer.  |exclusive| motion.
+			Default [count] is one, start of the file.  When
+			giving [range], the last number in it used as the byte
+			count.  End-of-line characters are counted depending
+			on the current 'fileformat' setting.
 			Also see the |line2byte()| function, and the 'o'
 			option in 'statusline'.
 			{not available when compiled without the
@@ -428,7 +442,7 @@ WORD before the fold.
 
 Special case: "cw" and "cW" are treated like "ce" and "cE" if the cursor is
 on a non-blank.  This is because "cw" is interpreted as change-word, and a
-word does not include the following white space.
+word does not include the following white space (see also |cw|).
 
 Another special case: When using the "w" motion in combination with an
 operator and the last word moved over is at the end of a line, the end of
@@ -445,35 +459,35 @@ between Vi and Vim.
 5. Text object motions					*object-motions*
 
 							*(*
-(			[count] sentences backward.  |exclusive| motion.
+(			[count] |sentence|s backward.  |exclusive| motion.
 
 							*)*
-)			[count] sentences forward.  |exclusive| motion.
+)			[count] |sentence|s forward.  |exclusive| motion.
 
 							*{*
-{			[count] paragraphs backward.  |exclusive| motion.
+{			[count] |paragraph|s backward.  |exclusive| motion.
 
 							*}*
-}			[count] paragraphs forward.  |exclusive| motion.
+}			[count] |paragraph|s forward.  |exclusive| motion.
 
 							*]]*
-]]			[count] sections forward or to the next '{' in the
+]]			[count] |section|s forward or to the next '{' in the
 			first column.  When used after an operator, then also
 			stops below a '}' in the first column.  |exclusive|
 			Note that |exclusive-linewise| often applies.
 
 							*][*
-][			[count] sections forward or to the next '}' in the
+][			[count] |section|s forward or to the next '}' in the
 			first column.  |exclusive|
 			Note that |exclusive-linewise| often applies.
 
 							*[[*
-[[			[count] sections backward or to the previous '{' in
+[[			[count] |section|s backward or to the previous '{' in
 			the first column.  |exclusive|
 			Note that |exclusive-linewise| often applies.
 
 							*[]*
-[]			[count] sections backward or to the previous '}' in
+[]			[count] |section|s backward or to the previous '}' in
 			the first column.  |exclusive|
 			Note that |exclusive-linewise| often applies.
 
@@ -531,8 +545,6 @@ including white space, the commands starting with "i" select an "inner" object
 without white space, or just the white space.  Thus the "inner" commands
 always select less text than the "a" commands.
 
-These commands are not available when the |+textobjects| feature has been
-disabled at compile time.
 Also see `gn` and `gN`, operating on the last search pattern.
 
 							*v_aw* *aw*
@@ -589,14 +601,17 @@ a]						*v_a]* *v_a[* *a]* *a[*
 a[			"a [] block", select [count] '[' ']' blocks.  This
 			goes backwards to the [count] unclosed '[', and finds
 			the matching ']'.  The enclosed text is selected,
-			including the '[' and ']'.
+			including the '[' and ']'.  The |cpo-M| option flag
+			is used to handle escaped brackets.
 			When used in Visual mode it is made characterwise.
 
 i]						*v_i]* *v_i[* *i]* *i[*
 i[			"inner [] block", select [count] '[' ']' blocks.  This
 			goes backwards to the [count] unclosed '[', and finds
 			the matching ']'.  The enclosed text is selected,
-			excluding the '[' and ']'.
+			excluding the '[' and ']'.  It's an error to select an
+			empty inner block like "[]".  The |cpo-M| option flag
+			is used to handle escaped brackets.
 			When used in Visual mode it is made characterwise.
 
 a)							*v_a)* *a)* *a(*
@@ -604,26 +619,33 @@ a(							*vab* *v_ab* *v_a(* *ab*
 ab			"a block", select [count] blocks, from "[count] [(" to
 			the matching ')', including the '(' and ')' (see
 			|[(|).  Does not include white space outside of the
-			parenthesis.
+			parenthesis.  The |cpo-M| option flag is used to
+			handle escaped parenthesis.
 			When used in Visual mode it is made characterwise.
 
 i)							*v_i)* *i)* *i(*
 i(							*vib* *v_ib* *v_i(* *ib*
 ib			"inner block", select [count] blocks, from "[count] [("
 			to the matching ')', excluding the '(' and ')' (see
-			|[(|).
+			|[(|).  If the cursor is not inside a () block, then
+			find the next "(".  It's an error to select an empty
+			inner block like "()".  The |cpo-M| option flag
+			is used to handle escaped parenthesis.
 			When used in Visual mode it is made characterwise.
 
 a>						*v_a>* *v_a<* *a>* *a<*
 a<			"a <> block", select [count] <> blocks, from the
 			[count]'th unmatched '<' backwards to the matching
-			'>', including the '<' and '>'.
+			'>', including the '<' and '>'.  The |cpo-M| option flag
+			is used to handle escaped '<' and '>'.
 			When used in Visual mode it is made characterwise.
 
 i>						*v_i>* *v_i<* *i>* *i<*
 i<			"inner <> block", select [count] <> blocks, from
 			the [count]'th unmatched '<' backwards to the matching
-			'>', excluding the '<' and '>'.
+			'>', excluding the '<' and '>'.  It's an error to
+			select an empty inner block like "<>".  The |cpo-M|
+			option flag is used to handle escaped '<' and '>'.
 			When used in Visual mode it is made characterwise.
 
 						*v_at* *at*
@@ -632,6 +654,7 @@ at			"a tag block", select [count] tag blocks, from the
 			"</aaa>", including the "<aaa>" and "</aaa>".
 			See |tag-blocks| about the details.
 			When used in Visual mode it is made characterwise.
+			Only available when compiled with the |+eval| feature.
 
 						*v_it* *it*
 it			"inner tag block", select [count] tag blocks, from the
@@ -644,14 +667,17 @@ a}							*v_a}* *a}* *a{*
 a{							*v_aB* *v_a{* *aB*
 aB			"a Block", select [count] Blocks, from "[count] [{" to
 			the matching '}', including the '{' and '}' (see
-			|[{|).
+			|[{|).  The |cpo-M| option flag is used to handle
+			escaped braces.
 			When used in Visual mode it is made characterwise.
 
 i}							*v_i}* *i}* *i{*
 i{							*v_iB* *v_i{* *iB*
 iB			"inner Block", select [count] Blocks, from "[count] [{"
 			to the matching '}', excluding the '{' and '}' (see
-			|[{|).
+			|[{|).  It's an error to select an empty inner block
+			like "{}".  The |cpo-M| option flag is used to handle
+			escaped braces.
 			When used in Visual mode it is made characterwise.
 
 a"							*v_aquote* *aquote*
@@ -678,6 +704,7 @@ i`							*v_i`* *i`*
 			Special case: With a count of 2 the quotes are
 			included, but no extra white space as with a"/a'/a`.
 
+							*o_object-select*
 When used after an operator:
 For non-block objects:
 	For the "a" commands: The operator applies to the object and the white
@@ -693,6 +720,7 @@ For a block object:
 	the surrounding braces are excluded.  For the "a" commands, the braces
 	are included.
 
+							*v_object-select*
 When used in Visual mode:
 When start and end of the Visual area are the same (just after typing "v"):
 	One object is selected, the same as for using an operator.
@@ -867,12 +895,12 @@ Numbered mark should be stored.  See |viminfo-file-marks|.
 
 
 							*'[* *`[*
-'[  `[			To the first character of the previously changed
-			or yanked text.
+'[  `[			To the first character of the previously changed,
+			or yanked text.  Also set when writing the buffer.
 
 							*']* *`]*
 ']  `]			To the last character of the previously changed or
-			yanked text.
+			yanked text.  Also set when writing the buffer.
 
 After executing an operator the Cursor is put at the beginning of the text
 that was operated upon.  After a put command ("p" or "P") the cursor is
@@ -1019,7 +1047,7 @@ These commands are not marks themselves, but jump to a mark:
 				:let lnum = line(".")
 				:keepjumps normal gg
 				:call SetLastChange()
-				:keepjumps exe "normal " . lnum . "G"
+				:keepjumps exe "normal " .. lnum .. "G"
 <
 			Note that ":keepjumps" must be used for every command.
 			When invoking a function the commands in that function
@@ -1064,27 +1092,30 @@ can go to cursor positions before older jumps, and back again.  Thus you can
 move up and down the list.  There is a separate jump list for each window.
 The maximum number of entries is fixed at 100.
 
-For example, after three jump commands you have this jump list:
+For example, after three jump commands you have this jump list: >
 
-    jump line  col file/text ~
-      3	  1    0 some text ~
-      2	 70    0 another line ~
-      1  1154   23 end. ~
-   > ~
-
+    jump line  col file/text
+      3     1    0 some text
+      2    70    0 another line
+      1  1154   23 end.
+   >
+<
 The "file/text" column shows the file name, or the text at the jump if it is
 in the current file (an indent is removed and a long line is truncated to fit
 in the window).
 
+The marker ">" indicates the current position in the jumplist.  It may not be
+shown when filtering the |:jumps| command using |:filter|
+
 You are currently in line 1167.  If you then use the CTRL-O command, the
-cursor is put in line 1154.  This results in:
+cursor is put in line 1154.  This results in: >
 
-    jump line  col file/text ~
-      2	  1    0 some text ~
-      1	 70    0 another line ~
-   >  0  1154   23 end. ~
-      1  1167    0 foo bar ~
-
+    jump line  col file/text
+      2     1    0 some text
+      1    70    0 another line
+   >  0  1154   23 end.
+      1  1167    0 foo bar
+<
 The pointer will be set at the last used jump position.  The next CTRL-O
 command will use the entry above it, the next CTRL-I command will use the
 entry below it.  If the pointer is below the last entry, this indicates that
@@ -1108,15 +1139,15 @@ command.  You can explicitly add a jump by setting the ' mark with "m'".  Note
 that calling setpos() does not do this.
 
 After the CTRL-O command that got you into line 1154 you could give another
-jump command (e.g., "G").  The jump list would then become:
+jump command (e.g., "G").  The jump list would then become: >
 
-    jump line  col file/text ~
-      4	  1    0 some text ~
-      3	 70    0 another line ~
-      2  1167    0 foo bar ~
-      1  1154   23 end. ~
-   > ~
-
+    jump line  col file/text
+      4     1    0 some text
+      3    70    0 another line
+      2  1167    0 foo bar
+      1  1154   23 end.
+   >
+<
 The line numbers will be adjusted for deleted and inserted lines.  This fails
 if you stop editing a file without writing, like with ":n!".
 
@@ -1125,7 +1156,45 @@ When you split a window, the jumplist will be copied to the new window.
 If you have included the ' item in the 'viminfo' option the jumplist will be
 stored in the viminfo file and restored when starting Vim.
 
+							*jumplist-stack*
+When 'jumpoptions' option includes "stack", the jumplist behaves like the tag
+stack.  When jumping to a new location from the middle of the jumplist, the
+locations after the current position will be discarded. With this option set
+you can move through a tree of jump locations. When going back up a branch and
+then down another branch, CTRL-O still takes you further up the tree.
 
+Given a jumplist like the following in which CTRL-O has been used to move back
+three times to location X: >
+
+     jump line  col file/text
+       2  1260    8 mark.c		<-- location X-2
+       1   685    0 eval.c		<-- location X-1
+    >  0   462   36 eval.c		<-- location X
+       1   479   39 eval.c
+       2   213    2 mark.c
+       3   181    0 mark.c
+<
+jumping to (new) location Y results in the locations after the current
+locations being removed: >
+
+     jump line  col file/text
+       3  1260    8 mark.c		<-- location X-2
+       2   685    0 eval.c		<-- location X-1
+       1   462   36 eval.c		<-- location X
+    >
+<
+Then, when yet another location Z is jumped to, the new location Y appears
+directly after location X in the jumplist and location X remains in the same
+position relative to the locations (X-1, X-2, etc., ...) that had been before
+it prior to the original jump from X to Y: >
+
+     jump line  col file/text
+       4  1260    8 mark.c		<-- location X-2
+       3   685    0 eval.c		<-- location X-1
+       2   462   36 eval.c		<-- location X
+       1   100    0 buffer.c		<-- location Y
+    >
+<
 CHANGE LIST JUMPS			*changelist* *change-list-jumps* *E664*
 
 When making a change the cursor position is remembered.  One position is
@@ -1141,7 +1210,7 @@ g;			Go to [count] older position in change list.
 			(not a motion command)
 
 							*g,* *E663*
-g,			Go to [count] newer cursor position in change list.
+g,			Go to [count] newer position in change list.
 			Just like |g;| but in the opposite direction.
 			(not a motion command)
 
@@ -1254,14 +1323,12 @@ bring you back to the switch statement.
 ]m			Go to [count] next start of a method (for Java or
 			similar structured language).  When not before the
 			start of a method, jump to the start or end of the
-			class.  When no '{' is found after the cursor, this is
-			an error.  |exclusive| motion.
+			class.  |exclusive| motion.
 						*]M*
 ]M			Go to [count] next end of a method (for Java or
 			similar structured language).  When not before the end
 			of a method, jump to the start or end of the class.
-			When no '}' is found after the cursor, this is an
-			error. |exclusive| motion.
+			|exclusive| motion.
 						*[m*
 [m			Go to [count] previous start of a method (for Java or
 			similar structured language).  When not after the

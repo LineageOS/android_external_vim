@@ -10,6 +10,8 @@ source screendump.vim
 source mouse.vim
 source term_util.vim
 
+import './vim9.vim' as v9
+
 let $PROMPT_COMMAND=''
 
 func Test_terminal_altscreen()
@@ -18,7 +20,8 @@ func Test_terminal_altscreen()
   let cmd = "cat Xtext\<CR>"
 
   let buf = term_start(&shell, {})
-  call writefile(["\<Esc>[?1047h"], 'Xtext')
+  call TermWait(buf)
+  call writefile(["\<Esc>[?1047h"], 'Xtext', 'D')
   call term_sendkeys(buf, cmd)
   call WaitForAssert({-> assert_equal(1, term_getaltscreen(buf))})
 
@@ -28,7 +31,6 @@ func Test_terminal_altscreen()
 
   call term_sendkeys(buf, "exit\r")
   exe buf . "bwipe!"
-  call delete('Xtext')
 endfunc
 
 func Test_terminal_shell_option()
@@ -68,29 +70,37 @@ endfunc
 
 " Check a terminal with different colors
 func Terminal_color(group_name, highlight_cmds, highlight_opt, open_cmds)
+  CheckScreendump
   CheckRunVimInTerminal
   CheckUnix
 
   let lines = [
 	\ 'call setline(1, range(20))',
+    \ 'func NotifyParent()',
+    \ '  call echoraw("' .. TermNotifyParentCmd(v:true) .. '")',
+    \ 'endfunc',
 	\ 'func OpenTerm()',
 	\ '  set noruler',
-	\ "  call term_start('cat', #{vertical: 1, " .. a:highlight_opt .. "})",
+	\ "  call term_start('cat', #{vertical: 1, "
+    \      .. 'exit_cb: {->NotifyParent()}, '
+    \      .. a:highlight_opt .. "})",
+    \ '  call NotifyParent()',
 	\ ] + a:open_cmds + [
 	\ 'endfunc',
-	\ ] + a:highlight_cmds
-  call writefile(lines, 'XtermStart')
+	\ ] + a:highlight_cmds + [
+    \ 'call NotifyParent()',
+    \ ]
+  call writefile(lines, 'XtermStart', 'D')
   let buf = RunVimInTerminal('-S XtermStart', #{rows: 15})
-  call TermWait(buf, 100)
+  call WaitForChildNotification()
   call term_sendkeys(buf, ":call OpenTerm()\<CR>")
-  call TermWait(buf, 50)
+  call WaitForChildNotification()
   call term_sendkeys(buf, "hello\<CR>")
   call VerifyScreenDump(buf, 'Test_terminal_color_' .. a:group_name, {})
 
   call term_sendkeys(buf, "\<C-D>")
-  call TermWait(buf, 50)
+  call WaitForChildNotification()
   call StopVimInTerminal(buf)
-  call delete('XtermStart')
 endfunc
 
 func Test_terminal_color_Terminal()
@@ -130,6 +140,7 @@ func Test_terminal_color_wincolor_over_group()
 endfunc
 
 func Test_terminal_color_wincolor_split()
+  CheckScreendump
   CheckRunVimInTerminal
   CheckUnix
 
@@ -143,7 +154,7 @@ func Test_terminal_color_wincolor_split()
   \ 'highlight MyWinCol ctermfg=red ctermbg=darkyellow',
   \ 'highlight MyWinCol2 ctermfg=black ctermbg=blue',
 	\ ]
-  call writefile(lines, 'XtermStart')
+  call writefile(lines, 'XtermStart', 'D')
   let buf = RunVimInTerminal('-S XtermStart', #{rows: 15})
   call TermWait(buf, 100)
   call term_sendkeys(buf, ":call OpenTerm()\<CR>")
@@ -162,7 +173,6 @@ func Test_terminal_color_wincolor_split()
   call term_sendkeys(buf, "\<C-D>")
   call TermWait(buf, 50)
   call StopVimInTerminal(buf)
-  call delete('XtermStart')
 endfunc
 
 func Test_terminal_color_transp_Terminal()
@@ -238,6 +248,7 @@ func Test_terminal_color_gui_transp_wincolor()
 endfunc
 
 func Test_terminal_in_popup()
+  CheckScreendump
   CheckRunVimInTerminal
 
   let text =<< trim END
@@ -245,7 +256,7 @@ func Test_terminal_in_popup()
     to edit
     in a popup window
   END
-  call writefile(text, 'Xtext')
+  call writefile(text, 'Xtext', 'D')
   let cmd = GetVimCommandCleanTerm()
   let lines = [
 	\ 'call setline(1, range(20))',
@@ -268,13 +279,13 @@ func Test_terminal_in_popup()
 	\ '  call popup_create(s:buf, #{minwidth: 40, minheight: 6, border: []})',
 	\ 'endfunc',
 	\ ]
-  call writefile(lines, 'XtermPopup')
+  call writefile(lines, 'XtermPopup', 'D')
   let buf = RunVimInTerminal('-S XtermPopup', #{rows: 15})
-  call TermWait(buf, 100)
+  call TermWait(buf,0)
   call term_sendkeys(buf, ":call OpenTerm(0)\<CR>")
-  call TermWait(buf, 500)
+  call TermWait(buf,0)
   call term_sendkeys(buf, ":\<CR>")
-  call TermWait(buf, 100)
+  call TermWait(buf,0)
   call term_sendkeys(buf, "\<C-W>:echo getwinvar(g:winid, \"&buftype\") win_gettype(g:winid)\<CR>")
   call VerifyScreenDump(buf, 'Test_terminal_popup_1', {})
 
@@ -282,16 +293,16 @@ func Test_terminal_in_popup()
   call VerifyScreenDump(buf, 'Test_terminal_popup_2', {})
  
   call term_sendkeys(buf, ":call OpenTerm(1)\<CR>")
-  call TermWait(buf, 500)
+  call TermWait(buf,0)
   call term_sendkeys(buf, ":set hlsearch\<CR>")
-  call TermWait(buf, 100)
+  call TermWait(buf,0)
   call term_sendkeys(buf, "/edit\<CR>")
   call VerifyScreenDump(buf, 'Test_terminal_popup_3', {})
  
   call term_sendkeys(buf, "\<C-W>:call HidePopup()\<CR>")
   call VerifyScreenDump(buf, 'Test_terminal_popup_4', {})
   call term_sendkeys(buf, "\<CR>")
-  call TermWait(buf, 50)
+  call TermWait(buf,0)
 
   call term_sendkeys(buf, "\<C-W>:call ClosePopup()\<CR>")
   call VerifyScreenDump(buf, 'Test_terminal_popup_5', {})
@@ -307,17 +318,16 @@ func Test_terminal_in_popup()
   call term_sendkeys(buf, "A")
   call VerifyScreenDump(buf, 'Test_terminal_popup_8', {})
 
-  call TermWait(buf, 50)
+  call TermWait(buf,0)
   call term_sendkeys(buf, ":q\<CR>")
-  call TermWait(buf, 250)  " wait for terminal to vanish
+  call WaitForAssert({-> assert_equal(0, match(term_getline(buf, 6), '^5\s*$'))}, 250) " wait for terminal to vanish
 
   call StopVimInTerminal(buf)
-  call delete('Xtext')
-  call delete('XtermPopup')
 endfunc
 
 " Check a terminal in popup window uses the default minimum size.
 func Test_terminal_in_popup_min_size()
+  CheckScreendump
   CheckRunVimInTerminal
 
   let text =<< trim END
@@ -325,7 +335,7 @@ func Test_terminal_in_popup_min_size()
     to show
     in a popup window
   END
-  call writefile(text, 'Xtext')
+  call writefile(text, 'Xtext', 'D')
   let lines = [
 	\ 'call setline(1, range(20))',
 	\ 'func OpenTerm()',
@@ -333,7 +343,7 @@ func Test_terminal_in_popup_min_size()
 	\ '  let g:winid = popup_create(s:buf, #{ border: []})',
 	\ 'endfunc',
 	\ ]
-  call writefile(lines, 'XtermPopup')
+  call writefile(lines, 'XtermPopup', 'D')
   let buf = RunVimInTerminal('-S XtermPopup', #{rows: 15})
   call TermWait(buf, 100)
   call term_sendkeys(buf, ":set noruler\<CR>")
@@ -346,40 +356,43 @@ func Test_terminal_in_popup_min_size()
   call term_sendkeys(buf, ":q\<CR>")
   call TermWait(buf, 50)  " wait for terminal to vanish
   call StopVimInTerminal(buf)
-  call delete('Xtext')
-  call delete('XtermPopup')
 endfunc
 
 " Check a terminal in popup window with different colors
 func Terminal_in_popup_color(group_name, highlight_cmds, highlight_opt, popup_cmds, popup_opt)
+  CheckScreendump
   CheckRunVimInTerminal
   CheckUnix
 
   let lines = [
 	\ 'call setline(1, range(20))',
+    \ 'func NotifyParent(...)',
+    \ '  call echoraw("' .. TermNotifyParentCmd(v:true) .. '")',
+    \ 'endfunc',
 	\ 'func OpenTerm()',
-	\ "  let s:buf = term_start('cat', #{hidden: 1, "
+	\ "  let s:buf = term_start('cat', #{hidden: 1, term_finish: 'close', "
 	\ .. a:highlight_opt .. "})",
-	\ '  let g:winid = popup_create(s:buf, #{border: [], '
-  \ .. a:popup_opt .. '})',
-  \ ] + a:popup_cmds + [
+    \ '  let g:winid = popup_create(s:buf, #{border: [], '
+    \      .. 'callback: {->NotifyParent()}, '
+    \      .. a:popup_opt .. '})',
+    \ ] + a:popup_cmds + [
+    \ '  call NotifyParent()',
 	\ 'endfunc',
-	\ ] + a:highlight_cmds
-  call writefile(lines, 'XtermPopup')
+	\ ] + a:highlight_cmds + [
+    \ 'call NotifyParent()',
+    \ ]
+  call writefile(lines, 'XtermPopup', 'D')
   let buf = RunVimInTerminal('-S XtermPopup', #{rows: 15})
-  call TermWait(buf, 100)
+  call WaitForChildNotification()
   call term_sendkeys(buf, ":set noruler\<CR>")
   call term_sendkeys(buf, ":call OpenTerm()\<CR>")
-  call TermWait(buf, 50)
+  call WaitForChildNotification()
   call term_sendkeys(buf, "hello\<CR>")
   call VerifyScreenDump(buf, 'Test_terminal_popup_' .. a:group_name, {})
 
   call term_sendkeys(buf, "\<C-D>")
-  call TermWait(buf, 50)
-  call term_sendkeys(buf, ":q\<CR>")
-  call TermWait(buf, 50)  " wait for terminal to vanish
+  call WaitForChildNotification()
   call StopVimInTerminal(buf)
-  call delete('XtermPopup')
 endfunc
 
 func Test_terminal_in_popup_color_Terminal()
@@ -528,6 +541,18 @@ func Test_double_popup_terminal()
   exe buf2 .. 'bwipe!'
 endfunc
 
+func Test_escape_popup_terminal()
+  set hidden
+
+  " Cannot escape a terminal popup window using win_gotoid
+  let prev_win = win_getid()
+  eval term_start('sh', #{hidden: 1, term_finish: 'close'})->popup_create({})
+  call assert_fails("call win_gotoid(" .. prev_win .. ")", 'E863:')
+
+  call popup_clear(1)
+  set hidden&
+endfunc
+
 func Test_issue_5607()
   let wincount = winnr('$')
   exe 'terminal' &shell &shellcmdflag 'exit'
@@ -570,7 +595,7 @@ func Test_term_and_startinsert()
      term
      startinsert
   EOL
-  call writefile(lines, 'XTest_startinsert')
+  call writefile(lines, 'XTest_startinsert', 'D')
   let buf = RunVimInTerminal('-S XTest_startinsert', {})
 
   call term_sendkeys(buf, "exit\r")
@@ -580,7 +605,6 @@ func Test_term_and_startinsert()
   call WaitForAssert({-> assert_equal("some text<", term_getline(buf, 1))})
 
   call StopVimInTerminal(buf)
-  call delete('XTest_startinsert')
 endfunc
 
 " Test for passing invalid arguments to terminal functions
@@ -671,7 +695,7 @@ func Test_term_mouse()
     red green yellow red blue
     vim emacs sublime nano
   END
-  call writefile(lines, 'Xtest_mouse')
+  call writefile(lines, 'Xtest_mouse', 'D')
 
   " Create a terminal window running Vim for the test with mouse enabled
   let prev_win = win_getid()
@@ -682,6 +706,11 @@ func Test_term_mouse()
   call term_sendkeys(buf, ":set mousemodel=extend\<CR>")
   call TermWait(buf)
   redraw!
+
+  " Funcref used in WaitFor() to check that the "Xbuf" file is readable and
+  " has some contents.  This avoids a "List index out of range" error when the
+  " file hasn't been written yet.
+  let XbufNotEmpty = {-> filereadable('Xbuf') && len(readfile('Xbuf')) > 0}
 
   " Use the mouse to enter the terminal window
   call win_gotoid(prev_win)
@@ -695,73 +724,76 @@ func Test_term_mouse()
   call test_setmouse(3, 8)
   call term_sendkeys(buf, "\<LeftMouse>\<LeftRelease>")
   call TermWait(buf, 50)
+  call delete('Xbuf')
   call term_sendkeys(buf, ":call writefile([json_encode(getpos('.'))], 'Xbuf')\<CR>")
   call TermWait(buf, 50)
+  call WaitFor(XbufNotEmpty)
   let pos = json_decode(readfile('Xbuf')[0])
   call assert_equal([3, 8], pos[1:2])
+  call delete('Xbuf')
 
   " Test for selecting text using mouse
-  call delete('Xbuf')
   call test_setmouse(2, 11)
   call term_sendkeys(buf, "\<LeftMouse>")
   call test_setmouse(2, 16)
   call term_sendkeys(buf, "\<LeftRelease>y")
   call TermWait(buf, 50)
   call term_sendkeys(buf, ":call writefile([@\"], 'Xbuf')\<CR>")
-  call TermWait(buf, 50)
-  call assert_equal('yellow', readfile('Xbuf')[0])
+  call WaitFor(XbufNotEmpty)
+  call WaitForAssert({-> assert_equal('yellow', readfile('Xbuf')[0])})
+  call delete('Xbuf')
 
   " Test for selecting text using double click
-  call delete('Xbuf')
   call test_setmouse(1, 11)
   call term_sendkeys(buf, "\<LeftMouse>\<LeftRelease>\<LeftMouse>")
   call test_setmouse(1, 17)
   call term_sendkeys(buf, "\<LeftRelease>y")
   call TermWait(buf, 50)
   call term_sendkeys(buf, ":call writefile([@\"], 'Xbuf')\<CR>")
-  call TermWait(buf, 50)
+  call WaitFor(XbufNotEmpty)
   call assert_equal('three four', readfile('Xbuf')[0])
+  call delete('Xbuf')
 
   " Test for selecting a line using triple click
-  call delete('Xbuf')
   call test_setmouse(3, 2)
   call term_sendkeys(buf, "\<LeftMouse>\<LeftRelease>\<LeftMouse>\<LeftRelease>\<LeftMouse>\<LeftRelease>y")
   call TermWait(buf, 50)
   call term_sendkeys(buf, ":call writefile([@\"], 'Xbuf')\<CR>")
-  call TermWait(buf, 50)
+  call WaitFor(XbufNotEmpty)
   call assert_equal("vim emacs sublime nano\n", readfile('Xbuf')[0])
+  call delete('Xbuf')
 
   " Test for selecting a block using quadruple click
-  call delete('Xbuf')
   call test_setmouse(1, 11)
   call term_sendkeys(buf, "\<LeftMouse>\<LeftRelease>\<LeftMouse>\<LeftRelease>\<LeftMouse>\<LeftRelease>\<LeftMouse>")
   call test_setmouse(3, 13)
   call term_sendkeys(buf, "\<LeftRelease>y")
   call TermWait(buf, 50)
   call term_sendkeys(buf, ":call writefile([@\"], 'Xbuf')\<CR>")
-  call TermWait(buf, 50)
+  call WaitFor(XbufNotEmpty)
   call assert_equal("ree\nyel\nsub", readfile('Xbuf')[0])
+  call delete('Xbuf')
 
   " Test for extending a selection using right click
-  call delete('Xbuf')
   call test_setmouse(2, 9)
   call term_sendkeys(buf, "\<LeftMouse>\<LeftRelease>")
   call test_setmouse(2, 16)
   call term_sendkeys(buf, "\<RightMouse>\<RightRelease>y")
   call TermWait(buf, 50)
   call term_sendkeys(buf, ":call writefile([@\"], 'Xbuf')\<CR>")
-  call TermWait(buf, 50)
+  call WaitFor(XbufNotEmpty)
   call assert_equal("n yellow", readfile('Xbuf')[0])
+  call delete('Xbuf')
 
   " Test for pasting text using middle click
-  call delete('Xbuf')
   call term_sendkeys(buf, ":let @r='bright '\<CR>")
   call test_setmouse(2, 22)
   call term_sendkeys(buf, "\"r\<MiddleMouse>\<MiddleRelease>")
   call TermWait(buf, 50)
   call term_sendkeys(buf, ":call writefile([getline(2)], 'Xbuf')\<CR>")
-  call TermWait(buf, 50)
+  call WaitFor(XbufNotEmpty)
   call assert_equal("red bright blue", readfile('Xbuf')[0][-15:])
+  call delete('Xbuf')
 
   " cleanup
   call TermWait(buf)
@@ -771,7 +803,6 @@ func Test_term_mouse()
   let &ttymouse = save_ttymouse
   let &clipboard = save_clipboard
   set mousetime&
-  call delete('Xtest_mouse')
   call delete('Xbuf')
 endfunc
 
@@ -824,7 +855,7 @@ func Test_term_modeless_selection()
     red green yellow red blue
     vim emacs sublime nano
   END
-  call writefile(lines, 'Xtest_modeless')
+  call writefile(lines, 'Xtest_modeless', 'D')
 
   " Create a terminal window running Vim for the test with mouse disabled
   let prev_win = win_getid()
@@ -857,7 +888,6 @@ func Test_term_modeless_selection()
   let &term = save_term
   let &ttymouse = save_ttymouse
   set mousetime& clipboard&
-  call delete('Xtest_modeless')
   new | only!
 endfunc
 
@@ -921,5 +951,71 @@ func Test_terminal_term_start_error()
   delfunc s:term_start_error
 endfunc
 
+func Test_terminal_vt420()
+  CheckRunVimInTerminal
+  " For Termcap
+  CheckUnix
+  CheckExecutable infocmp
+  let a = system('infocmp vt420')
+  if v:shell_error
+     " reset v:shell_error
+     let a = system('true')
+     throw 'Skipped: vt420 terminfo not available'
+  endif
+  let rows = 15
+  call writefile([':set term=vt420'], 'Xterm420', 'D')
+
+  let buf = RunVimInTerminal('-S Xterm420', #{rows: rows})
+  call TermWait(buf, 100)
+  call term_sendkeys(buf, ":set t_xo?\<CR>")
+  call WaitForAssert({-> assert_match('t_xo=y', term_getline(buf, rows))})
+  call StopVimInTerminal(buf)
+
+  call writefile([''], 'Xterm420')
+  let buf = RunVimInTerminal('-S Xterm420', #{rows: rows})
+  call TermWait(buf, 100)
+  call term_sendkeys(buf, ":set t_xo?\<CR>")
+  call WaitForAssert({-> assert_match('t_xo=\s\+', term_getline(buf, rows))})
+  call StopVimInTerminal(buf)
+endfunc
+
+" Test for using 'vertical' with term_start(). If a following term_start(),
+" doesn't have the 'vertical' attribute, then it should be split horizontally.
+func Test_terminal_vertical()
+  let lines =<< trim END
+    call term_start("NONE", {'vertical': 1})
+    call term_start("NONE")
+    VAR layout = winlayout()
+    call assert_equal('row', layout[0], string(layout))
+    call assert_equal('col', layout[1][0][0], string(layout))
+    :%bw!
+  END
+  call v9.CheckLegacyAndVim9Success(lines)
+endfunc
+
+" Needs to come before Test_hidden_terminal(), why?
+func Test_autocmd_buffilepost_with_hidden_term()
+  CheckExecutable true
+  new XTestFile
+  defer delete('XTestFile')
+  call setline(1, ['one', 'two', 'three'])
+  call cursor(3, 10)
+  augroup TestCursor
+    au!
+    autocmd BufFilePost * call setbufvar(3, '&tabstop', 4)
+  augroup END
+
+  let buf = term_start(['true'], #{hidden: 1, term_finish: 'close'})
+  call term_wait(buf)
+  redraw!
+  call assert_equal('XTestFile', bufname('%'))
+  call assert_equal([0, 3, 5, 0], getpos('.'))
+
+  augroup TestCursor
+    au!
+  augroup END
+  augroup! TestCursor
+  bw! XTestFile
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

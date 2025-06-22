@@ -18,10 +18,12 @@
 # define SEARCH_HL_PRIORITY 0
 
 /*
- * Add match to the match list of window 'wp'.  The pattern 'pat' will be
- * highlighted with the group 'grp' with priority 'prio'.
- * Optionally, a desired ID 'id' can be specified (greater than or equal to 1).
- * If no particular ID is desired, -1 must be specified for 'id'.
+ * Add match to the match list of window "wp".
+ * If "pat" is not NULL the pattern will be highlighted with the group "grp"
+ * with priority "prio".
+ * If "pos_list" is not NULL the list of posisions defines the highlights.
+ * Optionally, a desired ID "id" can be specified (greater than or equal to 1).
+ * If no particular ID is desired, -1 must be specified for "id".
  * Return ID of added match, -1 on failure.
  */
     static int
@@ -39,7 +41,7 @@ match_add(
     matchitem_T	*m;
     int		hlg_id;
     regprog_T	*regprog = NULL;
-    int		rtype = SOME_VALID;
+    int		rtype = UPD_SOME_VALID;
 
     if (*grp == NUL || (pat != NULL && *pat == NUL))
 	return -1;
@@ -48,19 +50,28 @@ match_add(
 	semsg(_(e_invalid_id_nr_must_be_greater_than_or_equal_to_one_1), id);
 	return -1;
     }
-    if (id != -1)
+    if (id == -1)
     {
-	cur = wp->w_match_head;
-	while (cur != NULL)
-	{
-	    if (cur->id == id)
+	// use the next available match ID
+	id = wp->w_next_match_id++;
+    }
+    else
+    {
+	// check the given ID is not already in use
+	for (cur = wp->w_match_head; cur != NULL; cur = cur->mit_next)
+	    if (cur->mit_id == id)
 	    {
 		semsg(_(e_id_already_taken_nr), id);
 		return -1;
 	    }
-	    cur = cur->next;
-	}
+
+	// Make sure the next match ID is always higher than the highest
+	// manually selected ID.  Add some extra in case a few more IDs are
+	// added soon.
+	if (wp->w_next_match_id < id + 100)
+	    wp->w_next_match_id = id + 100;
     }
+
     if ((hlg_id = syn_namen2id(grp, (int)STRLEN(grp))) == 0)
     {
 	semsg(_(e_no_such_highlight_group_name_str), grp);
@@ -72,30 +83,31 @@ match_add(
 	return -1;
     }
 
-    // Find available match ID.
-    while (id == -1)
-    {
-	cur = wp->w_match_head;
-	while (cur != NULL && cur->id != wp->w_next_match_id)
-	    cur = cur->next;
-	if (cur == NULL)
-	    id = wp->w_next_match_id;
-	wp->w_next_match_id++;
-    }
-
     // Build new match.
     m = ALLOC_CLEAR_ONE(matchitem_T);
-    m->id = id;
-    m->priority = prio;
-    m->pattern = pat == NULL ? NULL : vim_strsave(pat);
-    m->hlg_id = hlg_id;
-    m->match.regprog = regprog;
-    m->match.rmm_ic = FALSE;
-    m->match.rmm_maxcol = 0;
+    if (m == NULL)
+	return -1;
+    if (pos_list != NULL && pos_list->lv_len > 0)
+    {
+	m->mit_pos_array = ALLOC_CLEAR_MULT(llpos_T, pos_list->lv_len);
+	if (m->mit_pos_array == NULL)
+	{
+	    vim_free(m);
+	    return -1;
+	}
+	m->mit_pos_count = pos_list->lv_len;
+    }
+    m->mit_id = id;
+    m->mit_priority = prio;
+    m->mit_pattern = pat == NULL ? NULL : vim_strsave(pat);
+    m->mit_hlg_id = hlg_id;
+    m->mit_match.regprog = regprog;
+    m->mit_match.rmm_ic = FALSE;
+    m->mit_match.rmm_maxcol = 0;
 # if defined(FEAT_CONCEAL)
-    m->conceal_char = 0;
+    m->mit_conceal_char = 0;
     if (conceal_char != NULL)
-	m->conceal_char = (*mb_ptr2char)(conceal_char);
+	m->mit_conceal_char = (*mb_ptr2char)(conceal_char);
 # endif
 
     // Set up position matches
@@ -107,8 +119,7 @@ match_add(
 	int		i;
 
 	CHECK_LIST_MATERIALIZE(pos_list);
-	for (i = 0, li = pos_list->lv_first; li != NULL && i < MAXPOSMATCH;
-							i++, li = li->li_next)
+	for (i = 0, li = pos_list->lv_first; li != NULL; i++, li = li->li_next)
 	{
 	    linenr_T	lnum = 0;
 	    colnr_T	col = 0;
@@ -133,7 +144,7 @@ match_add(
 		    --i;
 		    continue;
 		}
-		m->pos.pos[i].lnum = lnum;
+		m->mit_pos_array[i].lnum = lnum;
 		subli = subli->li_next;
 		if (subli != NULL)
 		{
@@ -148,8 +159,8 @@ match_add(
 			    goto fail;
 		    }
 		}
-		m->pos.pos[i].col = col;
-		m->pos.pos[i].len = len;
+		m->mit_pos_array[i].col = col;
+		m->mit_pos_array[i].len = len;
 	    }
 	    else if (li->li_tv.v_type == VAR_NUMBER)
 	    {
@@ -158,9 +169,9 @@ match_add(
 		    --i;
 		    continue;
 		}
-		m->pos.pos[i].lnum = li->li_tv.vval.v_number;
-		m->pos.pos[i].col = 0;
-		m->pos.pos[i].len = 0;
+		m->mit_pos_array[i].lnum = li->li_tv.vval.v_number;
+		m->mit_pos_array[i].col = 0;
+		m->mit_pos_array[i].len = 0;
 	    }
 	    else
 	    {
@@ -176,23 +187,10 @@ match_add(
 	// Calculate top and bottom lines for redrawing area
 	if (toplnum != 0)
 	{
-	    if (wp->w_buffer->b_mod_set)
-	    {
-		if (wp->w_buffer->b_mod_top > toplnum)
-		    wp->w_buffer->b_mod_top = toplnum;
-		if (wp->w_buffer->b_mod_bot < botlnum)
-		    wp->w_buffer->b_mod_bot = botlnum;
-	    }
-	    else
-	    {
-		wp->w_buffer->b_mod_set = TRUE;
-		wp->w_buffer->b_mod_top = toplnum;
-		wp->w_buffer->b_mod_bot = botlnum;
-		wp->w_buffer->b_mod_xlines = 0;
-	    }
-	    m->pos.toplnum = toplnum;
-	    m->pos.botlnum = botlnum;
-	    rtype = VALID;
+	    redraw_win_range_later(wp, toplnum, botlnum);
+	    m->mit_toplnum = toplnum;
+	    m->mit_botlnum = botlnum;
+	    rtype = UPD_VALID;
 	}
     }
 
@@ -200,21 +198,23 @@ match_add(
     // the match priorities.
     cur = wp->w_match_head;
     prev = cur;
-    while (cur != NULL && prio >= cur->priority)
+    while (cur != NULL && prio >= cur->mit_priority)
     {
 	prev = cur;
-	cur = cur->next;
+	cur = cur->mit_next;
     }
     if (cur == prev)
 	wp->w_match_head = m;
     else
-	prev->next = m;
-    m->next = cur;
+	prev->mit_next = m;
+    m->mit_next = cur;
 
     redraw_win_later(wp, rtype);
     return id;
 
 fail:
+    vim_free(m->mit_pattern);
+    vim_free(m->mit_pos_array);
     vim_free(m);
     return -1;
 }
@@ -228,18 +228,19 @@ match_delete(win_T *wp, int id, int perr)
 {
     matchitem_T	*cur = wp->w_match_head;
     matchitem_T	*prev = cur;
-    int		rtype = SOME_VALID;
+    int		rtype = UPD_SOME_VALID;
 
     if (id < 1)
     {
 	if (perr == TRUE)
-	    semsg(_(e_invalid_id_nr_must_be_greater_than_or_equal_to_one_2), id);
+	    semsg(_(e_invalid_id_nr_must_be_greater_than_or_equal_to_one_2),
+									   id);
 	return -1;
     }
-    while (cur != NULL && cur->id != id)
+    while (cur != NULL && cur->mit_id != id)
     {
 	prev = cur;
-	cur = cur->next;
+	cur = cur->mit_next;
     }
     if (cur == NULL)
     {
@@ -248,29 +249,17 @@ match_delete(win_T *wp, int id, int perr)
 	return -1;
     }
     if (cur == prev)
-	wp->w_match_head = cur->next;
+	wp->w_match_head = cur->mit_next;
     else
-	prev->next = cur->next;
-    vim_regfree(cur->match.regprog);
-    vim_free(cur->pattern);
-    if (cur->pos.toplnum != 0)
+	prev->mit_next = cur->mit_next;
+    vim_regfree(cur->mit_match.regprog);
+    vim_free(cur->mit_pattern);
+    if (cur->mit_toplnum != 0)
     {
-	if (wp->w_buffer->b_mod_set)
-	{
-	    if (wp->w_buffer->b_mod_top > cur->pos.toplnum)
-		wp->w_buffer->b_mod_top = cur->pos.toplnum;
-	    if (wp->w_buffer->b_mod_bot < cur->pos.botlnum)
-		wp->w_buffer->b_mod_bot = cur->pos.botlnum;
-	}
-	else
-	{
-	    wp->w_buffer->b_mod_set = TRUE;
-	    wp->w_buffer->b_mod_top = cur->pos.toplnum;
-	    wp->w_buffer->b_mod_bot = cur->pos.botlnum;
-	    wp->w_buffer->b_mod_xlines = 0;
-	}
-	rtype = VALID;
+	redraw_win_range_later(wp, cur->mit_toplnum, cur->mit_botlnum);
+	rtype = UPD_VALID;
     }
+    vim_free(cur->mit_pos_array);
     vim_free(cur);
     redraw_win_later(wp, rtype);
     return 0;
@@ -286,13 +275,14 @@ clear_matches(win_T *wp)
 
     while (wp->w_match_head != NULL)
     {
-	m = wp->w_match_head->next;
-	vim_regfree(wp->w_match_head->match.regprog);
-	vim_free(wp->w_match_head->pattern);
+	m = wp->w_match_head->mit_next;
+	vim_regfree(wp->w_match_head->mit_match.regprog);
+	vim_free(wp->w_match_head->mit_pattern);
+	vim_free(wp->w_match_head->mit_pos_array);
 	vim_free(wp->w_match_head);
 	wp->w_match_head = m;
     }
-    redraw_win_later(wp, SOME_VALID);
+    redraw_win_later(wp, UPD_SOME_VALID);
 }
 
 /*
@@ -304,8 +294,8 @@ get_match(win_T *wp, int id)
 {
     matchitem_T *cur = wp->w_match_head;
 
-    while (cur != NULL && cur->id != id)
-	cur = cur->next;
+    while (cur != NULL && cur->mit_id != id)
+	cur = cur->mit_next;
     return cur;
 }
 
@@ -322,19 +312,15 @@ init_search_hl(win_T *wp, match_T *search_hl)
     cur = wp->w_match_head;
     while (cur != NULL)
     {
-	cur->hl.rm = cur->match;
-	if (cur->hlg_id == 0)
-	    cur->hl.attr = 0;
+	cur->mit_hl.rm = cur->mit_match;
+	if (cur->mit_hlg_id == 0)
+	    cur->mit_hl.attr = 0;
 	else
-	    cur->hl.attr = syn_id2attr(cur->hlg_id);
-	cur->hl.buf = wp->w_buffer;
-	cur->hl.lnum = 0;
-	cur->hl.first_lnum = 0;
-# ifdef FEAT_RELTIME
-	// Set the time limit to 'redrawtime'.
-	profile_setlimit(p_rdt, &(cur->hl.tm));
-# endif
-	cur = cur->next;
+	    cur->mit_hl.attr = syn_id2attr(cur->mit_hlg_id);
+	cur->mit_hl.buf = wp->w_buffer;
+	cur->mit_hl.lnum = 0;
+	cur->mit_hl.first_lnum = 0;
+	cur = cur->mit_next;
     }
     search_hl->buf = wp->w_buffer;
     search_hl->lnum = 0;
@@ -350,15 +336,15 @@ init_search_hl(win_T *wp, match_T *search_hl)
 next_search_hl_pos(
     match_T	    *shl,	// points to a match
     linenr_T	    lnum,
-    posmatch_T	    *posmatch,	// match positions
+    matchitem_T	    *match,	// match item with positions
     colnr_T	    mincol)	// minimal column for a match
 {
     int	    i;
     int	    found = -1;
 
-    for (i = posmatch->cur; i < MAXPOSMATCH; i++)
+    for (i = match->mit_pos_cur; i < match->mit_pos_count; i++)
     {
-	llpos_T	*pos = &posmatch->pos[i];
+	llpos_T	*pos = &match->mit_pos_array[i];
 
 	if (pos->lnum == 0)
 	    break;
@@ -368,27 +354,26 @@ next_search_hl_pos(
 	{
 	    if (found >= 0)
 	    {
-		// if this match comes before the one at "found" then swap
-		// them
-		if (pos->col < posmatch->pos[found].col)
+		// if this match comes before the one at "found" then swap them
+		if (pos->col < match->mit_pos_array[found].col)
 		{
 		    llpos_T	tmp = *pos;
 
-		    *pos = posmatch->pos[found];
-		    posmatch->pos[found] = tmp;
+		    *pos = match->mit_pos_array[found];
+		    match->mit_pos_array[found] = tmp;
 		}
 	    }
 	    else
 		found = i;
 	}
     }
-    posmatch->cur = 0;
+    match->mit_pos_cur = 0;
     if (found >= 0)
     {
-	colnr_T	start = posmatch->pos[found].col == 0
-					    ? 0 : posmatch->pos[found].col - 1;
-	colnr_T	end = posmatch->pos[found].col == 0
-				   ? MAXCOL : start + posmatch->pos[found].len;
+	colnr_T	start = match->mit_pos_array[found].col == 0
+				     ? 0 : match->mit_pos_array[found].col - 1;
+	colnr_T	end = match->mit_pos_array[found].col == 0
+			    ? MAXCOL : start + match->mit_pos_array[found].len;
 
 	shl->lnum = lnum;
 	shl->rm.startpos[0].lnum = 0;
@@ -396,7 +381,8 @@ next_search_hl_pos(
 	shl->rm.endpos[0].lnum = 0;
 	shl->rm.endpos[0].col = end;
 	shl->is_addpos = TRUE;
-	posmatch->cur = found + 1;
+	shl->has_cursor = FALSE;
+	match->mit_pos_cur = found + 1;
 	return 1;
     }
     return 0;
@@ -423,6 +409,7 @@ next_search_hl(
     colnr_T	matchcol;
     long	nmatched;
     int		called_emsg_before = called_emsg;
+    int		timed_out = FALSE;
 
     // for :{range}s/pat only highlight inside the range
     if ((lnum < search_first_line || lnum > search_last_line) && cur == NULL)
@@ -448,14 +435,6 @@ next_search_hl(
     // or none is found in this line.
     for (;;)
     {
-# ifdef FEAT_RELTIME
-	// Stop searching after passing the time limit.
-	if (profile_passed_limit(&(shl->tm)))
-	{
-	    shl->lnum = 0;		// no match found in time
-	    break;
-	}
-# endif
 	// Three situations:
 	// 1. No useful previous match: search from start of line.
 	// 2. Not Vi compatible or empty match: continue at next character.
@@ -489,23 +468,16 @@ next_search_hl(
 	if (shl->rm.regprog != NULL)
 	{
 	    // Remember whether shl->rm is using a copy of the regprog in
-	    // cur->match.
+	    // cur->mit_match.
 	    int regprog_is_copy = (shl != search_hl && cur != NULL
-				&& shl == &cur->hl
-				&& cur->match.regprog == cur->hl.rm.regprog);
-	    int timed_out = FALSE;
+			  && shl == &cur->mit_hl
+			  && cur->mit_match.regprog == cur->mit_hl.rm.regprog);
 
 	    nmatched = vim_regexec_multi(&shl->rm, win, shl->buf, lnum,
-		    matchcol,
-#ifdef FEAT_RELTIME
-		    &(shl->tm), &timed_out
-#else
-		    NULL, NULL
-#endif
-		    );
+							 matchcol, &timed_out);
 	    // Copy the regprog, in case it got freed and recompiled.
 	    if (regprog_is_copy)
-		cur->match.regprog = cur->hl.rm.regprog;
+		cur->mit_match.regprog = cur->mit_hl.rm.regprog;
 
 	    if (called_emsg > called_emsg_before || got_int || timed_out)
 	    {
@@ -523,7 +495,7 @@ next_search_hl(
 	    }
 	}
 	else if (cur != NULL)
-	    nmatched = next_search_hl_pos(shl, lnum, &(cur->pos), matchcol);
+	    nmatched = next_search_hl_pos(shl, lnum, cur, matchcol);
 	else
 	    nmatched = 0;
 	if (nmatched == 0)
@@ -569,7 +541,7 @@ prepare_search_hl(win_T *wp, match_T *search_hl, linenr_T lnum)
 	    shl_flag = TRUE;
 	}
 	else
-	    shl = &cur->hl;
+	    shl = &cur->mit_hl;
 	if (shl->rm.regprog != NULL
 		&& shl->lnum == 0
 		&& re_multiline(shl->rm.regprog))
@@ -587,7 +559,7 @@ prepare_search_hl(win_T *wp, match_T *search_hl, linenr_T lnum)
 # endif
 	    }
 	    if (cur != NULL)
-		cur->pos.cur = 0;
+		cur->mit_pos_cur = 0;
 	    pos_inprogress = TRUE;
 	    n = 0;
 	    while (shl->first_lnum < lnum && (shl->rm.regprog != NULL
@@ -595,7 +567,7 @@ prepare_search_hl(win_T *wp, match_T *search_hl, linenr_T lnum)
 	    {
 		next_search_hl(wp, search_hl, shl, shl->first_lnum, (colnr_T)n,
 					       shl == search_hl ? NULL : cur);
-		pos_inprogress = cur == NULL || cur->pos.cur == 0
+		pos_inprogress = cur == NULL || cur->mit_pos_cur == 0
 							      ? FALSE : TRUE;
 		if (shl->lnum != 0)
 		{
@@ -612,8 +584,28 @@ prepare_search_hl(win_T *wp, match_T *search_hl, linenr_T lnum)
 	    }
 	}
 	if (shl != search_hl && cur != NULL)
-	    cur = cur->next;
+	    cur = cur->mit_next;
     }
+}
+
+/*
+ * Update "shl->has_cursor" based on the match in "shl" and the cursor
+ * position.
+ */
+    static void
+check_cur_search_hl(win_T *wp, match_T *shl)
+{
+    linenr_T linecount = shl->rm.endpos[0].lnum - shl->rm.startpos[0].lnum;
+
+    if (wp->w_cursor.lnum >= shl->lnum
+	    && wp->w_cursor.lnum <= shl->lnum + linecount
+	    && (wp->w_cursor.lnum > shl->lnum
+				|| wp->w_cursor.col >= shl->rm.startpos[0].col)
+	    && (wp->w_cursor.lnum < shl->lnum + linecount
+				  || wp->w_cursor.col < shl->rm.endpos[0].col))
+	shl->has_cursor = TRUE;
+    else
+	shl->has_cursor = FALSE;
 }
 
 /*
@@ -649,13 +641,14 @@ prepare_search_hl_line(
 	    shl_flag = TRUE;
 	}
 	else
-	    shl = &cur->hl;
+	    shl = &cur->mit_hl;
 	shl->startcol = MAXCOL;
 	shl->endcol = MAXCOL;
 	shl->attr_cur = 0;
 	shl->is_addpos = FALSE;
+	shl->has_cursor = FALSE;
 	if (cur != NULL)
-	    cur->pos.cur = 0;
+	    cur->mit_pos_cur = 0;
 	next_search_hl(wp, search_hl, shl, lnum, mincol,
 						shl == search_hl ? NULL : cur);
 
@@ -674,6 +667,11 @@ prepare_search_hl_line(
 		shl->endcol = shl->rm.endpos[0].col;
 	    else
 		shl->endcol = MAXCOL;
+
+	    // check if the cursor is in the match before changing the columns
+	    if (shl == search_hl)
+		check_cur_search_hl(wp, shl);
+
 	    // Highlight one character for an empty match.
 	    if (shl->startcol == shl->endcol)
 	    {
@@ -690,7 +688,7 @@ prepare_search_hl_line(
 	    area_highlighting = TRUE;
 	}
 	if (shl != search_hl && cur != NULL)
-	    cur = cur->next;
+	    cur = cur->mit_next;
     }
     return area_highlighting;
 }
@@ -734,15 +732,15 @@ update_search_hl(
     {
 	if (shl_flag == FALSE
 		&& (cur == NULL
-			|| cur->priority > SEARCH_HL_PRIORITY))
+			|| cur->mit_priority > SEARCH_HL_PRIORITY))
 	{
 	    shl = search_hl;
 	    shl_flag = TRUE;
 	}
 	else
-	    shl = &cur->hl;
+	    shl = &cur->mit_hl;
 	if (cur != NULL)
-	    cur->pos.cur = 0;
+	    cur->mit_pos_cur = 0;
 	pos_inprogress = TRUE;
 	while (shl->rm.regprog != NULL || (cur != NULL && pos_inprogress))
 	{
@@ -760,21 +758,30 @@ update_search_hl(
 		// the match.
 		if (cur != NULL
 			&& shl != search_hl
-			&& syn_name2id((char_u *)"Conceal") == cur->hlg_id)
+			&& syn_name2id((char_u *)"Conceal") == cur->mit_hlg_id)
 		{
 		    *has_match_conc = col == shl->startcol ? 2 : 1;
-		    *match_conc = cur->conceal_char;
+		    *match_conc = cur->mit_conceal_char;
 		}
 		else
 		    *has_match_conc = 0;
 # endif
+		// Highlight the match were the cursor is using the CurSearch
+		// group.
+		if (shl == search_hl && shl->has_cursor)
+		{
+		    shl->attr_cur = HL_ATTR(HLF_LC);
+		    if (shl->attr_cur != shl->attr)
+			search_hl_has_cursor_lnum = lnum;
+		}
+
 	    }
 	    else if (col == shl->endcol)
 	    {
 		shl->attr_cur = 0;
 		next_search_hl(wp, search_hl, shl, lnum, col,
 					       shl == search_hl ? NULL : cur);
-		pos_inprogress = !(cur == NULL || cur->pos.cur == 0);
+		pos_inprogress = !(cur == NULL || cur->mit_pos_cur == 0);
 
 		// Need to get the line again, a multi-line regexp may have
 		// made it invalid.
@@ -787,6 +794,10 @@ update_search_hl(
 			shl->endcol = shl->rm.endpos[0].col;
 		    else
 			shl->endcol = MAXCOL;
+
+		    // check if the cursor is in the match
+		    if (shl == search_hl)
+			check_cur_search_hl(wp, shl);
 
 		    if (shl->startcol == shl->endcol)
 		    {
@@ -814,7 +825,7 @@ update_search_hl(
 	    break;
 	}
 	if (shl != search_hl && cur != NULL)
-	    cur = cur->next;
+	    cur = cur->mit_next;
     }
 
     // Use attributes from match with highest priority among 'search_hl' and
@@ -825,20 +836,20 @@ update_search_hl(
     {
 	if (shl_flag == FALSE
 		&& (cur == NULL ||
-			cur->priority > SEARCH_HL_PRIORITY))
+			cur->mit_priority > SEARCH_HL_PRIORITY))
 	{
 	    shl = search_hl;
 	    shl_flag = TRUE;
 	}
 	else
-	    shl = &cur->hl;
+	    shl = &cur->mit_hl;
 	if (shl->attr_cur != 0)
 	{
 	    search_attr = shl->attr_cur;
 	    *on_last_col = col + 1 >= shl->endcol;
 	}
 	if (shl != search_hl && cur != NULL)
-	    cur = cur->next;
+	    cur = cur->mit_next;
     }
     // Only highlight one character after the last column.
     if (*(*line + col) == NUL && (did_line_attr >= 1
@@ -876,14 +887,14 @@ get_prevcol_hl_flag(win_T *wp, match_T *search_hl, long curcol)
 	cur = wp->w_match_head;
 	while (cur != NULL)
 	{
-	    if (!cur->hl.is_addpos && (prevcol == (long)cur->hl.startcol
-			|| (prevcol > (long)cur->hl.startcol
-						 && cur->hl.endcol == MAXCOL)))
+	    if (!cur->mit_hl.is_addpos && (prevcol == (long)cur->mit_hl.startcol
+			|| (prevcol > (long)cur->mit_hl.startcol
+					     && cur->mit_hl.endcol == MAXCOL)))
 	    {
 		prevcol_hl_flag = TRUE;
 		break;
 	    }
-	    cur = cur->next;
+	    cur = cur->mit_next;
 	}
     }
     return prevcol_hl_flag;
@@ -907,19 +918,19 @@ get_search_match_hl(win_T *wp, match_T *search_hl, long col, int *char_attr)
     {
 	if (shl_flag == FALSE
 		&& ((cur != NULL
-			&& cur->priority > SEARCH_HL_PRIORITY)
+			&& cur->mit_priority > SEARCH_HL_PRIORITY)
 		    || cur == NULL))
 	{
 	    shl = search_hl;
 	    shl_flag = TRUE;
 	}
 	else
-	    shl = &cur->hl;
+	    shl = &cur->mit_hl;
 	if (col - 1 == (long)shl->startcol
 		&& (shl == search_hl || !shl->is_addpos))
 	    *char_attr = shl->attr;
 	if (shl != search_hl && cur != NULL)
-	    cur = cur->next;
+	    cur = cur->mit_next;
     }
 }
 
@@ -938,18 +949,17 @@ matchadd_dict_arg(typval_T *tv, char_u **conceal_char, win_T **win)
 	return FAIL;
     }
 
-    if (dict_find(tv->vval.v_dict, (char_u *)"conceal", -1) != NULL)
-	*conceal_char = dict_get_string(tv->vval.v_dict,
-						   (char_u *)"conceal", FALSE);
+    if (dict_has_key(tv->vval.v_dict, "conceal"))
+	*conceal_char = dict_get_string(tv->vval.v_dict, "conceal", FALSE);
 
-    if ((di = dict_find(tv->vval.v_dict, (char_u *)"window", -1)) != NULL)
+    if ((di = dict_find(tv->vval.v_dict, (char_u *)"window", -1)) == NULL)
+	return OK;
+
+    *win = find_win_by_nr_or_id(&di->di_tv);
+    if (*win == NULL)
     {
-	*win = find_win_by_nr_or_id(&di->di_tv);
-	if (*win == NULL)
-	{
-	    emsg(_(e_invalid_window_number));
-	    return FAIL;
-	}
+	emsg(_(e_invalid_window_number));
+	return FAIL;
     }
 
     return OK;
@@ -999,16 +1009,16 @@ f_getmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	dict = dict_alloc();
 	if (dict == NULL)
 	    return;
-	if (cur->match.regprog == NULL)
+	if (cur->mit_match.regprog == NULL)
 	{
 	    // match added with matchaddpos()
-	    for (i = 0; i < MAXPOSMATCH; ++i)
+	    for (i = 0; i < cur->mit_pos_count; ++i)
 	    {
 		llpos_T	*llpos;
 		char	buf[30];  // use 30 to avoid compiler warning
 		list_T	*l;
 
-		llpos = &cur->pos.pos[i];
+		llpos = &cur->mit_pos_array[i];
 		if (llpos->lnum == 0)
 		    break;
 		l = list_alloc();
@@ -1026,22 +1036,22 @@ f_getmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	}
 	else
 	{
-	    dict_add_string(dict, "pattern", cur->pattern);
+	    dict_add_string(dict, "pattern", cur->mit_pattern);
 	}
-	dict_add_string(dict, "group", syn_id2name(cur->hlg_id));
-	dict_add_number(dict, "priority", (long)cur->priority);
-	dict_add_number(dict, "id", (long)cur->id);
+	dict_add_string(dict, "group", syn_id2name(cur->mit_hlg_id));
+	dict_add_number(dict, "priority", (long)cur->mit_priority);
+	dict_add_number(dict, "id", (long)cur->mit_id);
 #  if defined(FEAT_CONCEAL)
-	if (cur->conceal_char)
+	if (cur->mit_conceal_char)
 	{
 	    char_u buf[MB_MAXBYTES + 1];
 
-	    buf[(*mb_char2bytes)(cur->conceal_char, buf)] = NUL;
+	    buf[(*mb_char2bytes)(cur->mit_conceal_char, buf)] = NUL;
 	    dict_add_string(dict, "conceal", (char_u *)&buf);
 	}
 #  endif
 	list_append_dict(rettv->vval.v_list, dict);
-	cur = cur->next;
+	cur = cur->mit_next;
     }
 # endif
 }
@@ -1066,11 +1076,8 @@ f_setmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 		|| check_for_opt_number_arg(argvars, 1) == FAIL))
 	return;
 
-    if (argvars[0].v_type != VAR_LIST)
-    {
-	emsg(_(e_list_required));
+    if (check_for_list_arg(argvars, 0) == FAIL)
 	return;
-    }
     win = get_optional_window(argvars, 1);
     if (win == NULL)
 	return;
@@ -1088,11 +1095,11 @@ f_setmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 		emsg(_(e_invalid_argument));
 		return;
 	    }
-	    if (!(dict_find(d, (char_u *)"group", -1) != NULL
-			&& (dict_find(d, (char_u *)"pattern", -1) != NULL
-			    || dict_find(d, (char_u *)"pos1", -1) != NULL)
-			&& dict_find(d, (char_u *)"priority", -1) != NULL
-			&& dict_find(d, (char_u *)"id", -1) != NULL))
+	    if (!(dict_has_key(d, "group")
+			&& (dict_has_key(d, "pattern")
+			    || dict_has_key(d, "pos1"))
+			&& dict_has_key(d, "priority")
+			&& dict_has_key(d, "id")))
 	    {
 		emsg(_(e_invalid_argument));
 		return;
@@ -1113,7 +1120,7 @@ f_setmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	    char_u	*conceal;
 
 	    d = li->li_tv.vval.v_dict;
-	    if (dict_find(d, (char_u *)"pattern", -1) == NULL)
+	    if (!dict_has_key(d, "pattern"))
 	    {
 		if (s == NULL)
 		{
@@ -1139,16 +1146,16 @@ f_setmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 		}
 	    }
 
-	    group = dict_get_string(d, (char_u *)"group", TRUE);
-	    priority = (int)dict_get_number(d, (char_u *)"priority");
-	    id = (int)dict_get_number(d, (char_u *)"id");
-	    conceal = dict_find(d, (char_u *)"conceal", -1) != NULL
-			      ? dict_get_string(d, (char_u *)"conceal", TRUE)
+	    group = dict_get_string(d, "group", TRUE);
+	    priority = (int)dict_get_number(d, "priority");
+	    id = (int)dict_get_number(d, "id");
+	    conceal = dict_has_key(d, "conceal")
+			      ? dict_get_string(d, "conceal", TRUE)
 			      : NULL;
 	    if (i == 0)
 	    {
 		match_add(win, group,
-		    dict_get_string(d, (char_u *)"pattern", FALSE),
+		    dict_get_string(d, "pattern", FALSE),
 		    priority, id, NULL, conceal);
 	    }
 	    else
@@ -1261,7 +1268,7 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	return;
     }
     l = argvars[1].vval.v_list;
-    if (l == NULL)
+    if (l == NULL || l->lv_len == 0)
 	return;
 
     if (argvars[2].v_type != VAR_UNKNOWN)
@@ -1297,32 +1304,32 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     void
 f_matcharg(typval_T *argvars UNUSED, typval_T *rettv)
 {
-    if (rettv_list_alloc(rettv) == OK)
-    {
+    if (rettv_list_alloc(rettv) != OK)
+	return;
+
 # ifdef FEAT_SEARCH_EXTRA
-	int	    id;
-	matchitem_T *m;
+    int	    id;
+    matchitem_T *m;
 
-	if (in_vim9script() && check_for_number_arg(argvars, 0) == FAIL)
-	    return;
+    if (in_vim9script() && check_for_number_arg(argvars, 0) == FAIL)
+	return;
 
-	id = (int)tv_get_number(&argvars[0]);
-	if (id >= 1 && id <= 3)
+    id = (int)tv_get_number(&argvars[0]);
+    if (id >= 1 && id <= 3)
+    {
+	if ((m = get_match(curwin, id)) != NULL)
 	{
-	    if ((m = get_match(curwin, id)) != NULL)
-	    {
-		list_append_string(rettv->vval.v_list,
-						syn_id2name(m->hlg_id), -1);
-		list_append_string(rettv->vval.v_list, m->pattern, -1);
-	    }
-	    else
-	    {
-		list_append_string(rettv->vval.v_list, NULL, -1);
-		list_append_string(rettv->vval.v_list, NULL, -1);
-	    }
+	    list_append_string(rettv->vval.v_list,
+		    syn_id2name(m->mit_hlg_id), -1);
+	    list_append_string(rettv->vval.v_list, m->mit_pattern, -1);
 	}
-# endif
+	else
+	{
+	    list_append_string(rettv->vval.v_list, NULL, -1);
+	    list_append_string(rettv->vval.v_list, NULL, -1);
+	}
     }
+# endif
 }
 
 /*

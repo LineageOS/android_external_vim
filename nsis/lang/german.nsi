@@ -3,6 +3,7 @@
 # german.nsi : German language strings for gvim NSIS installer.
 #
 # Locale ID    : 1031
+# Locale Name  : de
 # fileencoding : UTF-8
 # Author       : Christian Brabandt, tux
 
@@ -15,6 +16,20 @@ LangString ^SetupCaption     ${LANG_GERMAN} \
         "$(^Name) Setup"
 LangString ^UninstallCaption ${LANG_GERMAN} \
         "$(^Name) Uninstall"
+
+##############################################################################
+# Translated license file for the license page                            {{{1
+##############################################################################
+
+LicenseLangString page_lic_file 0 "..\lang\LICENSE.nsis.txt"
+#LicenseLangString page_lic_file ${LANG_GERMAN} "..\lang\LICENSE.de.nsis.txt"
+
+##############################################################################
+# Translated README.txt file, which is opened after installation          {{{1
+##############################################################################
+
+LangString vim_readme_file 0 "README.txt"
+#LangString vim_readme_file ${LANG_GERMAN} "README.de.txt"
 
 ##############################################################################
 # MUI Configuration Strings                                               {{{1
@@ -121,11 +136,6 @@ LangString str_section_plugin_vim   ${LANG_GERMAN} \
 LangString str_desc_plugin_vim      ${LANG_GERMAN} \
     "Plugin-Verzeichnisse im Vim-Installationsverzeichnis erstellen. Diese werden \
      für alle Benutzer dieses Systems genutzt."
-
-LangString str_section_vis_vim      ${LANG_GERMAN} \
-    "VisVim-Erweiterung"
-LangString str_desc_vis_vim         ${LANG_GERMAN} \
-    "VisVim-Erweiterung zur Integration in Microsoft Visual Studio."
 
 LangString str_section_nls          ${LANG_GERMAN} \
     "Unterstützung für andere Sprachen"

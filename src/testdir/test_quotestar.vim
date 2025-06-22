@@ -98,7 +98,7 @@ func Do_test_quotestar_for_x11()
 
     " Running in a terminal and the GUI is available: Tell the server to open
     " the GUI and check that the remote command still works.
-    if has('gui_athena') || has('gui_motif')
+    if has('gui_motif')
       " For those GUIs, ignore the 'failed to create input context' error.
       call remote_send(name, ":call test_ignore_error('E285') | gui -f\<CR>")
     else
@@ -139,8 +139,8 @@ func Test_quotestar()
   if has('macunix')
     let skipped = Do_test_quotestar_for_macunix()
   elseif has('x11')
-    if empty($DISPLAY)
-      let skipped = "Test can only run when $DISPLAY is set."
+    if empty($DISPLAY) || !empty($WAYLAND_DISPLAY)
+      let skipped = "Test can only run when $DISPLAY is set and $WAYLAND_DISPLAY is not set."
     else
       let skipped = Do_test_quotestar_for_x11()
     endif

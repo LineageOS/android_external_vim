@@ -1,5 +1,5 @@
 /* normal.c */
-void f_internal_get_nv_cmdchar(typval_T *argvars, typval_T *rettv);
+int check_text_or_curbuf_locked(oparg_T *oap);
 void normal_cmd(oparg_T *oap, int toplevel);
 void check_visual_highlight(void);
 void end_visual_mode(void);
@@ -22,13 +22,15 @@ void pop_showcmd(void);
 void do_check_scrollbind(int check);
 void check_scrollbind(linenr_T topline_diff, long leftcol_diff);
 int find_decl(char_u *ptr, int len, int locally, int thisblock, int flags_arg);
+int nv_screengo(oparg_T *oap, int dir, long dist);
 void nv_scroll_line(cmdarg_T *cap);
-void scroll_redraw(int up, long count);
 void handle_tabmenu(void);
 void do_nv_ident(int c1, int c2);
 int get_visual_text(cmdarg_T *cap, char_u **pp, int *lenp);
 void start_selection(void);
 void may_start_select(int c);
+void nv_g_home_m_cmd(cmdarg_T *cap);
 int unadjust_for_sel(void);
+int unadjust_for_sel_inner(pos_T *pp);
 void set_cursor_for_append_to_line(void);
 /* vim: set ft=c : */

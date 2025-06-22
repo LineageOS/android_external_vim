@@ -1,6 +1,6 @@
 " Vim syntax support file
 " Maintainer: Ben Fritz <fritzophrenic@gmail.com>
-" Last Change: 2020 Jan 05
+" Last Change: 2024 Nov 02
 "
 " Additional contributors:
 "
@@ -32,9 +32,9 @@ let s:end=line('$')
 " Font
 if exists("g:html_font")
   if type(g:html_font) == type([])
-    let s:htmlfont = "'". join(g:html_font,"','") . "', monospace"
+    let s:htmlfont = "'".. join(g:html_font,"','") .. "', monospace"
   else
-    let s:htmlfont = "'". g:html_font . "', monospace"
+    let s:htmlfont = "'".. g:html_font .. "', monospace"
   endif
 else
   let s:htmlfont = "monospace"
@@ -221,8 +221,8 @@ else
 endif
 
 " Find out the background and foreground color for use later
-let s:fgc = s:HtmlColor(synIDattr(hlID("Normal"), "fg#", s:whatterm))
-let s:bgc = s:HtmlColor(synIDattr(hlID("Normal"), "bg#", s:whatterm))
+let s:fgc = s:HtmlColor(synIDattr(hlID("Normal")->synIDtrans(), "fg#", s:whatterm))
+let s:bgc = s:HtmlColor(synIDattr(hlID("Normal")->synIDtrans(), "bg#", s:whatterm))
 if s:fgc == ""
   let s:fgc = ( &background == "dark" ? "#ffffff" : "#000000" )
 endif
@@ -234,41 +234,43 @@ if !s:settings.use_css
   " Return opening HTML tag for given highlight id
   function! s:HtmlOpening(id, extra_attrs)
     let a = ""
-    if synIDattr(a:id, "inverse")
+    let translated_ID = synIDtrans(a:id)
+    if synIDattr(translated_ID, "inverse")
       " For inverse, we always must set both colors (and exchange them)
-      let x = s:HtmlColor(synIDattr(a:id, "fg#", s:whatterm))
-      let a = a . '<span '.a:extra_attrs.'style="background-color: ' . ( x != "" ? x : s:fgc ) . '">'
-      let x = s:HtmlColor(synIDattr(a:id, "bg#", s:whatterm))
-      let a = a . '<font color="' . ( x != "" ? x : s:bgc ) . '">'
+      let x = s:HtmlColor(synIDattr(translated_ID, "fg#", s:whatterm))
+      let a = a .. '<span '..a:extra_attrs..'style="background-color: ' .. ( x != "" ? x : s:fgc ) .. '">'
+      let x = s:HtmlColor(synIDattr(translated_ID, "bg#", s:whatterm))
+      let a = a .. '<font color="' .. ( x != "" ? x : s:bgc ) .. '">'
     else
-      let x = s:HtmlColor(synIDattr(a:id, "bg#", s:whatterm))
+      let x = s:HtmlColor(synIDattr(translated_ID, "bg#", s:whatterm))
       if x != ""
-	let a = a . '<span '.a:extra_attrs.'style="background-color: ' . x . '">'
+	let a = a .. '<span '..a:extra_attrs..'style="background-color: ' .. x .. '">'
       elseif !empty(a:extra_attrs)
-	let a = a . '<span '.a:extra_attrs.'>'
+	let a = a .. '<span '..a:extra_attrs..'>'
       endif
-      let x = s:HtmlColor(synIDattr(a:id, "fg#", s:whatterm))
-      if x != "" | let a = a . '<font color="' . x . '">' | endif
+      let x = s:HtmlColor(synIDattr(translated_ID, "fg#", s:whatterm))
+      if x != "" | let a = a .. '<font color="' .. x .. '">' | endif
     endif
-    if synIDattr(a:id, "bold") | let a = a . "<b>" | endif
-    if synIDattr(a:id, "italic") | let a = a . "<i>" | endif
-    if synIDattr(a:id, "underline") | let a = a . "<u>" | endif
+    if synIDattr(translated_ID, "bold") | let a = a .. "<b>" | endif
+    if synIDattr(translated_ID, "italic") | let a = a .. "<i>" | endif
+    if synIDattr(translated_ID, "underline") | let a = a .. "<u>" | endif
     return a
   endfun
 
   " Return closing HTML tag for given highlight id
   function! s:HtmlClosing(id, has_extra_attrs)
     let a = ""
-    if synIDattr(a:id, "underline") | let a = a . "</u>" | endif
-    if synIDattr(a:id, "italic") | let a = a . "</i>" | endif
-    if synIDattr(a:id, "bold") | let a = a . "</b>" | endif
-    if synIDattr(a:id, "inverse")
-      let a = a . '</font></span>'
+    let translated_ID = synIDtrans(a:id)
+    if synIDattr(translated_ID, "underline") | let a = a .. "</u>" | endif
+    if synIDattr(translated_ID, "italic") | let a = a .. "</i>" | endif
+    if synIDattr(translated_ID, "bold") | let a = a .. "</b>" | endif
+    if synIDattr(translated_ID, "inverse")
+      let a = a .. '</font></span>'
     else
-      let x = s:HtmlColor(synIDattr(a:id, "fg#", s:whatterm))
-      if x != "" | let a = a . '</font>' | endif
-      let x = s:HtmlColor(synIDattr(a:id, "bg#", s:whatterm))
-      if x != "" || a:has_extra_attrs | let a = a . '</span>' | endif
+      let x = s:HtmlColor(synIDattr(translated_ID, "fg#", s:whatterm))
+      if x != "" | let a = a .. '</font>' | endif
+      let x = s:HtmlColor(synIDattr(translated_ID, "bg#", s:whatterm))
+      if x != "" || a:has_extra_attrs | let a = a .. '</span>' | endif
     endif
     return a
   endfun
@@ -286,84 +288,102 @@ if s:settings.use_css
   " save CSS to a list of rules to add to the output at the end of processing
 
   " first, get the style names we need
-  let wrapperfunc_lines = [
-	\ 'function! s:BuildStyleWrapper(style_id, diff_style_id, extra_attrs, text, make_unselectable, unformatted)',
-	\ '',
-	\ '  let l:style_name = synIDattr(a:style_id, "name", s:whatterm)'
-	\ ]
+  let s:wrapperfunc_lines = []
+  call add(s:wrapperfunc_lines, [])
+  let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	function! s:BuildStyleWrapper(style_id, diff_style_id, extra_attrs, text, make_unselectable, unformatted)
+	
+	  let l:style_name = synIDattr(a:style_id, "name", s:whatterm)
+  ENDLET
   if &diff
-    let wrapperfunc_lines += [
-	\ '  let l:diff_style_name = synIDattr(a:diff_style_id, "name", s:whatterm)']
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	  let l:diff_style_name = synIDattr(a:diff_style_id, "name", s:whatterm)
+    ENDLET
 
-  " Add normal groups and diff groups to separate lists so we can order them to
-  " allow diff highlight to override normal highlight
+    " Add normal groups and diff groups to separate lists so we can order them to
+    " allow diff highlight to override normal highlight
 
-  " if primary style IS a diff style, grab it from the diff cache instead
-  " (always succeeds because we pre-populate it)
-  let wrapperfunc_lines += [
-	\ '',
-	\ '  if a:style_id == s:DIFF_D_ID || a:style_id == s:DIFF_A_ID ||'.
-	\ '          a:style_id == s:DIFF_C_ID || a:style_id == s:DIFF_T_ID',
-	\ '    let l:saved_style = get(s:diffstylelist,a:style_id)',
-	\ '  else'
-	\ ]
+    " if primary style IS a diff style, grab it from the diff cache instead
+    " (always succeeds because we pre-populate it)
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim ENDLET
+
+	  if a:style_id == s:DIFF_D_ID || a:style_id == s:DIFF_A_ID || a:style_id == s:DIFF_C_ID || a:style_id == s:DIFF_T_ID
+	    let l:saved_style = get(s:diffstylelist,a:style_id)
+	  else
+    ENDLET
   endif
 
   " get primary style info from cache or build it on the fly if not found
-  let wrapperfunc_lines += [
-	\ '    let l:saved_style = get(s:stylelist,a:style_id)',
-	\ '    if type(l:saved_style) == type(0)',
-	\ '      unlet l:saved_style',
-	\ '      let l:saved_style = s:CSS1(a:style_id)',
-	\ '      if l:saved_style != ""',
-	\ '        let l:saved_style = "." . l:style_name . " { " . l:saved_style . "}"',
-	\ '      endif',
-	\ '      let s:stylelist[a:style_id]= l:saved_style',
-	\ '    endif'
-	\ ]
+  call add(s:wrapperfunc_lines, [])
+  let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	    let l:saved_style = get(s:stylelist,a:style_id)
+	    if type(l:saved_style) == type(0)
+	      unlet l:saved_style
+	      let l:saved_style = s:CSS1(a:style_id)
+	      if l:saved_style != ""
+	        let l:saved_style = "." .. l:style_name .. " { " .. l:saved_style .. "}"
+	      endif
+	      let s:stylelist[a:style_id] = l:saved_style
+	    endif
+  ENDLET
   if &diff
-    let wrapperfunc_lines += [ '  endif' ]
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	  endif
+    ENDLET
   endif
+" Ignore this comment, just bypassing a highlighting issue: if
 
   " Build the wrapper tags around the text. It turns out that caching these
   " gives pretty much zero performance gain and adds a lot of logic.
 
-  let wrapperfunc_lines += [
-	\ '',
-	\ '  if l:saved_style == "" && empty(a:extra_attrs)'
-	\ ]
+  call add(s:wrapperfunc_lines, [])
+  let s:wrapperfunc_lines[-1] =<< trim ENDLET
+
+	  if l:saved_style == "" && empty(a:extra_attrs)
+  ENDLET
   if &diff
-    let wrapperfunc_lines += [
-	\ '    if a:diff_style_id <= 0'
-	\ ]
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	    if a:diff_style_id <= 0
+    ENDLET
   endif
   " no surroundings if neither primary nor diff style has any info
-  let wrapperfunc_lines += [
-	\ '       return a:text'
-	\ ]
+  call add(s:wrapperfunc_lines, [])
+  let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	      return a:text
+  ENDLET
   if &diff
     " no primary style, but diff style
-    let wrapperfunc_lines += [
-	\ '     else',
-	\ '       return "<span class=\"" .l:diff_style_name . "\">".a:text."</span>"',
-	\ '     endif'
-	\ ]
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	    else
+	      return '<span class="' ..l:diff_style_name .. '">'..a:text.."</span>"
+	    endif
+    ENDLET
   endif
+  " Ignore this comment, just bypassing a highlighting issue: if
+
   " open tag for non-empty primary style
-  let wrapperfunc_lines += [
-	\ '  else']
+  call add(s:wrapperfunc_lines, [])
+  let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	  else
+  ENDLET
   " non-empty primary style. handle either empty or non-empty diff style.
   "
   " separate the two classes by a space to apply them both if there is a diff
   " style name, unless the primary style is empty, then just use the diff style
   " name
-  let diffstyle =
-	  \ (&diff ? '(a:diff_style_id <= 0 ? "" : " ". l:diff_style_name) .'
-	  \        : "")
+  let s:diffstyle =
+	  \ (&diff ? '(a:diff_style_id <= 0 ? "" : " " .. l:diff_style_name)..'
+	  \        : '')
   if s:settings.prevent_copy == ""
-    let wrapperfunc_lines += [
-	  \ '    return "<span ".a:extra_attrs."class=\"" . l:style_name .'.diffstyle.'"\">".a:text."</span>"'
-	  \ ]
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim eval ENDLET
+	    return "<span "..a:extra_attrs..'class="' .. l:style_name ..{s:diffstyle}'">'..a:text.."</span>"
+    ENDLET
   else
 
     " New method: use generated content in the CSS. The only thing needed here
@@ -388,59 +408,76 @@ if s:settings.use_css
     " Note, if maxlength property needs to be added in the future, it will need
     " to use strchars(), because HTML specifies that the maxlength parameter
     " uses the number of unique codepoints for its limit.
-    let wrapperfunc_lines += [
-	  \   '    if a:make_unselectable',
-	  \   '      return "<span ".a:extra_attrs."class=\"" . l:style_name .'.diffstyle.'"\"'
-	  \ ]
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim eval ENDLET
+	    if a:make_unselectable
+	      let return_span = "<span "..a:extra_attrs..'class="' .. l:style_name ..{s:diffstyle}'"'
+    ENDLET
     if s:settings.use_input_for_pc !=# 'all'
-      let wrapperfunc_lines[-1] .= ' " . "data-" . l:style_name . "-content=\"".a:text."\"'
+      call add(s:wrapperfunc_lines, [])
+      let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	      let return_span ..= " data-" .. l:style_name .. '-content="'..a:text..'"'
+      ENDLET
     endif
-    let wrapperfunc_lines[-1] .= '>'
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	      let return_span ..= '>'
+    ENDLET
     if s:settings.use_input_for_pc !=# 'none'
-      let wrapperfunc_lines[-1] .=
-	    \                '<input'.s:unselInputType.' class=\"" . l:style_name .'.diffstyle.'"\"'.
-	    \                 ' value=\"".substitute(a:unformatted,''\s\+$'',"","")."\"'.
-	    \                 ' onselect=''this.blur(); return false;'''.
-	    \                 ' onmousedown=''this.blur(); return false;'''.
-	    \                 ' onclick=''this.blur(); return false;'''.
-	    \                 ' readonly=''readonly'''.
-	    \                 ' size=\"".strwidth(a:unformatted)."\"'.
-	    \                 (s:settings.use_xhtml ? '/' : '').'>'
+      call add(s:wrapperfunc_lines, [])
+      let s:wrapperfunc_lines[-1] =<< trim eval ENDLET
+	      let return_span ..=   '<input'..s:unselInputType..' class="' .. l:style_name ..{s:diffstyle}'"'
+	      let return_span ..=   ' value="'..substitute(a:unformatted,'\s\+$',"","")..'"'
+	      let return_span ..=   " onselect='this.blur(); return false;'"
+	      let return_span ..=   " onmousedown='this.blur(); return false;'"
+	      let return_span ..=   " onclick='this.blur(); return false;'"
+	      let return_span ..=   " readonly='readonly'"
+	      let return_span ..=   ' size="'..strwidth(a:unformatted)..'"'
+	      let return_span ..=   (s:settings.use_xhtml ? '/>' : '>')
+      ENDLET
     endif
-    let wrapperfunc_lines[-1] .= '</span>"'
-    let wrapperfunc_lines += [
-	  \ '    else',
-	  \ '      return "<span ".a:extra_attrs."class=\"" . l:style_name .'. diffstyle .'"\">".a:text."</span>"'
-	  \ ]
+    call add(s:wrapperfunc_lines, [])
+    let s:wrapperfunc_lines[-1] =<< trim eval ENDLET
+	      return return_span..'</span>'
+	    else
+	      return "<span "..a:extra_attrs..'class="' .. l:style_name .. {s:diffstyle}'">'..a:text.."</span>"
+	    endif
+    ENDLET
   endif
-  let wrapperfunc_lines += [
-	\ '  endif',
-	\ 'endfun'
-	\ ]
+  call add(s:wrapperfunc_lines, [])
+  let s:wrapperfunc_lines[-1] =<< trim ENDLET
+	  endif
+	endfun
+  ENDLET
 else
   " Non-CSS method just needs the wrapper.
   "
   " Functions used to get opening/closing automatically return null strings if
   " no styles exist.
   if &diff
-    let wrapperfunc_lines = [
-	  \ 'function! s:BuildStyleWrapper(style_id, diff_style_id, extra_attrs, text, unusedarg, unusedarg2)',
-	  \ '  return s:HtmlOpening(a:style_id, a:extra_attrs).(a:diff_style_id <= 0 ? "" :'.
-	  \                                     's:HtmlOpening(a:diff_style_id, "")).a:text.'.
-	  \   '(a:diff_style_id <= 0 ? "" : s:HtmlClosing(a:diff_style_id, 0)).s:HtmlClosing(a:style_id, !empty(a:extra_attrs))',
-	  \ 'endfun'
-	  \ ]
+    let s:wrapperfunc_lines =<< trim ENDLET
+	function! s:BuildStyleWrapper(style_id, diff_style_id, extra_attrs, text, unusedarg, unusedarg2)
+	  if a:diff_style_id <= 0
+	    let l:diff_opening = s:HtmlOpening(a:diff_style_id, "")
+	    let l:diff_closing = s:HtmlClosing(a:diff_style_id, 0)
+	  else
+	    let l:diff_opening = ""
+	    let l:diff_closing = ""
+	  endif
+	  return s:HtmlOpening(a:style_id, a:extra_attrs)..l:diff_opening..a:text..l:diff_closing..s:HtmlClosing(a:style_id, !empty(a:extra_attrs))
+	endfun
+    ENDLET
   else
-    let wrapperfunc_lines = [
-	  \ 'function! s:BuildStyleWrapper(style_id, diff_style_id, extra_attrs, text, unusedarg, unusedarg2)',
-	  \ '  return s:HtmlOpening(a:style_id, a:extra_attrs).a:text.s:HtmlClosing(a:style_id, !empty(a:extra_attrs))',
-	  \ 'endfun'
-	  \ ]
+    let s:wrapperfunc_lines =<< trim ENDLET
+	function! s:BuildStyleWrapper(style_id, diff_style_id, extra_attrs, text, unusedarg, unusedarg2)
+	  return s:HtmlOpening(a:style_id, a:extra_attrs)..a:text..s:HtmlClosing(a:style_id, !empty(a:extra_attrs))
+	endfun
+    ENDLET
   endif
 endif
 
 " create the function we built line by line above
-exec join(wrapperfunc_lines, "\n")
+exec join(flatten(s:wrapperfunc_lines), "\n")
 
 let s:diff_mode = &diff
 
@@ -471,7 +508,7 @@ function! s:HtmlFormat(text, style_id, diff_style_id, extra_attrs, make_unselect
 
   " Replace double spaces, leading spaces, and trailing spaces if needed
   if ' ' != s:HtmlSpace
-    let formatted = substitute(formatted, '  ', s:HtmlSpace . s:HtmlSpace, 'g')
+    let formatted = substitute(formatted, '  ', s:HtmlSpace .. s:HtmlSpace, 'g')
     let formatted = substitute(formatted, '^ ', s:HtmlSpace, 'g')
     let formatted = substitute(formatted, ' \+$', s:HtmlSpace, 'g')
   endif
@@ -487,7 +524,7 @@ if s:settings.prevent_copy =~# 'n'
     if s:settings.line_ids
       function! s:HtmlFormat_n(text, style_id, diff_style_id, lnr)
 	if a:lnr > 0
-	  return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, 'id="'.(exists('g:html_diff_win_num') ? 'W'.g:html_diff_win_num : "").'L'.a:lnr.s:settings.id_suffix.'" ', 1)
+	  return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, 'id="'..(exists('g:html_diff_win_num') ? 'W'..g:html_diff_win_num : "")..'L'..a:lnr..s:settings.id_suffix..'" ', 1)
 	else
 	  return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, "", 1)
 	endif
@@ -503,14 +540,14 @@ if s:settings.prevent_copy =~# 'n'
     " always be non-zero, however we don't want to use the <input> because that
     " won't work as nice for empty text
     function! s:HtmlFormat_n(text, style_id, diff_style_id, lnr)
-      return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, 'id="'.(exists('g:html_diff_win_num') ? 'W'.g:html_diff_win_num : "").'L'.a:lnr.s:settings.id_suffix.'" ', 0)
+      return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, 'id="'..(exists('g:html_diff_win_num') ? 'W'..g:html_diff_win_num : "")..'L'..a:lnr..s:settings.id_suffix..'" ', 0)
     endfun
   endif
 else
   if s:settings.line_ids
     function! s:HtmlFormat_n(text, style_id, diff_style_id, lnr)
       if a:lnr > 0
-	return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, 'id="'.(exists('g:html_diff_win_num') ? 'W'.g:html_diff_win_num : "").'L'.a:lnr.s:settings.id_suffix.'" ', 0)
+	return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, 'id="'..(exists('g:html_diff_win_num') ? 'W'..g:html_diff_win_num : "")..'L'..a:lnr..s:settings.id_suffix..'" ', 0)
       else
 	return s:HtmlFormat(a:text, a:style_id, a:diff_style_id, "", 0)
       endif
@@ -535,8 +572,8 @@ if s:settings.prevent_copy =~# 'f'
     " Simply space-pad to the desired width inside the generated content (note
     " that the FoldColumn definition includes a whitespace:pre rule)
     function! s:FoldColumn_build(char, len, numfill, char2, class, click)
-      return "<a href='#' class='".a:class."' onclick='".a:click."' data-FoldColumn-content='".
-	    \ repeat(a:char, a:len).a:char2.repeat(' ', a:numfill).
+      return "<a href='#' class='"..a:class.."' onclick='"..a:click.."' data-FoldColumn-content='".
+	    \ repeat(a:char, a:len)..a:char2..repeat(' ', a:numfill).
 	    \ "'></a>"
     endfun
     function! s:FoldColumn_fill()
@@ -554,35 +591,38 @@ if s:settings.prevent_copy =~# 'f'
     "
     " Note, 'exec' commands do not recognize line continuations, so must
     " concatenate lines rather than continue them.
-    let build_fun_lines = [
-	  \ 'function! s:FoldColumn_build(char, len, numfill, char2, class, click)',
-	  \ '  let l:input_open = "<input readonly=''readonly''".s:unselInputType.'.
-	  \ '          " onselect=''this.blur(); return false;''".'.
-	  \ '          " onmousedown=''this.blur(); ".a:click." return false;''".'.
-	  \ '          " onclick=''return false;'' size=''".'.
-	  \ '          string(a:len + (empty(a:char2) ? 0 : 1) + a:numfill) .'.
-	  \ '          "'' "',
-	  \ '  let l:common_attrs = "class=''FoldColumn'' value=''"',
-	  \ '  let l:input_close = (s:settings.use_xhtml ? "'' />" : "''>")'
-	  \ ]
+    let s:build_fun_lines = []
+    call add(s:build_fun_lines, [])
+    let s:build_fun_lines[-1] =<< trim ENDLET
+	  function! s:FoldColumn_build(char, len, numfill, char2, class, click)
+	    let l:input_open = "<input readonly='readonly'"..s:unselInputType
+	    let l:input_open ..= " onselect='this.blur(); return false;'"
+	    let l:input_open ..= " onmousedown='this.blur(); "..a:click.." return false;'"
+	    let l:input_open ..= " onclick='return false;' size='"
+	    let l:input_open ..= string(a:len + (empty(a:char2) ? 0 : 1) + a:numfill) .. "' "
+	    let l:common_attrs = "class='FoldColumn' value='"
+	    let l:input_close = (s:settings.use_xhtml ? "' />" : "'>")
+	    let l:return_span = "<span class='"..a:class.."'>"
+	    let l:return_span ..= l:input_open..l:common_attrs..repeat(a:char, a:len)..(a:char2)
+	    let l:return_span ..= l:input_close
+    ENDLET
     if s:settings.use_input_for_pc ==# 'fallback'
-      let build_fun_lines += [
-	    \ '  let l:gen_content_link ='.
-	    \ '          "<a href=''#'' class=''FoldColumn'' onclick=''".a:click."'' data-FoldColumn-content=''".'.
-	    \ '          repeat(a:char, a:len).a:char2.repeat('' '', a:numfill).'.
-	    \ '          "''></a>"'
-	    \ ]
+      call add(s:build_fun_lines, [])
+      let s:build_fun_lines[-1] =<< trim ENDLET
+	    let l:return_span ..= "<a href='#' class='FoldColumn' onclick='"..a:click.."'"
+	    let l:return_span ..= " data-FoldColumn-content='"
+	    let l:return_span ..= repeat(a:char, a:len)..a:char2..repeat(' ', a:numfill)
+	    let l:return_span ..= "'></a>"
+      ENDLET
     endif
-    let build_fun_lines += [
-	  \ '  return "<span class=''".a:class."''>".'.
-	  \ '          l:input_open.l:common_attrs.repeat(a:char, a:len).(a:char2).'.
-	  \ '          l:input_close.'.
-	  \ (s:settings.use_input_for_pc ==# 'fallback' ? 'l:gen_content_link.' : "").
-	  \ '          "</span>"',
-	  \ 'endfun'
-	  \ ]
+    call add(s:build_fun_lines, [])
+    let s:build_fun_lines[-1] =<< trim ENDLET
+	    let l:return_span ..= "</span>"
+	    return l:return_span
+	  endfun
+    ENDLET
     " create the function we built line by line above
-    exec join(build_fun_lines, "\n")
+    exec join(flatten(s:build_fun_lines), "\n")
 
     function! s:FoldColumn_fill()
       return s:FoldColumn_build(' ', s:foldcolumn, 0, '', 'FoldColumn', '')
@@ -592,8 +632,8 @@ else
   " For normal fold columns, simply space-pad to the desired width (note that
   " the FoldColumn definition includes a whitespace:pre rule)
   function! s:FoldColumn_build(char, len, numfill, char2, class, click)
-    return "<a href='#' class='".a:class."' onclick='".a:click."'>".
-	  \ repeat(a:char, a:len).a:char2.repeat(' ', a:numfill).
+    return "<a href='#' class='"..a:class.."' onclick='"..a:click.."'>".
+	  \ repeat(a:char, a:len)..a:char2..repeat(' ', a:numfill).
 	  \ "</a>"
   endfun
   function! s:FoldColumn_fill()
@@ -625,29 +665,30 @@ endif
 " Return CSS style describing given highlight id (can be empty)
 function! s:CSS1(id)
   let a = ""
-  if synIDattr(a:id, "inverse")
+  let translated_ID = synIDtrans(a:id)
+  if synIDattr(translated_ID, "inverse")
     " For inverse, we always must set both colors (and exchange them)
-    let x = s:HtmlColor(synIDattr(a:id, "bg#", s:whatterm))
-    let a = a . "color: " . ( x != "" ? x : s:bgc ) . "; "
-    let x = s:HtmlColor(synIDattr(a:id, "fg#", s:whatterm))
-    let a = a . "background-color: " . ( x != "" ? x : s:fgc ) . "; "
+    let x = s:HtmlColor(synIDattr(translated_ID, "bg#", s:whatterm))
+    let a = a .. "color: " .. ( x != "" ? x : s:bgc ) .. "; "
+    let x = s:HtmlColor(synIDattr(translated_ID, "fg#", s:whatterm))
+    let a = a .. "background-color: " .. ( x != "" ? x : s:fgc ) .. "; "
   else
-    let x = s:HtmlColor(synIDattr(a:id, "fg#", s:whatterm))
-    if x != "" | let a = a . "color: " . x . "; " | endif
-    let x = s:HtmlColor(synIDattr(a:id, "bg#", s:whatterm))
+    let x = s:HtmlColor(synIDattr(translated_ID, "fg#", s:whatterm))
+    if x != "" | let a = a .. "color: " .. x .. "; " | endif
+    let x = s:HtmlColor(synIDattr(translated_ID, "bg#", s:whatterm))
     if x != ""
-      let a = a . "background-color: " . x . "; "
+      let a = a .. "background-color: " .. x .. "; "
       " stupid hack because almost every browser seems to have at least one font
       " which shows 1px gaps between lines which have background
-      let a = a . "padding-bottom: 1px; "
-    elseif (a:id == s:FOLDED_ID || a:id == s:LINENR_ID || a:id == s:FOLD_C_ID) && !empty(s:settings.prevent_copy)
+      let a = a .. "padding-bottom: 1px; "
+    elseif (translated_ID == s:FOLDED_ID || translated_ID == s:LINENR_ID || translated_ID == s:FOLD_C_ID) && !empty(s:settings.prevent_copy)
       " input elements default to a different color than the rest of the page
-      let a = a . "background-color: " . s:bgc . "; "
+      let a = a .. "background-color: " .. s:bgc .. "; "
     endif
   endif
-  if synIDattr(a:id, "bold") | let a = a . "font-weight: bold; " | endif
-  if synIDattr(a:id, "italic") | let a = a . "font-style: italic; " | endif
-  if synIDattr(a:id, "underline") | let a = a . "text-decoration: underline; " | endif
+  if synIDattr(translated_ID, "bold") | let a = a .. "font-weight: bold; " | endif
+  if synIDattr(translated_ID, "italic") | let a = a .. "font-style: italic; " | endif
+  if synIDattr(translated_ID, "underline") | let a = a .. "text-decoration: underline; " | endif
   return a
 endfun
 
@@ -720,7 +761,7 @@ if exists("g:loaded_2html_plugin")
   let s:pluginversion = g:loaded_2html_plugin
 else
   if !exists("g:unloaded_tohtml_plugin")
-    let s:main_plugin_path = expand("<sfile>:p:h:h")."/plugin/tohtml.vim"
+    let s:main_plugin_path = expand("<sfile>:p:h:h").."/plugin/tohtml.vim"
     if filereadable(s:main_plugin_path)
       let s:lines = readfile(s:main_plugin_path, "", 20)
       call filter(s:lines, 'v:val =~ "loaded_2html_plugin = "')
@@ -743,12 +784,12 @@ let s:orgbufnr = winbufnr(0)
 let s:origwin_stl = &l:stl
 if expand("%") == ""
   if exists('g:html_diff_win_num')
-    exec 'new Untitled_win'.g:html_diff_win_num.'.'.(s:settings.use_xhtml ? 'x' : '').'html'
+    exec 'new Untitled_win'..g:html_diff_win_num..'.'.(s:settings.use_xhtml ? 'xhtml' : 'html')
   else
-    exec 'new Untitled.'.(s:settings.use_xhtml ? 'x' : '').'html'
+    exec 'new Untitled.'..(s:settings.use_xhtml ? 'xhtml' : 'html')
   endif
 else
-  exec 'new %.'.(s:settings.use_xhtml ? 'x' : '').'html'
+  exec 'new %.'..(s:settings.use_xhtml ? 'xhtml' : 'html')
 endif
 
 " Resize the new window to very small in order to make it draw faster
@@ -795,7 +836,7 @@ let s:lines = []
 
 if s:settings.use_xhtml
   if s:settings.encoding != ""
-    call add(s:lines, "<?xml version=\"1.0\" encoding=\"" . s:settings.encoding . "\"?>")
+    call add(s:lines, "<?xml version=\"1.0\" encoding=\"" .. s:settings.encoding .. "\"?>")
   else
     call add(s:lines, "<?xml version=\"1.0\"?>")
   endif
@@ -808,225 +849,227 @@ let s:HtmlSpace = ' '
 let s:LeadingSpace = ' '
 let s:HtmlEndline = ''
 if s:settings.no_pre
-  let s:HtmlEndline = '<br' . s:tag_close
+  let s:HtmlEndline = '<br' .. s:tag_close
   let s:LeadingSpace = s:settings.use_xhtml ? '&#160;' : '&nbsp;'
-  let s:HtmlSpace = '\' . s:LeadingSpace
+  let s:HtmlSpace = '\' .. s:LeadingSpace
 endif
 
 " HTML header, with the title and generator ;-). Left free space for the CSS,
 " to be filled at the end.
-call extend(s:lines, [
-      \ "<html>",
-      \ "<head>"])
-" include encoding as close to the top as possible, but only if not already
-" contained in XML information (to avoid haggling over content type)
-if s:settings.encoding != "" && !s:settings.use_xhtml
-  if s:html5
-    call add(s:lines, '<meta charset="' . s:settings.encoding . '"' . s:tag_close)
-  else
-    call add(s:lines, "<meta http-equiv=\"content-type\" content=\"text/html; charset=" . s:settings.encoding . '"' . s:tag_close)
-  endif
-endif
-call extend(s:lines, [
-      \ ("<title>".expand("%:p:~")."</title>"),
-      \ ("<meta name=\"Generator\" content=\"Vim/".v:version/100.".".v:version%100.'"'.s:tag_close),
-      \ ("<meta name=\"plugin-version\" content=\"".s:pluginversion.'"'.s:tag_close)
-      \ ])
-call add(s:lines, '<meta name="syntax" content="'.s:current_syntax.'"'.s:tag_close)
-call add(s:lines, '<meta name="settings" content="'.
-      \ join(filter(keys(s:settings),'s:settings[v:val]'),',').
-      \ ',prevent_copy='.s:settings.prevent_copy.
-      \ ',use_input_for_pc='.s:settings.use_input_for_pc.
-      \ '"'.s:tag_close)
-call add(s:lines, '<meta name="colorscheme" content="'.
-      \ (exists('g:colors_name')
-      \ ? g:colors_name
-      \ : 'none'). '"'.s:tag_close)
-
-if s:settings.use_css
+if !s:settings.no_doc
   call extend(s:lines, [
-	\ "<style" . (s:html5 ? "" : " type=\"text/css\"") . ">",
-	\ s:settings.use_xhtml ? "" : "<!--"])
-  let s:ieonly = []
-  if s:settings.dynamic_folds
-    if s:settings.hover_unfold
-      " if we are doing hover_unfold, use css 2 with css 1 fallback for IE6
-      call extend(s:lines, [
-	    \ ".FoldColumn { text-decoration: none; white-space: pre; }",
-	    \ "",
-	    \ "body * { margin: 0; padding: 0; }", "",
-	    \ ".open-fold   > span.Folded { display: none;  }",
-	    \ ".open-fold   > .fulltext   { display: inline; }",
-	    \ ".closed-fold > .fulltext   { display: none;  }",
-	    \ ".closed-fold > span.Folded { display: inline; }",
-	    \ "",
-	    \ ".open-fold   > .toggle-open   { display: none;   }",
-	    \ ".open-fold   > .toggle-closed { display: inline; }",
-	    \ ".closed-fold > .toggle-open   { display: inline; }",
-	    \ ".closed-fold > .toggle-closed { display: none;   }",
-	    \ "", "",
-	    \ '/* opening a fold while hovering won''t be supported by IE6 and other',
-	    \ "similar browsers, but it should fail gracefully. */",
-	    \ ".closed-fold:hover > .fulltext      { display: inline; }",
-	    \ ".closed-fold:hover > .toggle-filler { display: none; }",
-	    \ ".closed-fold:hover > .Folded        { display: none; }"])
-      " TODO: IE6 is REALLY old and I can't even test it anymore. Maybe we
-      " should remove this? Leave it in for now, it was working at one point,
-      " and doesn't affect any modern browsers. Even newer IE versions should
-      " support the above code and ignore the following.
-      let s:ieonly = [
-	    \ "<!--[if lt IE 7]><style type=\"text/css\">",
-	    \ ".open-fold   .fulltext      { display: inline; }",
-	    \ ".open-fold   span.Folded    { display: none; }",
-	    \ ".open-fold   .toggle-open   { display: none; }",
-	    \ ".open-fold   .toggle-closed { display: inline; }",
-	    \ "",
-	    \ ".closed-fold .fulltext      { display: none; }",
-	    \ ".closed-fold span.Folded    { display: inline; }",
-	    \ ".closed-fold .toggle-open   { display: inline; }",
-	    \ ".closed-fold .toggle-closed { display: none; }",
-	    \ "</style>",
-	    \ "<![endif]-->",
-	    \]
+	\ "<html>",
+	\ "<head>"])
+  " include encoding as close to the top as possible, but only if not already
+  " contained in XML information (to avoid haggling over content type)
+  if s:settings.encoding != "" && !s:settings.use_xhtml
+    if s:html5
+      call add(s:lines, '<meta charset="' .. s:settings.encoding .. '"' .. s:tag_close)
     else
-      " if we aren't doing hover_unfold, use CSS 1 only
-      call extend(s:lines, [
-	    \ ".FoldColumn { text-decoration: none; white-space: pre; }",
-	    \ ".open-fold   .fulltext      { display: inline; }",
-	    \ ".open-fold   span.Folded    { display: none; }",
-	    \ ".open-fold   .toggle-open   { display: none; }",
-	    \ ".open-fold   .toggle-closed { display: inline; }",
-	    \ "",
-	    \ ".closed-fold .fulltext      { display: none; }",
-	    \ ".closed-fold span.Folded    { display: inline; }",
-	    \ ".closed-fold .toggle-open   { display: inline; }",
-	    \ ".closed-fold .toggle-closed { display: none; }",
-	    \])
+      call add(s:lines, "<meta http-equiv=\"content-type\" content=\"text/html; charset=" .. s:settings.encoding .. '"' .. s:tag_close)
     endif
   endif
-  " else we aren't doing any dynamic folding, no need for any special rules
-
   call extend(s:lines, [
-	  \ s:settings.use_xhtml ? "" : '-->',
-	  \ "</style>",
-	  \])
-  call extend(s:lines, s:ieonly)
-  unlet s:ieonly
-endif
-
-let s:uses_script = s:settings.dynamic_folds || s:settings.line_ids
-
-" insert script tag if needed
-if s:uses_script
-  call extend(s:lines, [
-        \ "",
-        \ "<script" . (s:html5 ? "" : " type='text/javascript'") . ">",
-        \ s:settings.use_xhtml ? '//<![CDATA[' : "<!--"])
-endif
-
-" insert javascript to toggle folds open and closed
-if s:settings.dynamic_folds
-  call extend(s:lines, [
-	\ "",
-	\ "function toggleFold(objID)",
-	\ "{",
-	\ "  var fold;",
-	\ "  fold = document.getElementById(objID);",
-	\ "  if (fold.className == 'closed-fold')",
-	\ "  {",
-	\ "    fold.className = 'open-fold';",
-	\ "  }",
-	\ "  else if (fold.className == 'open-fold')",
-	\ "  {",
-	\ "    fold.className = 'closed-fold';",
-	\ "  }",
-	\ "}"
+	\ ("<title>"..expand("%:p:~").."</title>"),
+	\ ("<meta name=\"Generator\" content=\"Vim/"..v:version/100.."."..v:version%100..'"'..s:tag_close),
+	\ ("<meta name=\"plugin-version\" content=\""..s:pluginversion..'"'..s:tag_close)
 	\ ])
-endif
+  call add(s:lines, '<meta name="syntax" content="'..s:current_syntax..'"'..s:tag_close)
+  call add(s:lines, '<meta name="settings" content="'..
+	\ join(filter(keys(s:settings),'s:settings[v:val]'),',')..
+	\ ',prevent_copy='..s:settings.prevent_copy..
+	\ ',use_input_for_pc='..s:settings.use_input_for_pc..
+	\ '"'..s:tag_close)
+  call add(s:lines, '<meta name="colorscheme" content="'..
+	\ (exists('g:colors_name')
+	\ ? g:colors_name
+	\ : 'none').. '"'..s:tag_close)
 
-if s:settings.line_ids
-  " insert javascript to get IDs from line numbers, and to open a fold before
-  " jumping to any lines contained therein
-  call extend(s:lines, [
-	\ "",
-	\ "/* function to open any folds containing a jumped-to line before jumping to it */",
-	\ "function JumpToLine()",
-	\ "{",
-	\ "  var lineNum;",
-	\ "  lineNum = window.location.hash;",
-	\ "  lineNum = lineNum.substr(1); /* strip off '#' */",
-	\ "",
-	\ "  if (lineNum.indexOf('L') == -1) {",
-	\ "    lineNum = 'L'+lineNum;",
-	\ "  }",
-	\ "  var lineElem = document.getElementById(lineNum);"
-	\ ])
+  if s:settings.use_css
+    call extend(s:lines, [
+	  \ "<style" .. (s:html5 ? "" : " type=\"text/css\"") .. ">",
+	  \ s:settings.use_xhtml ? "" : "<!--"])
+    let s:ieonly = []
+    if s:settings.dynamic_folds
+      if s:settings.hover_unfold
+	" if we are doing hover_unfold, use css 2 with css 1 fallback for IE6
+	call extend(s:lines, [
+	      \ ".FoldColumn { text-decoration: none; white-space: pre; }",
+	      \ "",
+	      \ "body * { margin: 0; padding: 0; }", "",
+	      \ ".open-fold   > span.Folded { display: none;  }",
+	      \ ".open-fold   > .fulltext   { display: inline; }",
+	      \ ".closed-fold > .fulltext   { display: none;  }",
+	      \ ".closed-fold > span.Folded { display: inline; }",
+	      \ "",
+	      \ ".open-fold   > .toggle-open   { display: none;   }",
+	      \ ".open-fold   > .toggle-closed { display: inline; }",
+	      \ ".closed-fold > .toggle-open   { display: inline; }",
+	      \ ".closed-fold > .toggle-closed { display: none;   }",
+	      \ "", "",
+	      \ '/* opening a fold while hovering won''t be supported by IE6 and other',
+	      \ "similar browsers, but it should fail gracefully. */",
+	      \ ".closed-fold:hover > .fulltext      { display: inline; }",
+	      \ ".closed-fold:hover > .toggle-filler { display: none; }",
+	      \ ".closed-fold:hover > .Folded        { display: none; }"])
+	" TODO: IE6 is REALLY old and I can't even test it anymore. Maybe we
+	" should remove this? Leave it in for now, it was working at one point,
+	" and doesn't affect any modern browsers. Even newer IE versions should
+	" support the above code and ignore the following.
+	let s:ieonly = [
+	      \ "<!--[if lt IE 7]><style type=\"text/css\">",
+	      \ ".open-fold   .fulltext      { display: inline; }",
+	      \ ".open-fold   span.Folded    { display: none; }",
+	      \ ".open-fold   .toggle-open   { display: none; }",
+	      \ ".open-fold   .toggle-closed { display: inline; }",
+	      \ "",
+	      \ ".closed-fold .fulltext      { display: none; }",
+	      \ ".closed-fold span.Folded    { display: inline; }",
+	      \ ".closed-fold .toggle-open   { display: inline; }",
+	      \ ".closed-fold .toggle-closed { display: none; }",
+	      \ "</style>",
+	      \ "<![endif]-->",
+	      \]
+      else
+	" if we aren't doing hover_unfold, use CSS 1 only
+	call extend(s:lines, [
+	      \ ".FoldColumn { text-decoration: none; white-space: pre; }",
+	      \ ".open-fold   .fulltext      { display: inline; }",
+	      \ ".open-fold   span.Folded    { display: none; }",
+	      \ ".open-fold   .toggle-open   { display: none; }",
+	      \ ".open-fold   .toggle-closed { display: inline; }",
+	      \ "",
+	      \ ".closed-fold .fulltext      { display: none; }",
+	      \ ".closed-fold span.Folded    { display: inline; }",
+	      \ ".closed-fold .toggle-open   { display: inline; }",
+	      \ ".closed-fold .toggle-closed { display: none; }",
+	      \])
+      endif
+    endif
+    " else we aren't doing any dynamic folding, no need for any special rules
 
+    call extend(s:lines, [
+	    \ s:settings.use_xhtml ? "" : '-->',
+	    \ "</style>",
+	    \])
+    call extend(s:lines, s:ieonly)
+    unlet s:ieonly
+  endif
+
+  let s:uses_script = s:settings.dynamic_folds || s:settings.line_ids
+
+  " insert script tag if needed
+  if s:uses_script
+    call extend(s:lines, [
+	  \ "",
+	  \ "<script" .. (s:html5 ? "" : " type='text/javascript'") .. ">",
+	  \ s:settings.use_xhtml ? '//<![CDATA[' : "<!--"])
+  endif
+
+  " insert javascript to toggle folds open and closed
   if s:settings.dynamic_folds
     call extend(s:lines, [
 	  \ "",
-	  \ "  /* navigate upwards in the DOM tree to open all folds containing the line */",
-	  \ "  var node = lineElem;",
-	  \ "  while (node && node.id != 'vimCodeElement".s:settings.id_suffix."')",
+	  \ "function toggleFold(objID)",
+	  \ "{",
+	  \ "  var fold;",
+	  \ "  fold = document.getElementById(objID);",
+	  \ "  if (fold.className == 'closed-fold')",
 	  \ "  {",
-	  \ "    if (node.className == 'closed-fold')",
-	  \ "    {",
-	  \ "      node.className = 'open-fold';",
-	  \ "    }",
-	  \ "    node = node.parentNode;",
+	  \ "    fold.className = 'open-fold';",
 	  \ "  }",
+	  \ "  else if (fold.className == 'open-fold')",
+	  \ "  {",
+	  \ "    fold.className = 'closed-fold';",
+	  \ "  }",
+	  \ "}"
 	  \ ])
   endif
-  call extend(s:lines, [
-	\ "  /* Always jump to new location even if the line was hidden inside a fold, or",
-	\ "   * we corrected the raw number to a line ID.",
-	\ "   */",
-	\ "  if (lineElem) {",
-	\ "    lineElem.scrollIntoView(true);",
-	\ "  }",
-	\ "  return true;",
-	\ "}",
-	\ "if ('onhashchange' in window) {",
-	\ "  window.onhashchange = JumpToLine;",
-	\ "}"
-	\ ])
-endif
 
-" insert script closing tag if needed
-if s:uses_script
-  call extend(s:lines, [
-        \ '',
-        \ s:settings.use_xhtml ? '//]]>' : '-->',
-        \ "</script>"
-        \ ])
-endif
+  if s:settings.line_ids
+    " insert javascript to get IDs from line numbers, and to open a fold before
+    " jumping to any lines contained therein
+    call extend(s:lines, [
+	  \ "",
+	  \ "/* function to open any folds containing a jumped-to line before jumping to it */",
+	  \ "function JumpToLine()",
+	  \ "{",
+	  \ "  var lineNum;",
+	  \ "  lineNum = window.location.hash;",
+	  \ "  lineNum = lineNum.substr(1); /* strip off '#' */",
+	  \ "",
+	  \ "  if (lineNum.indexOf('L') == -1) {",
+	  \ "    lineNum = 'L'+lineNum;",
+	  \ "  }",
+	  \ "  var lineElem = document.getElementById(lineNum);"
+	  \ ])
 
-call extend(s:lines, ["</head>",
-      \ "<body".(s:settings.line_ids ? " onload='JumpToLine();'" : "").">"])
+    if s:settings.dynamic_folds
+      call extend(s:lines, [
+	    \ "",
+	    \ "  /* navigate upwards in the DOM tree to open all folds containing the line */",
+	    \ "  var node = lineElem;",
+	    \ "  while (node && node.id != 'vimCodeElement"..s:settings.id_suffix.."')",
+	    \ "  {",
+	    \ "    if (node.className == 'closed-fold')",
+	    \ "    {",
+	    \ "      node.className = 'open-fold';",
+	    \ "    }",
+	    \ "    node = node.parentNode;",
+	    \ "  }",
+	    \ ])
+    endif
+    call extend(s:lines, [
+	  \ "  /* Always jump to new location even if the line was hidden inside a fold, or",
+	  \ "   * we corrected the raw number to a line ID.",
+	  \ "   */",
+	  \ "  if (lineElem) {",
+	  \ "    lineElem.scrollIntoView(true);",
+	  \ "  }",
+	  \ "  return true;",
+	  \ "}",
+	  \ "if ('onhashchange' in window) {",
+	  \ "  window.onhashchange = JumpToLine;",
+	  \ "}"
+	  \ ])
+  endif
+
+  " insert script closing tag if needed
+  if s:uses_script
+    call extend(s:lines, [
+	  \ '',
+	  \ s:settings.use_xhtml ? '//]]>' : '-->',
+	  \ "</script>"
+	  \ ])
+  endif
+
+  call extend(s:lines, ["</head>",
+	\ "<body"..(s:settings.line_ids ? " onload='JumpToLine();'" : "")..">"])
+endif
 
 if s:settings.no_pre
   " if we're not using CSS we use a font tag which can't have a div inside
   if s:settings.use_css
-    call extend(s:lines, ["<div id='vimCodeElement".s:settings.id_suffix."'>"])
+    call extend(s:lines, ["<div id='vimCodeElement" .. s:settings.id_suffix .. "'>"])
   endif
 else
-  call extend(s:lines, ["<pre id='vimCodeElement".s:settings.id_suffix."'>"])
+  call extend(s:lines, ["<pre id='vimCodeElement" .. s:settings.id_suffix .. "'>"])
 endif
 
-exe s:orgwin . "wincmd w"
+exe s:orgwin .. "wincmd w"
 
 " caches of style data
 " initialize to include line numbers if using them
 if s:settings.number_lines
-  let s:stylelist = { s:LINENR_ID : ".LineNr { " . s:CSS1( s:LINENR_ID ) . "}" }
+  let s:stylelist = { s:LINENR_ID : ".LineNr { " .. s:CSS1( s:LINENR_ID ) .. "}" }
 else
   let s:stylelist = {}
 endif
 let s:diffstylelist = {
-      \   s:DIFF_A_ID : ".DiffAdd { " . s:CSS1( s:DIFF_A_ID ) . "}",
-      \   s:DIFF_C_ID : ".DiffChange { " . s:CSS1( s:DIFF_C_ID ) . "}",
-      \   s:DIFF_D_ID : ".DiffDelete { " . s:CSS1( s:DIFF_D_ID ) . "}",
-      \   s:DIFF_T_ID : ".DiffText { " . s:CSS1( s:DIFF_T_ID ) . "}"
+      \   s:DIFF_A_ID : ".DiffAdd { " .. s:CSS1( s:DIFF_A_ID ) .. "}",
+      \   s:DIFF_C_ID : ".DiffChange { " .. s:CSS1( s:DIFF_C_ID ) .. "}",
+      \   s:DIFF_D_ID : ".DiffDelete { " .. s:CSS1( s:DIFF_D_ID ) .. "}",
+      \   s:DIFF_T_ID : ".DiffText { " .. s:CSS1( s:DIFF_T_ID ) .. "}"
       \ }
 
 " set up progress bar in the status line
@@ -1044,17 +1087,17 @@ if !s:settings.no_progress
        \ g:colors_name != s:last_colors_name
       let s:last_colors_name = exists("g:colors_name") ? g:colors_name : "none"
 
-      let l:diffatr = synIDattr(hlID("DiffDelete"), "reverse", s:whatterm) ? "fg#" : "bg#"
-      let l:stlatr = synIDattr(hlID("StatusLine"), "reverse", s:whatterm) ? "fg#" : "bg#"
+      let l:diffatr = synIDattr(hlID("DiffDelete")->synIDtrans(), "reverse", s:whatterm) ? "fg#" : "bg#"
+      let l:stlatr = synIDattr(hlID("StatusLine")->synIDtrans(), "reverse", s:whatterm) ? "fg#" : "bg#"
 
-      let l:progbar_color = synIDattr(hlID("DiffDelete"), l:diffatr, s:whatterm)
-      let l:stl_color = synIDattr(hlID("StatusLine"), l:stlatr, s:whatterm)
+      let l:progbar_color = synIDattr(hlID("DiffDelete")->synIDtrans(), l:diffatr, s:whatterm)
+      let l:stl_color = synIDattr(hlID("StatusLine")->synIDtrans(), l:stlatr, s:whatterm)
 
       if "" == l:progbar_color
-	let l:progbar_color = synIDattr(hlID("DiffDelete"), "reverse", s:whatterm) ? s:fgc : s:bgc
+	let l:progbar_color = synIDattr(hlID("DiffDelete")->synIDtrans(), "reverse", s:whatterm) ? s:fgc : s:bgc
       endif
       if "" == l:stl_color
-	let l:stl_color = synIDattr(hlID("StatusLine"), "reverse", s:whatterm) ? s:fgc : s:bgc
+	let l:stl_color = synIDattr(hlID("StatusLine")->synIDtrans(), "reverse", s:whatterm) ? s:fgc : s:bgc
       endif
 
       if l:progbar_color == l:stl_color
@@ -1084,13 +1127,13 @@ if !s:settings.no_progress
 	endif
 	echomsg "diff detected progbar color set to" l:progbar_color
       endif
-      exe "hi TOhtmlProgress_auto" s:whatterm."bg=".l:progbar_color
+      exe "hi TOhtmlProgress_auto" s:whatterm.."bg="..l:progbar_color
     endif
   endfun
 
   func! s:ProgressBar(title, max_value, winnr)
     let pgb=copy(s:progressbar)
-    let pgb.title = a:title.' '
+    let pgb.title = a:title..' '
     let pgb.max_value = a:max_value
     let pgb.winnr = a:winnr
     let pgb.cur_value = 0
@@ -1192,6 +1235,66 @@ if !s:settings.no_progress
   call s:SetProgbarColor()
 endif
 
+let s:build_fun_lines = []
+call add(s:build_fun_lines, [])
+let s:build_fun_lines[-1] =<< trim ENDLET
+    func! s:Add_diff_fill(lnum)
+      let l:filler = diff_filler(a:lnum)
+      if l:filler > 0
+	let l:to_insert = l:filler
+	while l:to_insert > 0
+	  let l:new = repeat(s:difffillchar, 3)
+
+	  if l:to_insert > 2 && l:to_insert < l:filler && !s:settings.whole_filler
+	    let l:new = l:new .. " " .. l:filler .. " inserted lines "
+	    let l:to_insert = 2
+	  endif
+ENDLET
+call add(s:build_fun_lines, [])
+if !s:settings.no_pre
+  let s:build_fun_lines[-1] =<< trim ENDLET
+	  " HTML line wrapping is off--go ahead and fill to the margin
+	  " TODO: what about when CSS wrapping is turned on?
+	  let l:new = l:new .. repeat(s:difffillchar, &columns - strlen(l:new) - s:margin)
+  ENDLET
+else
+  let s:build_fun_lines[-1] =<< trim ENDLET
+	  let l:new = l:new .. repeat(s:difffillchar, 3)
+  ENDLET
+endif
+call add(s:build_fun_lines, [])
+let s:build_fun_lines[-1] =<< trim ENDLET
+	let l:new = s:HtmlFormat_d(l:new, s:DIFF_D_ID, 0)
+ENDLET
+if s:settings.number_lines
+  call add(s:build_fun_lines, [])
+  let s:build_fun_lines[-1] =<< trim ENDLET
+	  " Indent if line numbering is on. Indent gets style of line number
+	  " column.
+	  let l:new = s:HtmlFormat_n(repeat(' ', s:margin), s:LINENR_ID, 0, 0) .. l:new
+  ENDLET
+endif
+if s:settings.dynamic_folds && !s:settings.no_foldcolumn 
+  call add(s:build_fun_lines, [])
+  let s:build_fun_lines[-1] =<< trim ENDLET
+	  if s:foldcolumn > 0
+	    " Indent for foldcolumn if there is one. Assume it's empty, there should
+	    " not be a fold for deleted lines in diff mode.
+	    let l:new = s:FoldColumn_fill() .. l:new
+	  endif
+  ENDLET
+endif
+" Ignore this comment, just bypassing a highlighting issue: if
+call add(s:build_fun_lines, [])
+let s:build_fun_lines[-1] =<< trim ENDLET
+	call add(s:lines, l:new..s:HtmlEndline)
+	let l:to_insert = l:to_insert - 1
+      endwhile
+    endif
+  endfun
+ENDLET
+exec join(flatten(s:build_fun_lines), "\n")
+
 " First do some preprocessing for dynamic folding. Do this for the entire file
 " so we don't accidentally start within a closed fold or something.
 let s:allfolds = []
@@ -1218,7 +1321,7 @@ if s:settings.dynamic_folds
       let s:newfold = {'firstline': s:lnum, 'lastline': foldclosedend(s:lnum), 'level': s:level,'type': "closed-fold"}
       call add(s:allfolds, s:newfold)
       " open the fold so we can find any contained folds
-      execute s:lnum."foldopen"
+      execute s:lnum.."foldopen"
     else
       if !s:settings.no_progress
 	call s:pgb.incr()
@@ -1250,7 +1353,7 @@ if s:settings.dynamic_folds
 	call add(s:allfolds, s:newfold)
       endif
       " open the fold so we can find any contained folds
-      execute s:lnum."foldopen"
+      execute s:lnum.."foldopen"
     else
       if !s:settings.no_progress
 	call s:pgb.incr()
@@ -1337,7 +1440,7 @@ if s:settings.dynamic_folds
   " Note that only when a start and an end line is specified will a fold
   " containing the current range ever be removed.
   while leveladjust > 0
-    exe g:html_start_line."foldopen"
+    exe g:html_start_line.."foldopen"
     let leveladjust -= 1
   endwhile
 endif
@@ -1397,47 +1500,11 @@ endif
 while s:lnum <= s:end
 
   " If there are filler lines for diff mode, show these above the line.
-  let s:filler = diff_filler(s:lnum)
-  if s:filler > 0
-    let s:n = s:filler
-    while s:n > 0
-      let s:new = repeat(s:difffillchar, 3)
-
-      if s:n > 2 && s:n < s:filler && !s:settings.whole_filler
-	let s:new = s:new . " " . s:filler . " inserted lines "
-	let s:n = 2
-      endif
-
-      if !s:settings.no_pre
-	" HTML line wrapping is off--go ahead and fill to the margin
-	" TODO: what about when CSS wrapping is turned on?
-	let s:new = s:new . repeat(s:difffillchar, &columns - strlen(s:new) - s:margin)
-      else
-	let s:new = s:new . repeat(s:difffillchar, 3)
-      endif
-
-      let s:new = s:HtmlFormat_d(s:new, s:DIFF_D_ID, 0)
-      if s:settings.number_lines
-	" Indent if line numbering is on. Indent gets style of line number
-	" column.
-	let s:new = s:HtmlFormat_n(repeat(' ', s:margin), s:LINENR_ID, 0, 0) . s:new
-      endif
-      if s:settings.dynamic_folds && !s:settings.no_foldcolumn && s:foldcolumn > 0
-	" Indent for foldcolumn if there is one. Assume it's empty, there should
-	" not be a fold for deleted lines in diff mode.
-	let s:new = s:FoldColumn_fill() . s:new
-      endif
-      call add(s:lines, s:new.s:HtmlEndline)
-
-      let s:n = s:n - 1
-    endwhile
-    unlet s:n
-  endif
-  unlet s:filler
+  call s:Add_diff_fill(s:lnum)
 
   " Start the line with the line number.
   if s:settings.number_lines
-    let s:numcol = repeat(' ', s:margin - 1 - strlen(s:lnum)) . s:lnum . ' '
+    let s:numcol = repeat(' ', s:margin - 1 - strlen(s:lnum)) .. s:lnum .. ' '
   endif
 
   let s:new = ""
@@ -1448,11 +1515,11 @@ while s:lnum <= s:end
     let s:new = foldtextresult(s:lnum)
     if !s:settings.no_pre
       " HTML line wrapping is off--go ahead and fill to the margin
-      let s:new = s:new . repeat(s:foldfillchar, &columns - strlen(s:new))
+      let s:new = s:new .. repeat(s:foldfillchar, &columns - strlen(s:new))
     endif
 
     " put numcol in a separate group for sake of unselectable text
-    let s:new = (s:settings.number_lines ? s:HtmlFormat_n(s:numcol, s:FOLDED_ID, 0, s:lnum): "") . s:HtmlFormat_t(s:new, s:FOLDED_ID, 0)
+    let s:new = (s:settings.number_lines ? s:HtmlFormat_n(s:numcol, s:FOLDED_ID, 0, s:lnum): "") .. s:HtmlFormat_t(s:new, s:FOLDED_ID, 0)
 
     " Skip to the end of the fold
     let s:new_lnum = foldclosedend(s:lnum)
@@ -1473,7 +1540,7 @@ while s:lnum <= s:end
     if s:settings.dynamic_folds
       " First insert a closing for any open folds that end on this line
       while !empty(s:foldstack) && get(s:foldstack,0).lastline == s:lnum-1
-	let s:new = s:new."</span></span>"
+	let s:new = s:new.."</span></span>"
 	call remove(s:foldstack, 0)
       endwhile
 
@@ -1481,9 +1548,9 @@ while s:lnum <= s:end
       let s:firstfold = 1
       while !empty(s:allfolds) && get(s:allfolds,0).firstline == s:lnum
 	let s:foldId = s:foldId + 1
-	let s:new .= "<span id='"
-	let s:new .= (exists('g:html_diff_win_num') ? "win".g:html_diff_win_num : "")
-	let s:new .= "fold".s:foldId.s:settings.id_suffix."' class='".s:allfolds[0].type."'>"
+	let s:new ..= "<span id='"
+	let s:new ..= (exists('g:html_diff_win_num') ? "win"..g:html_diff_win_num : "")
+	let s:new ..= "fold"..s:foldId..s:settings.id_suffix.."' class='"..s:allfolds[0].type.."'>"
 
 
 	" Unless disabled, add a fold column for the opening line of a fold.
@@ -1494,20 +1561,20 @@ while s:lnum <= s:end
 	if !s:settings.no_foldcolumn
 	  " add fold column that can open the new fold
 	  if s:allfolds[0].level > 1 && s:firstfold
-	    let s:new = s:new . s:FoldColumn_build('|', s:allfolds[0].level - 1, 0, "",
-		  \ 'toggle-open FoldColumn','javascript:toggleFold("fold'.s:foldstack[0].id.s:settings.id_suffix.'");')
+	    let s:new = s:new .. s:FoldColumn_build('|', s:allfolds[0].level - 1, 0, "",
+		  \ 'toggle-open FoldColumn','javascript:toggleFold("fold'..s:foldstack[0].id..s:settings.id_suffix..'");')
 	  endif
 	  " add the filler spaces separately from the '+' char so that it can be
 	  " shown/hidden separately during a hover unfold
-	  let s:new = s:new . s:FoldColumn_build("+", 1, 0, "",
-		\ 'toggle-open FoldColumn', 'javascript:toggleFold("fold'.s:foldId.s:settings.id_suffix.'");')
+	  let s:new = s:new .. s:FoldColumn_build("+", 1, 0, "",
+		\ 'toggle-open FoldColumn', 'javascript:toggleFold("fold'..s:foldId..s:settings.id_suffix..'");')
 	  " If this is not the last fold we're opening on this line, we need
 	  " to keep the filler spaces hidden if the fold is opened by mouse
 	  " hover. If it is the last fold to open in the line, we shouldn't hide
 	  " them, so don't apply the toggle-filler class.
-	  let s:new = s:new . s:FoldColumn_build(" ", 1, s:foldcolumn - s:allfolds[0].level - 1, "",
-		\ 'toggle-open FoldColumn'. (get(s:allfolds, 1, {'firstline': 0}).firstline == s:lnum ?" toggle-filler" :""),
-		\ 'javascript:toggleFold("fold'.s:foldId.s:settings.id_suffix.'");')
+	  let s:new = s:new .. s:FoldColumn_build(" ", 1, s:foldcolumn - s:allfolds[0].level - 1, "",
+		\ 'toggle-open FoldColumn'.. (get(s:allfolds, 1, {'firstline': 0}).firstline == s:lnum ?" toggle-filler" :""),
+		\ 'javascript:toggleFold("fold'..s:foldId..s:settings.id_suffix..'");')
 
 	  " add fold column that can close the new fold
 	  " only add extra blank space if we aren't opening another fold on the
@@ -1520,12 +1587,12 @@ while s:lnum <= s:end
 	  if s:firstfold
 	    " the first fold in a line has '|' characters from folds opened in
 	    " previous lines, before the '-' for this fold
-	    let s:new .= s:FoldColumn_build('|', s:allfolds[0].level - 1, s:extra_space, '-',
-		  \ 'toggle-closed FoldColumn', 'javascript:toggleFold("fold'.s:foldId.s:settings.id_suffix.'");')
+	    let s:new ..= s:FoldColumn_build('|', s:allfolds[0].level - 1, s:extra_space, '-',
+		  \ 'toggle-closed FoldColumn', 'javascript:toggleFold("fold'..s:foldId..s:settings.id_suffix..'");')
 	  else
 	    " any subsequent folds in the line only add a single '-'
-	    let s:new = s:new . s:FoldColumn_build("-", 1, s:extra_space, "",
-		  \ 'toggle-closed FoldColumn', 'javascript:toggleFold("fold'.s:foldId.s:settings.id_suffix.'");')
+	    let s:new = s:new .. s:FoldColumn_build("-", 1, s:extra_space, "",
+		  \ 'toggle-closed FoldColumn', 'javascript:toggleFold("fold'..s:foldId..s:settings.id_suffix..'");')
 	  endif
 	  let s:firstfold = 0
 	endif
@@ -1533,12 +1600,12 @@ while s:lnum <= s:end
 	" Add fold text, moving the span ending to the next line so collapsing
 	" of folds works correctly.
 	" Put numcol in a separate group for sake of unselectable text.
-	let s:new = s:new . (s:settings.number_lines ? s:HtmlFormat_n(s:numcol, s:FOLDED_ID, 0, 0) : "") . substitute(s:HtmlFormat_t(foldtextresult(s:lnum), s:FOLDED_ID, 0), '</span>', s:HtmlEndline.'\n\0', '')
-	let s:new = s:new . "<span class='fulltext'>"
+	let s:new = s:new .. (s:settings.number_lines ? s:HtmlFormat_n(s:numcol, s:FOLDED_ID, 0, 0) : "") .. substitute(s:HtmlFormat_t(foldtextresult(s:lnum), s:FOLDED_ID, 0), '</span>', s:HtmlEndline..'\n\0', '')
+	let s:new = s:new .. "<span class='fulltext'>"
 
 	" open the fold now that we have the fold text to allow retrieval of
 	" fold text for subsequent folds
-	execute s:lnum."foldopen"
+	execute s:lnum.."foldopen"
 	call insert(s:foldstack, remove(s:allfolds,0))
 	let s:foldstack[0].id = s:foldId
       endwhile
@@ -1553,13 +1620,13 @@ while s:lnum <= s:end
 	  " add the empty foldcolumn for unfolded lines if there is a fold
 	  " column at all
 	  if s:foldcolumn > 0
-	    let s:new = s:new . s:FoldColumn_fill()
+	    let s:new = s:new .. s:FoldColumn_fill()
 	  endif
 	else
 	  " add the fold column for folds not on the opening line
 	  if get(s:foldstack, 0).firstline < s:lnum
-	    let s:new = s:new . s:FoldColumn_build('|', s:foldstack[0].level, s:foldcolumn - s:foldstack[0].level, "",
-		  \ 'FoldColumn', 'javascript:toggleFold("fold'.s:foldstack[0].id.s:settings.id_suffix.'");')
+	    let s:new = s:new .. s:FoldColumn_build('|', s:foldstack[0].level, s:foldcolumn - s:foldstack[0].level, "",
+		  \ 'FoldColumn', 'javascript:toggleFold("fold'..s:foldstack[0].id..s:settings.id_suffix..'");')
 	  endif
 	endif
       endif
@@ -1567,9 +1634,9 @@ while s:lnum <= s:end
 
     " Now continue with the unfolded line text
     if s:settings.number_lines
-      let s:new = s:new . s:HtmlFormat_n(s:numcol, s:LINENR_ID, 0, s:lnum)
+      let s:new = s:new .. s:HtmlFormat_n(s:numcol, s:LINENR_ID, 0, s:lnum)
     elseif s:settings.line_ids
-      let s:new = s:new . s:HtmlFormat_n("", s:LINENR_ID, 0, s:lnum)
+      let s:new = s:new .. s:HtmlFormat_n("", s:LINENR_ID, 0, s:lnum)
     endif
 
     " Get the diff attribute, if any.
@@ -1609,7 +1676,7 @@ while s:lnum <= s:end
 	if s:len < &columns && !s:settings.no_pre
 	  " Add spaces at the end of the raw text line to extend the changed
 	  " line to the full width.
-	  let s:line = s:line . repeat(' ', &columns - virtcol([s:lnum, s:len]) - s:margin)
+	  let s:line = s:line .. repeat(' ', &columns - virtcol([s:lnum, s:len]) - s:margin)
 	  let s:len = &columns
 	endif
       else
@@ -1647,11 +1714,11 @@ while s:lnum <= s:end
 		" if the found tab is the first character in the text being
 		" processed, we need to get the character prior to the text,
 		" given by startcol.
-		let s:prevc = matchstr(s:line, '.\%' . (s:startcol + s:offset) . 'c')
+		let s:prevc = matchstr(s:line, '.\%' .. (s:startcol + s:offset) .. 'c')
 	      else
 		" Otherwise, the byte index of the tab into s:expandedtab is
 		" given by s:idx.
-		let s:prevc = matchstr(s:expandedtab, '.\%' . (s:idx + 1) . 'c')
+		let s:prevc = matchstr(s:expandedtab, '.\%' .. (s:idx + 1) .. 'c')
 	      endif
 	      let s:vcol = virtcol([s:lnum, s:startcol + s:idx + s:offset - len(s:prevc)])
 
@@ -1687,12 +1754,12 @@ while s:lnum <= s:end
       " Output the text with the same synID, with class set to the highlight ID
       " name, unless it has been concealed completely.
       if strlen(s:expandedtab) > 0
-	let s:new = s:new . s:HtmlFormat(s:expandedtab,  s:id, s:diff_id, "", 0)
+	let s:new = s:new .. s:HtmlFormat(s:expandedtab,  s:id, s:diff_id, "", 0)
       endif
     endwhile
   endif
 
-  call extend(s:lines, split(s:new.s:HtmlEndline, '\n', 1))
+  call extend(s:lines, split(s:new..s:HtmlEndline, '\n', 1))
   if !s:settings.no_progress && s:pgb.needs_redraw
     redrawstatus
     let s:pgb.needs_redraw = 0
@@ -1704,32 +1771,39 @@ while s:lnum <= s:end
   endif
 endwhile
 
+" Diff filler is returned based on what needs inserting *before* the given line.
+" So to get diff filler at the end of the buffer, we need to use last line + 1
+call s:Add_diff_fill(s:end+1)
+
 if s:settings.dynamic_folds
   " finish off any open folds
   while !empty(s:foldstack)
-    let s:lines[-1].="</span></span>"
+    let s:lines[-1]..="</span></span>"
     call remove(s:foldstack, 0)
   endwhile
 
   " add fold column to the style list if not already there
   let s:id = s:FOLD_C_ID
   if !has_key(s:stylelist, s:id)
-    let s:stylelist[s:id] = '.FoldColumn { ' . s:CSS1(s:id) . '}'
+    let s:stylelist[s:id] = '.FoldColumn { ' .. s:CSS1(s:id) .. '}'
   endif
 endif
 
 if s:settings.no_pre
   if !s:settings.use_css
     " Close off the font tag that encapsulates the whole <body>
-    call extend(s:lines, ["</font>", "</body>", "</html>"])
+    call extend(s:lines, ["</font>"])
   else
-    call extend(s:lines, ["</div>", "</body>", "</html>"])
+    call extend(s:lines, ["</div>"])
   endif
 else
-  call extend(s:lines, ["</pre>", "</body>", "</html>"])
+  call extend(s:lines, ["</pre>"])
+endif
+if !s:settings.no_doc
+  call extend(s:lines, ["</body>", "</html>"])
 endif
 
-exe s:newwin . "wincmd w"
+exe s:newwin .. "wincmd w"
 call setline(1, s:lines)
 unlet s:lines
 
@@ -1742,44 +1816,48 @@ unlet s:lines
 " The generated HTML is admittedly ugly and takes a LONG time to fold.
 " Make sure the user doesn't do syntax folding when loading a generated file,
 " using a modeline.
-call append(line('$'), "<!-- vim: set foldmethod=manual : -->")
-
-" Now, when we finally know which, we define the colors and styles
-if s:settings.use_css
-  1;/<style\>/+1
+if !s:settings.no_modeline
+  call append(line('$'), "<!-- vim: set foldmethod=manual : -->")
 endif
 
-" Normal/global attributes
-if s:settings.use_css
+" Now, when we finally know which, we define the colors and styles
+if s:settings.use_css && !s:settings.no_doc
+  1;/<style\>/+1
+
+  " Normal/global attributes
   if s:settings.no_pre
-    call append('.', "body { color: " . s:fgc . "; background-color: " . s:bgc . "; font-family: ". s:htmlfont ."; }")
+    call append('.', "body { color: " .. s:fgc .. "; background-color: " .. s:bgc .. "; font-family: ".. s:htmlfont .."; }")
     +
   else
-    call append('.', "pre { " . s:whitespace . "font-family: ". s:htmlfont ."; color: " . s:fgc . "; background-color: " . s:bgc . "; }")
+    call append('.', "pre { " .. s:whitespace .. "font-family: ".. s:htmlfont .."; color: " .. s:fgc .. "; background-color: " .. s:bgc .. "; }")
     +
     yank
     put
     execute "normal! ^cwbody\e"
     " body should not have the wrap formatting, only the pre section
     if s:whitespace != ''
-      exec 's#'.s:whitespace
+      exec 's#'..s:whitespace
     endif
   endif
   " fix browser inconsistencies (sometimes within the same browser) of different
   " default font size for different elements
   call append('.', '* { font-size: 1em; }')
   +
+  " use color scheme styles for links
+  " browser-default blue/purple colors for links don't look like the existing theme and are unreadable on dark backgrounds
+  call append('.', 'a { color: inherit; }')
+  +
   " if we use any input elements for unselectable content, make sure they look
   " like normal text
   if !empty(s:settings.prevent_copy)
     if s:settings.use_input_for_pc !=# "none"
-      call append('.', 'input { border: none; margin: 0; padding: 0; font-family: '.s:htmlfont.'; }')
+      call append('.', 'input { border: none; margin: 0; padding: 0; font-family: '..s:htmlfont..'; }')
       +
       " ch units for browsers which support them, em units for a somewhat
       " reasonable fallback.
       for w in range(1, 20, 1)
 	call append('.', [
-	      \ "input[size='".w."'] { width: ".w."em; width: ".w."ch; }"
+	      \ "input[size='"..w.."'] { width: "..w.."em; width: "..w.."ch; }"
 	      \ ])
 	+
       endfor
@@ -1823,14 +1901,15 @@ if s:settings.use_css
       endif
       for s:style_name in s:unselectable_styles
 	call append('.', [
-	      \ '  .'.s:style_name.' { user-select: none; }',
-	      \ '  [data-'.s:style_name.'-content]::before { content: attr(data-'.s:style_name.'-content); }',
-	      \ '  [data-'.s:style_name.'-content]::before { padding-bottom: 1px; display: inline-block; /* match the 1-px padding of standard items with background */ }',
-	      \ '  span[data-'.s:style_name.'-content]::before { cursor: default; }',
+	      \ '  .'..s:style_name..' { user-select: none; }',
+	      \ '  [data-'..s:style_name..'-content]::before { content: attr(data-'..s:style_name..'-content); }',
+	      \ '  [data-'..s:style_name..'-content]::before { padding-bottom: 1px; display: inline-block; /* match the 1-px padding of standard items with background */ }',
+	      \ '  span[data-'..s:style_name..'-content]::before { cursor: default; }',
 	      \ ])
 	+4
       endfor
       if s:settings.use_input_for_pc !=# 'none'
+	" Note, the extra '}' is to match the "@supports" above
 	call append('.', [
 	      \ '  input { display: none; }',
 	      \ '}'
@@ -1846,12 +1925,12 @@ if s:settings.use_css
 	" Make the cursor show active fold columns as active areas, and empty fold
 	" columns as not interactive.
 	call append('.', ['input.FoldColumn { cursor: pointer; }',
-	      \ 'input.FoldColumn[value="'.repeat(' ', s:foldcolumn).'"] { cursor: default; }'
+	      \ 'input.FoldColumn[value="'..repeat(' ', s:foldcolumn)..'"] { cursor: default; }'
 	      \ ])
 	+2
 	if s:settings.use_input_for_pc !=# 'all'
 	  call append('.', [
-		\ 'a[data-FoldColumn-content="'.repeat(' ', s:foldcolumn).'"] { cursor: default; }'
+		\ 'a[data-FoldColumn-content="'..repeat(' ', s:foldcolumn)..'"] { cursor: default; }'
 		\ ])
 	  +1
 	end
@@ -1874,15 +1953,17 @@ if s:settings.use_css
       endif
     endif
   endif
-else
+endif
+
+if !s:settings.use_css && !s:settings.no_doc
   " For Netscape 4, set <body> attributes too, though, strictly speaking, it's
   " incorrect.
-  execute '%s:<body\([^>]*\):<body bgcolor="' . s:bgc . '" text="' . s:fgc . '"\1>\r<font face="'. s:htmlfont .'"'
+  execute '%s:<body\([^>]*\):<body bgcolor="' .. s:bgc .. '" text="' .. s:fgc .. '"\1>\r<font face="'.. s:htmlfont ..'"'
 endif
 
 " Gather attributes for all other classes. Do diff first so that normal
 " highlight groups are inserted before it.
-if s:settings.use_css
+if s:settings.use_css && !s:settings.no_doc
   if s:diff_mode
     call append('.', filter(map(keys(s:diffstylelist), "s:diffstylelist[v:val]"), 'v:val != ""'))
   endif
@@ -1892,20 +1973,22 @@ if s:settings.use_css
 endif
 
 " Add hyperlinks
-" TODO: add option to not do this? Maybe just make the color the same as the
-" text highlight group normally is?
-%s+\(https\=://\S\{-}\)\(\([.,;:}]\=\(\s\|$\)\)\|[\\"'<>]\|&gt;\|&lt;\|&quot;\)+<a href="\1">\1</a>\2+ge
-
-" The DTD
-if s:settings.use_xhtml
-  exe "normal! gg$a\n<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">"
-elseif s:html5
-  exe "normal! gg0i<!DOCTYPE html>\n"
-else
-  exe "normal! gg0i<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">\n"
+if !s:settings.no_links
+  %s+\(https\=://\S\{-}\)\(\([.,;:}]\=\(\s\|$\)\)\|[\\"'<>]\|&gt;\|&lt;\|&quot;\)+<a href="\1">\1</a>\2+ge
 endif
 
-if s:settings.use_xhtml
+" The DTD
+if !s:settings.no_doc
+  if s:settings.use_xhtml
+    exe "normal! gg$a\n<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">"
+  elseif s:html5
+    exe "normal! gg0i<!DOCTYPE html>\n"
+  else
+    exe "normal! gg0i<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">\n"
+  endif
+endif
+
+if s:settings.use_xhtml && !s:settings.no_doc
   exe "normal! gg/<html/e\na xmlns=\"http://www.w3.org/1999/xhtml\"\e"
 endif
 
@@ -1926,7 +2009,7 @@ let @/ = s:old_search
 let &more = s:old_more
 
 " switch to original window to restore those settings
-exe s:orgwin . "wincmd w"
+exe s:orgwin .. "wincmd w"
 
 if !s:settings.expand_tabs
   let &l:isprint = s:old_isprint
@@ -1936,7 +2019,7 @@ let &l:et = s:old_et
 let &l:scrollbind = s:old_bind
 
 " and back to the new window again to end there
-exe s:newwin . "wincmd w"
+exe s:newwin .. "wincmd w"
 
 let &l:stl = s:newwin_stl
 exec 'resize' s:old_winheight
@@ -1973,10 +2056,13 @@ if !v:profiling
     delfunc s:progressbar.incr
     unlet s:pgb s:progressbar
   endif
+
+  delfunc s:Add_diff_fill
 endif
 
-unlet! s:new_lnum s:diffattr s:difffillchar s:foldfillchar s:HtmlSpace
+unlet! s:new_lnum s:diffattr s:difffillchar s:foldfillchar s:HtmlSpace s:diffstyle
 unlet! s:LeadingSpace s:HtmlEndline s:firstfold s:numcol s:foldcolumn
+unlet! s:wrapperfunc_lines s:build_fun_lines
 unlet s:foldstack s:allfolds s:foldId s:settings
 
 let &cpo = s:cpo_sav

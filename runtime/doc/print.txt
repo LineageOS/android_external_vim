@@ -1,4 +1,4 @@
-*print.txt*     For Vim version 8.2.  Last change: 2021 Oct 04
+*print.txt*     For Vim version 9.1.  Last change: 2024 May 11
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -139,31 +139,34 @@ If there is no error, return zero or an empty string.
 The default for non MS-Windows or VMS systems is to simply use "lpr" to print
 the file: >
 
-    system('lpr' . (&printdevice == '' ? '' : ' -P' . &printdevice)
-	. ' ' . v:fname_in) . delete(v:fname_in) + v:shell_error
+    system('lpr' .. (&printdevice == '' ? '' : ' -P' .. &printdevice)
+	.. ' ' .. v:fname_in) .. delete(v:fname_in) + v:shell_error
 
 On MS-Windows machines the default is to copy the file to the currently
 specified printdevice: >
 
-    system('copy' . ' ' . v:fname_in . (&printdevice == ''
-		? ' LPT1:' : (' \"' . &printdevice . '\"')))
-		. delete(v:fname_in)
+    system('copy' .. ' ' .. v:fname_in .. (&printdevice == ''
+		? ' LPT1:' : (' \"' .. &printdevice .. '\"')))
+		.. delete(v:fname_in)
 
 On VMS machines the default is to send the file to either the default or
 currently specified printdevice: >
 
-    system('print' . (&printdevice == '' ? '' : ' /queue=' .
-		&printdevice) . ' ' . v:fname_in) . delete(v:fname_in)
+    system('print' .. (&printdevice == '' ? '' : ' /queue=' ..
+		&printdevice) .. ' ' .. v:fname_in) .. delete(v:fname_in)
 
 If you change this option, using a function is an easy way to avoid having to
 escape all the spaces.  Example: >
 
-	:set printexpr=PrintFile(v:fname_in)
-	:function PrintFile(fname)
-	:  call system("ghostview " . a:fname)
-	:  call delete(a:fname)
+	:set printexpr=PrintFile()
+	:function PrintFile()
+	:  call system("ghostview " .. v:fname_in)
+	:  call delete(v:fname_in)
 	:  return v:shell_error
 	:endfunc
+
+It is more efficient if the option is set to just a function call,
+see |expr-option-function|.
 
 Be aware that some print programs return control before they have read the
 file.  If you delete the file too soon it will not be printed.  These programs
@@ -178,7 +181,9 @@ If the expression starts with s: or |<SID>|, then it is replaced with the
 script ID (|local-function|). Example: >
 		set printexpr=s:MyPrintFile()
 		set printexpr=<SID>SomePrintFile()
-<
+Otherwise, the expression is evaluated in the context of the script where the
+option was set, thus script-local items are available.
+
 This option cannot be set from a |modeline| or in the |sandbox|, for security
 reasons.
 
@@ -492,10 +497,11 @@ No CJK fonts are supplied with Vim.  There are some free Korean, Japanese, and
 Traditional Chinese fonts available at:
 
   http://examples.oreilly.com/cjkvinfo/adobe/samples/
+  https://resources.oreilly.com/examples/9781565922242/
 
 You can find descriptions of the various fonts in the read me file at
 
-  http://examples.oreilly.de/english_examples/cjkvinfo/adobe/00README
+  https://resources.oreilly.com/examples/9781565922242/-/blob/master/00README
 
 Please read your printer documentation on how to install new fonts.
 
@@ -586,7 +592,7 @@ There are three available versions:
 - GNU Ghostscript which is available under the GNU General Public License.  It
   can be obtained from:
 
-    ftp://mirror.cs.wisc.edu/pub/mirrors/ghost/gnu/
+    https://www.gnu.org/software/ghostscript
 
 - A commercial version for inclusion in commercial products.
 
@@ -611,10 +617,7 @@ X11
 - Ghostview.  Obtainable from:
 
     http://www.cs.wisc.edu/~ghost/gv/
-
-- gv.  Derived from Ghostview.  Obtainable from:
-
-    http://wwwthep.physik.uni-mainz.de/~plass/gv/
+    https://www.gnu.org/software/gv/
 
   Copies (possibly not the most recent) can be found at:
 
@@ -622,7 +625,8 @@ X11
 
 OpenVMS
 
-- Is apparently supported in the main code now (untested).  See:
+- Is apparently supported in the main code now (untested).
+  See (link seems dead):
 
     http://wwwthep.physik.uni-mainz.de/~plass/gv/
 
@@ -638,12 +642,6 @@ Linux
   Obtainable from:
 
     http://www.cs.wisc.edu/~ghost/gsview/
-
-- BMV.  Different from Ghostview and gv in that it doesn't use X but svgalib.
-  Obtainable from:
-
-    ftp://sunsite.unc.edu/pub/Linux/apps/graphics/viewers/svga/bmv-1.2.tgz
-
 
 7.3 PSUtils
 

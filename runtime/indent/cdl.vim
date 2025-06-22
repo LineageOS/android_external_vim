@@ -1,7 +1,7 @@
 " Description:	Comshare Dimension Definition Language (CDL)
 " Maintainer:	Raul Segura Acevedo <raulseguraaceved@netscape.net> (Invalid email address)
 " 		Doug Kearns <dougkearns@gmail.com>
-" Last Change:	Fri Nov 30 13:35:48  2001 CST
+" Last Change:	2022 Apr 06
 
 if exists("b:did_indent")
     "finish
@@ -12,6 +12,8 @@ setlocal indentexpr=CdlGetIndent(v:lnum)
 setlocal indentkeys&
 setlocal indentkeys+==~else,=~endif,=~then,;,),=
 
+let b:undo_indent = "setl inde< indk<"
+
 " Only define the function once.
 if exists("*CdlGetIndent")
     "finish
@@ -19,7 +21,7 @@ endif
 
 " find out if an "...=..." expression is an assignment (or a conditional)
 " it scans 'line' first, and then the previous lines
-fun! CdlAsignment(lnum, line)
+fun! CdlAssignment(lnum, line)
   let f = -1
   let lnum = a:lnum
   let line = a:line
@@ -88,7 +90,7 @@ fun! CdlGetIndent(lnum)
     end
   end
 
-  " remove members [a] of [b]:[c]... (inicio remainds valid)
+  " remove members [a] of [b]:[c]... (inicio remains valid)
   let line = substitute(line, '\c\(\[[^]]*]\(\s*of\s*\|:\)*\)\+', ' ', 'g')
   while 1
     " search for the next interesting element
@@ -109,7 +111,7 @@ fun! CdlGetIndent(lnum)
     else " c == '='
       " if it is an assignment increase indent
       if f == -1 " we don't know yet, find out
-	let f = CdlAsignment(lnum, strpart(line, 0, inicio))
+	let f = CdlAssignment(lnum, strpart(line, 0, inicio))
       end
       if f == 1 " formula increase it
 	let ind = ind + shiftwidth()
@@ -123,7 +125,7 @@ fun! CdlGetIndent(lnum)
     let ind = ind - shiftwidth()
   elseif match(thisline, '^\s*=') >= 0
     if f == -1 " we don't know yet if is an assignment, find out
-      let f = CdlAsignment(lnum, "")
+      let f = CdlAssignment(lnum, "")
     end
     if f == 1 " formula increase it
       let ind = ind + shiftwidth()

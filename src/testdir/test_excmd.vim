@@ -3,6 +3,7 @@
 source check.vim
 source shared.vim
 source term_util.vim
+source screendump.vim
 
 func Test_ex_delete()
   new
@@ -83,23 +84,31 @@ endfunc
 
 " Test for the :drop command
 func Test_drop_cmd()
-  call writefile(['L1', 'L2'], 'Xfile')
+  call writefile(['L1', 'L2'], 'Xdropfile', 'D')
+  " Test for reusing the current buffer
   enew | only
-  drop Xfile
+  let expected_nr = bufnr()
+  drop Xdropfile
+  call assert_equal(expected_nr, bufnr())
   call assert_equal('L2', getline(2))
   " Test for switching to an existing window
   below new
-  drop Xfile
+  drop Xdropfile
   call assert_equal(1, winnr())
-  " Test for splitting the current window
+  " Test for splitting the current window (set nohidden)
   enew | only
   set modified
-  drop Xfile
+  drop Xdropfile
   call assert_equal(2, winnr('$'))
+  " Not splitting the current window even if modified (set hidden)
+  set hidden
+  enew | only
+  set modified
+  drop Xdropfile
+  call assert_equal(1, winnr('$'))
   " Check for setting the argument list
-  call assert_equal(['Xfile'], argv())
+  call assert_equal(['Xdropfile'], argv())
   enew | only!
-  call delete('Xfile')
 endfunc
 
 " Test for the :append command
@@ -141,14 +150,13 @@ func Test_append_cmd_empty_buf()
     endfunc
     call timer_start(10, 'Timer')
   END
-  call writefile(lines, 'Xtest_append_cmd_empty_buf')
+  call writefile(lines, 'Xtest_append_cmd_empty_buf', 'D')
   let buf = RunVimInTerminal('-S Xtest_append_cmd_empty_buf', {'rows': 6})
   call WaitForAssert({-> assert_equal('bbbbb', term_getline(buf, 2))})
   call WaitForAssert({-> assert_equal('aaaaa', term_getline(buf, 1))})
 
   " clean up
   call StopVimInTerminal(buf)
-  call delete('Xtest_append_cmd_empty_buf')
 endfunc
 
 " Test for the :insert command
@@ -190,14 +198,13 @@ func Test_insert_cmd_empty_buf()
     endfunc
     call timer_start(10, 'Timer')
   END
-  call writefile(lines, 'Xtest_insert_cmd_empty_buf')
+  call writefile(lines, 'Xtest_insert_cmd_empty_buf', 'D')
   let buf = RunVimInTerminal('-S Xtest_insert_cmd_empty_buf', {'rows': 6})
   call WaitForAssert({-> assert_equal('bbbbb', term_getline(buf, 2))})
   call WaitForAssert({-> assert_equal('aaaaa', term_getline(buf, 1))})
 
   " clean up
   call StopVimInTerminal(buf)
-  call delete('Xtest_insert_cmd_empty_buf')
 endfunc
 
 " Test for the :change command
@@ -241,8 +248,8 @@ func Test_confirm_cmd()
   CheckNotGui
   CheckRunVimInTerminal
 
-  call writefile(['foo1'], 'Xfoo')
-  call writefile(['bar1'], 'Xbar')
+  call writefile(['foo1'], 'Xfoo', 'D')
+  call writefile(['bar1'], 'Xbar', 'D')
 
   " Test for saving all the modified buffers
   let lines =<< trim END
@@ -253,7 +260,7 @@ func Test_confirm_cmd()
     call setline(1, 'bar2')
     wincmd b
   END
-  call writefile(lines, 'Xscript')
+  call writefile(lines, 'Xscript', 'D')
   let buf = RunVimInTerminal('-S Xscript', {'rows': 20})
   call term_sendkeys(buf, ":confirm qall\n")
   call WaitForAssert({-> assert_match('\[Y\]es, (N)o, Save (A)ll, (D)iscard All, (C)ancel: ', term_getline(buf, 20))}, 1000)
@@ -302,10 +309,6 @@ func Test_confirm_cmd()
 
   call assert_equal(['foo4'], readfile('Xfoo'))
   call assert_equal(['bar2'], readfile('Xbar'))
-
-  call delete('Xscript')
-  call delete('Xfoo')
-  call delete('Xbar')
 endfunc
 
 func Test_confirm_cmd_cancel()
@@ -318,7 +321,7 @@ func Test_confirm_cmd_cancel()
     new
     call setline(1, 'abc')
   END
-  call writefile(lines, 'Xscript')
+  call writefile(lines, 'Xscript', 'D')
   let buf = RunVimInTerminal('-S Xscript', {'rows': 20})
   call term_sendkeys(buf, ":confirm close\n")
   call WaitForAssert({-> assert_match('^\[Y\]es, (N)o, (C)ancel: *$',
@@ -332,7 +335,6 @@ func Test_confirm_cmd_cancel()
   call WaitForAssert({-> assert_match('^ *0,0-1         All$',
         \ term_getline(buf, 20))}, 1000)
   call StopVimInTerminal(buf)
-  call delete('Xscript')
 endfunc
 
 " The ":confirm" prompt was sometimes used with the terminal in cooked mode.
@@ -342,14 +344,14 @@ func Test_confirm_q_wq()
   CheckNotGui
   CheckRunVimInTerminal
 
-  call writefile(['foo'], 'Xfoo')
+  call writefile(['foo'], 'Xfoo', 'D')
 
   let lines =<< trim END
     set hidden nomore
     call setline(1, 'abc')
     edit Xfoo
   END
-  call writefile(lines, 'Xscript')
+  call writefile(lines, 'Xscript', 'D')
   let buf = RunVimInTerminal('-S Xscript', {'rows': 20})
   call term_sendkeys(buf, ":confirm q\n")
   call WaitForAssert({-> assert_match('^\[Y\]es, (N)o, (C)ancel: *$',
@@ -365,23 +367,21 @@ func Test_confirm_q_wq()
   call term_sendkeys(buf, 'C')
   call WaitForAssert({-> assert_notmatch('^\[Y\]es, (N)o, (C)ancel: C*$',
         \ term_getline(buf, 20))}, 1000)
-  call StopVimInTerminal(buf)
 
-  call delete('Xscript')
-  call delete('Xfoo')
+  call StopVimInTerminal(buf)
 endfunc
 
 func Test_confirm_write_ro()
   CheckNotGui
   CheckRunVimInTerminal
 
-  call writefile(['foo'], 'Xconfirm_write_ro')
+  call writefile(['foo'], 'Xconfirm_write_ro', 'D')
   let lines =<< trim END
     set nobackup ff=unix cmdheight=2
     edit Xconfirm_write_ro
     norm Abar
   END
-  call writefile(lines, 'Xscript')
+  call writefile(lines, 'Xscript', 'D')
   let buf = RunVimInTerminal('-S Xscript', {'rows': 20})
 
   " Try to write with 'ro' option.
@@ -422,17 +422,15 @@ func Test_confirm_write_ro()
   call assert_equal(['foo'], readfile('Xconfirm_write_ro'))
 
   call StopVimInTerminal(buf)
-  call delete('Xscript')
-  call delete('Xconfirm_write_ro')
 endfunc
 
 func Test_confirm_write_partial_file()
   CheckNotGui
   CheckRunVimInTerminal
 
-  call writefile(['a', 'b', 'c', 'd'], 'Xwrite_partial')
+  call writefile(['a', 'b', 'c', 'd'], 'Xwrite_partial', 'D')
   call writefile(['set nobackup ff=unix cmdheight=2',
-        \         'edit Xwrite_partial'], 'Xscript')
+        \         'edit Xwrite_partial'], 'Xscript', 'D')
   let buf = RunVimInTerminal('-S Xscript', {'rows': 20})
 
   call term_sendkeys(buf, ":confirm 2,3w\n")
@@ -458,8 +456,6 @@ func Test_confirm_write_partial_file()
   call assert_equal(['b', 'c'], readfile('Xwrite_partial'))
 
   call StopVimInTerminal(buf)
-  call delete('Xwrite_partial')
-  call delete('Xscript')
 endfunc
 
 " Test for the :print command
@@ -489,9 +485,9 @@ func Test_redir_cmd()
 
   if has('unix')
     " Redirecting to a directory name
-    call mkdir('Xdir')
-    call assert_fails('redir > Xdir', 'E17:')
-    call delete('Xdir', 'd')
+    call mkdir('Xredir')
+    call assert_fails('redir > Xredir', 'E17:')
+    call delete('Xredir', 'd')
   endif
 
   " Test for redirecting to a register
@@ -509,10 +505,9 @@ func Test_redir_cmd_readonly()
   CheckNotRoot
 
   " Redirecting to a read-only file
-  call writefile([], 'Xfile')
-  call setfperm('Xfile', 'r--r--r--')
-  call assert_fails('redir! > Xfile', 'E190:')
-  call delete('Xfile')
+  call writefile([], 'Xredirfile', 'D')
+  call setfperm('Xredirfile', 'r--r--r--')
+  call assert_fails('redir! > Xredirfile', 'E190:')
 endfunc
 
 " Test for the :filetype command
@@ -532,21 +527,20 @@ endfunc
 
 " Test for the :read command
 func Test_read_cmd()
-  call writefile(['one'], 'Xfile')
+  call writefile(['one'], 'Xcmdfile', 'D')
   new
   call assert_fails('read', 'E32:')
-  edit Xfile
+  edit Xcmdfile
   read
   call assert_equal(['one', 'one'], getline(1, '$'))
   close!
   new
-  read Xfile
+  read Xcmdfile
   call assert_equal(['', 'one'], getline(1, '$'))
   call deletebufline('', 1, '$')
-  call feedkeys("Qr Xfile\<CR>visual\<CR>", 'xt')
+  call feedkeys("Qr Xcmdfile\<CR>visual\<CR>", 'xt')
   call assert_equal(['one'], getline(1, '$'))
   close!
-  call delete('Xfile')
 endfunc
 
 " Test for running Ex commands when text is locked.
@@ -580,10 +574,12 @@ endfunc
 
 " Test for the :verbose command
 func Test_verbose_cmd()
-  call assert_equal(['  verbose=1'], split(execute('verbose set vbs'), "\n"))
+  set verbose=3
+  call assert_match('  verbose=1\n\s*Last set from ', execute('verbose set vbs'), "\n")
   call assert_equal(['  verbose=0'], split(execute('0verbose set vbs'), "\n"))
-  let l = execute("4verbose set verbose | set verbose")
-  call assert_equal(['  verbose=4', '  verbose=0'], split(l, "\n"))
+  set verbose=0
+  call assert_match('  verbose=4\n\s*Last set from .*\n  verbose=0',
+        \ execute("4verbose set verbose | set verbose"))
 endfunc
 
 " Test for the :delete command and the related abbreviated commands
@@ -631,9 +627,9 @@ func Sandbox_tests()
   endif
   call assert_fails("let $TESTVAR=1", 'E48:')
   call assert_fails("call feedkeys('ivim')", 'E48:')
-  call assert_fails("source! Xfile", 'E48:')
-  call assert_fails("call delete('Xfile')", 'E48:')
-  call assert_fails("call writefile([], 'Xfile')", 'E48:')
+  call assert_fails("source! Xsomefile", 'E48:')
+  call assert_fails("call delete('Xthatfile')", 'E48:')
+  call assert_fails("call writefile([], 'Xanotherfile')", 'E48:')
   call assert_fails('!ls', 'E48:')
   call assert_fails('shell', 'E48:')
   call assert_fails('stop', 'E48:')
@@ -658,7 +654,7 @@ func Sandbox_tests()
   if has('terminal')
     call assert_fails('terminal', 'E48:')
     call assert_fails('call term_start("vim")', 'E48:')
-    call assert_fails('call term_dumpwrite(1, "Xfile")', 'E48:')
+    call assert_fails('call term_dumpwrite(1, "Xdumpfile")', 'E48:')
   endif
   if has('channel')
     call assert_fails("call ch_logfile('chlog')", 'E48:')
@@ -707,6 +703,8 @@ func Test_address_line_overflow()
   call setline(1, range(100))
   call assert_fails('|.44444444444444444444444', 'E1247:')
   call assert_fails('|.9223372036854775806', 'E1247:')
+  call assert_fails('.44444444444444444444444d', 'E1247:')
+  call assert_equal(range(100)->map('string(v:val)'), getline(1, '$'))
 
   $
   yank 77777777777777777777
@@ -715,5 +713,47 @@ func Test_address_line_overflow()
   bwipe!
 endfunc
 
+" This was leaving the cursor in line zero
+func Test_using_zero_in_range()
+  new
+  norm o00
+  silent!  0;s/\%')
+  bwipe!
+endfunc
+
+" Test :write after changing name with :file and loading it with :edit
+func Test_write_after_rename()
+  call writefile(['text'], 'Xafterfile', 'D')
+
+  enew
+  file Xafterfile
+  call assert_fails('write', 'E13: File exists (add ! to override)')
+
+  " works OK after ":edit"
+  edit
+  write
+
+  bwipe!
+endfunc
+
+" catch address lines overflow
+func Test_ex_address_range_overflow()
+  call assert_fails(':--+foobar', 'E492:')
+endfunc
+
+func Test_drop_modified_file()
+  CheckScreendump
+  let lines =<< trim END
+  call setline(1, 'The quick brown fox jumped over the lazy dogs')
+  END
+  call writefile([''], 'Xdrop_modified.txt', 'D')
+  call writefile(lines, 'Xtest_drop_modified', 'D')
+  let buf = RunVimInTerminal('-S Xtest_drop_modified Xdrop_modified.txt', {'rows': 10,'columns': 40})
+  call term_sendkeys(buf, ":drop Xdrop_modified.txt\<CR>")
+  call VerifyScreenDump(buf, 'Test_drop_modified_1', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

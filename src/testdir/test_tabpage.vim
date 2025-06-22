@@ -117,10 +117,16 @@ function Test_tabpage()
   call assert_equal(3, tabpagenr())
   +3tabmove
   call assert_equal(6, tabpagenr())
+  silent -tabmove
+  call assert_equal(5, tabpagenr())
+  silent -2 tabmove
+  call assert_equal(3, tabpagenr())
+  silent	-2	tabmove
+  call assert_equal(1, tabpagenr())
 
-  " The following are a no-op
   norm! 2gt
   call assert_equal(2, tabpagenr())
+  " The following are a no-op
   tabmove 2
   call assert_equal(2, tabpagenr())
   2tabmove
@@ -148,6 +154,93 @@ function Test_tabpage()
   tabnew
   call assert_fails("-2tabmove", 'E16:')
   tabonly!
+endfunc
+
+func Test_tabpage_drop()
+  edit f1
+  tab split f2
+  tab split f3
+  normal! gt
+  call assert_equal(1, tabpagenr())
+  tab drop f4
+  call assert_equal(1, tabpagenr('#'))
+
+  tab drop f3
+  call assert_equal(4, tabpagenr())
+  call assert_equal(2, tabpagenr('#'))
+  bwipe!
+  bwipe!
+  bwipe!
+  bwipe!
+  call assert_equal(1, tabpagenr('$'))
+
+  call assert_equal(1, winnr('$'))
+  call assert_equal('', bufname(''))
+  call writefile(['L1', 'L2'], 'Xdropfile', 'D')
+
+  " Test for ':tab drop single-file': reuse current buffer
+  let expected_nr = bufnr()
+  tab drop Xdropfile
+  call assert_equal(1, tabpagenr('$'))
+  call assert_equal(expected_nr, bufnr())
+  call assert_equal('L2', getline(2))
+  bwipe!
+
+  " Test for ':tab drop single-file': not reuse modified buffer
+  set modified
+  let expected_nr = bufnr() + 1
+  tab drop Xdropfile
+  call assert_equal(2, tabpagenr())
+  call assert_equal(2, tabpagenr('$'))
+  call assert_equal(expected_nr, bufnr())
+  call assert_equal('L2', getline(2))
+  bwipe!
+
+  " Test for ':tab drop single-file': multiple tabs already exist
+  tab split f2
+  tab split f3
+  let expected_nr = bufnr() + 1
+  tab drop Xdropfile
+  call assert_equal(4, tabpagenr())
+  call assert_equal(4, tabpagenr('$'))
+  call assert_equal(expected_nr, bufnr())
+  call assert_equal('L2', getline(2))
+  %bwipe!
+
+  " Test for ':tab drop multi-files': reuse current buffer
+  let expected_nr = bufnr()
+  tab drop Xdropfile f1 f2 f3
+  call assert_equal(1, tabpagenr())
+  call assert_equal(4, tabpagenr('$'))
+  call assert_equal(expected_nr, bufnr())
+  call assert_equal('L2', getline(2))
+  %bwipe!
+
+  " Test for ':tab drop multi-files': not reuse modified buffer
+  set modified
+  let expected_nr = bufnr() + 1
+  tab drop Xdropfile f1 f2 f3
+  call assert_equal(2, tabpagenr())
+  call assert_equal(5, tabpagenr('$'))
+  call assert_equal(expected_nr, bufnr())
+  call assert_equal('L2', getline(2))
+  %bwipe!
+
+  " Test for ':tab drop multi-files': multiple tabs already exist
+  tab split f2
+  tab split f3
+  let expected_nr = bufnr() + 1
+  tab drop a b c
+  call assert_equal(4, tabpagenr())
+  call assert_equal(6, tabpagenr('$'))
+  call assert_equal(expected_nr, bufnr())
+  let expected_nr = bufnr() + 3
+  tab drop Xdropfile f1 f2 f3
+  call assert_equal(5, tabpagenr())
+  call assert_equal(8, tabpagenr('$'))
+  call assert_equal(expected_nr, bufnr())
+  call assert_equal('L2', getline(2))
+  %bwipe!
 endfunc
 
 " Test autocommands
@@ -244,14 +337,14 @@ function Test_tabpage_with_autocmd_tab_drop()
 
   let s:li = []
   tab drop test1
-  call assert_equal(['BufLeave', 'BufEnter'], s:li)
+  call assert_equal(['BufEnter'], s:li)
 
   let s:li = []
   tab drop test2 test3
   call assert_equal([
         \ 'TabLeave', 'TabEnter', 'TabLeave', 'TabEnter',
         \ 'TabLeave', 'WinEnter', 'TabEnter', 'BufEnter',
-        \ 'TabLeave', 'WinEnter', 'TabEnter', 'BufEnter'], s:li)
+        \ 'TabLeave', 'WinEnter', 'TabEnter', 'BufEnter', 'BufEnter'], s:li)
 
   autocmd! TestTabpageGroup
   augroup! TestTabpageGroup
@@ -595,6 +688,7 @@ func Test_tabs()
 endfunc
 
 func Test_tabpage_cmdheight()
+  CheckScreendump
   CheckRunVimInTerminal
   call writefile([
         \ 'set laststatus=2',
@@ -606,19 +700,16 @@ func Test_tabpage_cmdheight()
         \ 'echo "hello\nthere"',
         \ 'tabnext',
         \ 'redraw',
-	\ ], 'XTest_tabpage_cmdheight')
+	\ ], 'XTest_tabpage_cmdheight', 'D')
   " Check that cursor line is concealed
   let buf = RunVimInTerminal('-S XTest_tabpage_cmdheight', {'statusoff': 3})
   call VerifyScreenDump(buf, 'Test_tabpage_cmdheight', {})
 
   call StopVimInTerminal(buf)
-  call delete('XTest_tabpage_cmdheight')
 endfunc
 
 " Test for closing the tab page from a command window
 func Test_tabpage_close_cmdwin()
-  CheckFeature cmdwin
-
   tabnew
   call feedkeys("q/:tabclose\<CR>\<Esc>", 'xt')
   call assert_equal(2, tabpagenr('$'))
@@ -768,14 +859,14 @@ endfunc
 func Test_tabpage_close_on_switch()
   tabnew
   tabnew
-  edit Xfile
+  edit Xtabfile
   augroup T2
     au!
-    au BufLeave Xfile 1tabclose
+    au BufLeave Xtabfile 1tabclose
   augroup END
   tabfirst
   call assert_equal(2, tabpagenr())
-  call assert_equal('Xfile', @%)
+  call assert_equal('Xtabfile', @%)
   augroup T2
     au!
   augroup END
@@ -850,6 +941,138 @@ func Test_lastused_tabpage()
   call assert_equal(wnum, win_getid())
 
   tabonly!
+endfunc
+
+" Test for tabpage allocation failure
+func Test_tabpage_alloc_failure()
+  call test_alloc_fail(GetAllocId('newtabpage_tvars'), 0, 0)
+  call assert_fails('tabnew', 'E342:')
+
+  call test_alloc_fail(GetAllocId('newtabpage_tvars'), 0, 0)
+  edit Xfile1
+  call assert_fails('tabedit Xfile2', 'E342:')
+  call assert_equal(1, winnr('$'))
+  call assert_equal(1, tabpagenr('$'))
+  call assert_equal('Xfile1', @%)
+
+  new
+  call test_alloc_fail(GetAllocId('newtabpage_tvars'), 0, 0)
+  call assert_fails('wincmd T', 'E342:')
+  bw!
+
+  call test_alloc_fail(GetAllocId('newtabpage_tvars'), 0, 0)
+  call assert_fails('tab split', 'E342:')
+  call assert_equal(2, winnr('$'))
+  call assert_equal(1, tabpagenr('$'))
+endfunc
+
+func Test_tabpage_tabclose()
+  " Default behaviour, move to the right.
+  call s:reconstruct_tabpage_for_test(6)
+  norm! 4gt
+  setl tcl=
+  tabclose
+  call assert_equal("n3", bufname())
+
+  " Move to the left.
+  call s:reconstruct_tabpage_for_test(6)
+  norm! 4gt
+  setl tcl=left
+  tabclose
+  call assert_equal("n1", bufname())
+
+  " Move to the last used tab page.
+  call s:reconstruct_tabpage_for_test(6)
+  norm! 5gt
+  norm! 2gt
+  setl tcl=uselast
+  tabclose
+  call assert_equal("n3", bufname())
+
+  " Same, but the last used tab page is invalid. Move to the right.
+  call s:reconstruct_tabpage_for_test(6)
+  norm! 5gt
+  norm! 3gt
+  setl tcl=uselast
+  tabclose 5
+  tabclose!
+  call assert_equal("n2", bufname())
+
+  " Same, but the last used tab page is invalid. Move to the left.
+  call s:reconstruct_tabpage_for_test(6)
+  norm! 5gt
+  norm! 3gt
+  setl tcl=uselast,left
+  tabclose 5
+  tabclose!
+  call assert_equal("n0", bufname())
+
+  " Move left when moving right is not possible.
+  call s:reconstruct_tabpage_for_test(6)
+  setl tcl=
+  norm! 6gt
+  tabclose
+  call assert_equal("n3", bufname())
+
+  " Move right when moving left is not possible.
+  call s:reconstruct_tabpage_for_test(6)
+  setl tcl=left
+  norm! 1gt
+  tabclose
+  call assert_equal("n0", bufname())
+
+  setl tcl&
+endfunc
+
+" this was giving ml_get errors
+func Test_tabpage_last_line()
+  enew
+  call setline(1, repeat(['a'], &lines + 5))
+  $
+  tabnew
+  call setline(1, repeat(['b'], &lines + 20))
+  $
+  tabNext
+  call assert_equal('a', getline('.'))
+
+  bwipe!
+  bwipe!
+endfunc
+
+" this was causing an endless loop
+func Test_tabpage_drop_tabmove()
+  augroup TestTabpageTabmove
+    au!
+    autocmd! TabEnter * :if tabpagenr() > 1 | tabmove - | endif
+  augroup end
+  $tab drop XTab_99.log
+  $tab drop XTab_98.log
+  $tab drop XTab_97.log
+
+  autocmd! TestTabpageTabmove
+  augroup! TestTabpageTabmove
+
+  " clean up
+  bwipe!
+  bwipe!
+  bwipe!
+endfunc
+
+" Test that settabvar() shouldn't change the last accessed tabpage.
+func Test_lastused_tabpage_settabvar()
+  tabonly!
+  tabnew
+  tabnew
+  tabnew
+  call assert_equal(3, tabpagenr('#'))
+
+  call settabvar(2, 'myvar', 'tabval')
+  call assert_equal('tabval', gettabvar(2, 'myvar'))
+  call assert_equal(3, tabpagenr('#'))
+
+  bwipe!
+  bwipe!
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

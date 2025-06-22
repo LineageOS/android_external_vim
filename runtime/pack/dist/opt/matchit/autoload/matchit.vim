@@ -1,6 +1,6 @@
 "  matchit.vim: (global plugin) Extended "%" matching
 "  autload script of matchit plugin, see ../plugin/matchit.vim
-"  Last Change: Jun 10, 2021
+"  Last Change: May 20, 2024
 
 " Neovim does not support scriptversion
 if has("vimscript-4")
@@ -41,6 +41,10 @@ function s:RestoreOptions()
   if &ve != ''
     let restore_options = " ve=" .. &ve .. restore_options
     set ve=
+  endif
+  if &smartcase
+    let restore_options = " smartcase " .. restore_options
+    set nosmartcase
   endif
   return restore_options
 endfunction
@@ -83,9 +87,9 @@ function matchit#Match_wrapper(word, forward, mode) range
     let s:last_mps = &mps
     " quote the special chars in 'matchpairs', replace [,:] with \| and then
     " append the builtin pairs (/*, */, #if, #ifdef, #ifndef, #else, #elif,
-    " #endif)
+    " #elifdef, #elifndef, #endif)
     let default = escape(&mps, '[$^.*~\\/?]') .. (strlen(&mps) ? "," : "") ..
-      \ '\/\*:\*\/,#\s*if\%(n\=def\)\=:#\s*else\>:#\s*elif\>:#\s*endif\>'
+      \ '\/\*:\*\/,#\s*if\%(n\=def\)\=:#\s*else\>:#\s*elif\%(n\=def\)\=\>:#\s*endif\>'
     " s:all = pattern with all the keywords
     let match_words = match_words .. (strlen(match_words) ? "," : "") .. default
     let s:last_words = match_words
@@ -97,6 +101,8 @@ function matchit#Match_wrapper(word, forward, mode) range
       let s:pat = s:ParseWords(match_words)
     endif
     let s:all = substitute(s:pat, s:notslash .. '\zs[,:]\+', '\\|', 'g')
+    " un-escape \, to ,
+    let s:all = substitute(s:all, '\\,', ',', 'g')
     " Just in case there are too many '\(...)' groups inside the pattern, make
     " sure to use \%(...) groups, so that error E872 can be avoided
     let s:all = substitute(s:all, '\\(', '\\%(', 'g')
@@ -108,6 +114,8 @@ function matchit#Match_wrapper(word, forward, mode) range
     let s:patBR = substitute(match_words .. ',',
       \ s:notslash .. '\zs[,:]*,[,:]*', ',', 'g')
     let s:patBR = substitute(s:patBR, s:notslash .. '\zs:\{2,}', ':', 'g')
+    " un-escape \, to ,
+    let s:patBR = substitute(s:patBR, '\\,', ',', 'g')
   endif
 
   " Second step:  set the following local variables:
@@ -134,9 +142,6 @@ function matchit#Match_wrapper(word, forward, mode) range
     let curcol = match(matchline, regexp)
     " If there is no match, give up.
     if curcol == -1
-      " Make sure macros abort properly
-      "exe "norm! \<esc>"
-      call feedkeys("\e", 'tni')
       return s:CleanUp(restore_options, a:mode, startpos)
     endif
     let endcol = matchend(matchline, regexp)
@@ -533,6 +538,8 @@ fun! s:Choose(patterns, string, comma, branch, prefix, suffix, ...)
   else
     let currpat = substitute(current, s:notslash .. a:branch, '\\|', 'g')
   endif
+  " un-escape \, to ,
+  let currpat = substitute(currpat, '\\,', ',', 'g')
   while a:string !~ a:prefix .. currpat .. a:suffix
     let tail = strpart(tail, i)
     let i = matchend(tail, s:notslash .. a:comma)
@@ -756,16 +763,16 @@ endfun
 fun! s:ParseSkip(str)
   let skip = a:str
   if skip[1] == ":"
-    if skip[0] == "s"
+    if skip[0] ==# "s"
       let skip = "synIDattr(synID(line('.'),col('.'),1),'name') =~? '" ..
         \ strpart(skip,2) .. "'"
-    elseif skip[0] == "S"
+    elseif skip[0] ==# "S"
       let skip = "synIDattr(synID(line('.'),col('.'),1),'name') !~? '" ..
         \ strpart(skip,2) .. "'"
-    elseif skip[0] == "r"
-      let skip = "strpart(getline('.'),0,col('.'))=~'" . strpart(skip,2). "'"
-    elseif skip[0] == "R"
-      let skip = "strpart(getline('.'),0,col('.'))!~'" . strpart(skip,2). "'"
+    elseif skip[0] ==# "r"
+      let skip = "strpart(getline('.'),0,col('.'))=~'" .. strpart(skip,2) .. "'"
+    elseif skip[0] ==# "R"
+      let skip = "strpart(getline('.'),0,col('.'))!~'" .. strpart(skip,2) .. "'"
     endif
   endif
   return skip

@@ -1,13 +1,15 @@
 " vi:set ts=8 sts=8 sw=8 tw=0:
 "
 " Menu Translations:	Japanese (UTF-8)
-" Last Translator:	MURAOKA Taro  <koron.kaoriya@gmail.com>
-" Last Change:		18-Jul-2018.
+" Last Translator:	MURAOKA Taro <koron.kaoriya@gmail.com>
+" Last Change:		18-Dec-2023.
 "
-" Copyright (C) 2001-2018 MURAOKA Taro <koron.kaoriya@gmail.com>,
+" Copyright (C) 2001-2023 MURAOKA Taro <koron.kaoriya@gmail.com>,
 "			  vim-jp <http://vim-jp.org/>
 "
 " THIS FILE IS DISTRIBUTED UNDER THE VIM LICENSE.
+"
+" Original translations
 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -23,7 +25,7 @@ scriptencoding utf-8
 menutrans &Help			ヘルプ(&H)
 menutrans &Overview<Tab><F1>	概略(&O)<Tab><F1>
 menutrans &User\ Manual		ユーザーマニュアル(&U)
-menutrans &How-to\ links	&How-toリンク
+menutrans &How-To\ links	&How-toリンク
 menutrans &Credits		クレジット(&C)
 menutrans Co&pying		著作権情報(&P)
 menutrans &Sponsor/Register	スポンサー/登録(&S)
@@ -37,7 +39,7 @@ let g:menutrans_help_dialog = "ヘルプを検索したいコマンドもしく�
 menutrans &File				ファイル(&F)
 menutrans &Open\.\.\.<Tab>:e		開く(&O)\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp	分割して開く(&L)\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew	タブページで開く<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew	タブページで開く(&T)<Tab>:tabnew
 menutrans &New<Tab>:enew		新規作成(&N)<Tab>:enew
 menutrans &Close<Tab>:close		閉じる(&C)<Tab>:close
 menutrans &Save<Tab>:w			保存(&S)<Tab>:w
@@ -270,10 +272,9 @@ if has("toolbar")
     tmenu ToolBar.Cut		クリップボードへ切り取り
     tmenu ToolBar.Copy		クリップボードへコピー
     tmenu ToolBar.Paste		クリップボードから貼り付け
-    tmenu ToolBar.Find		検索...
+    tmenu ToolBar.Replace	検索 / 置換...
     tmenu ToolBar.FindNext	次を検索
     tmenu ToolBar.FindPrev	前を検索
-    tmenu ToolBar.Replace	置換...
     if 0	" disabled; These are in the Windows menu
       tmenu ToolBar.New		新規ウィンドウ作成
       tmenu ToolBar.WinSplit	ウィンドウ分割

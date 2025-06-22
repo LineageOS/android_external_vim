@@ -115,6 +115,18 @@ func Test_getbufwintabinfo()
   wincmd t | only
 endfunc
 
+function Test_get_wininfo_leftcol()
+  set nowrap
+  set winwidth=10
+  vsp
+  call setline(1, ['abcdefghijklmnopqrstuvwxyz'])
+  norm! 5zl
+  call assert_equal(5, getwininfo()[0].leftcol)
+  bwipe!
+  set wrap&
+  set winwidth&
+endfunc
+
 function Test_get_buf_options()
   let opts = bufnr()->getbufvar('&')
   call assert_equal(v:t_dict, type(opts))
@@ -170,6 +182,28 @@ func Test_getbufinfo_lines()
   call assert_equal(3, getbufinfo(bn)[0]["linecount"])
   edit Xfoo
   bw!
+endfunc
+
+func Test_getwininfo_au()
+  enew
+  call setline(1, range(1, 16))
+
+  let g:info = #{}
+  augroup T1
+    au!
+    au WinEnter * let g:info = getwininfo(win_getid())[0]
+  augroup END
+
+  4split
+  " Check that calling getwininfo() from WinEnter returns fresh values for
+  " topline and botline.
+  call assert_equal(1, g:info.topline)
+  call assert_equal(4, g:info.botline)
+  close
+
+  unlet g:info
+  augroup! T1
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

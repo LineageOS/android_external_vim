@@ -1,13 +1,12 @@
 " Vim syntax file
-" This is a GENERATED FILE. Please always refer to source file at the URI below.
 " Language: XF86Config (XFree86 configuration file)
+" Maintainer: This runtime file is looking for a new maintainer.
+" Last Change: 2025 Jan 06 by Jan-Arvid Harrach (#16397)
 " Former Maintainer: David Ne\v{c}as (Yeti) <yeti@physics.muni.cz>
-" Last Change: 2010 Nov 01
-" URL: http://trific.ath.cx/Ftp/vim/syntax/xf86conf.vim
-" Required Vim Version: 6.0
+" Last Change By David: 2010 Nov 01
 "
 " Options: let xf86conf_xfree86_version = 3 or 4
-"							 to force XFree86 3.x or 4.x XF86Config syntax
+"          to force XFree86 3.x or 4.x XF86Config syntax
 
 " Setup
 " quit when a syntax file was already loaded
@@ -59,7 +58,7 @@ syn match xf86confModeLineValue "\"[^\"]\+\"\(\_s\+[0-9.]\+\)\{9}" nextgroup=xf8
 
 " Sections and subsections
 if b:xf86conf_xfree86_version >= 4
-	syn region xf86confSection matchgroup=xf86confSectionDelim start="^\s*Section\s\+\"\(Files\|Server[_ ]*Flags\|Input[_ ]*Device\|Device\|Video[_ ]*Adaptor\|Server[_ ]*Layout\|DRI\|Extensions\|Vendor\|Keyboard\|Pointer\|InputClass\)\"" end="^\s*EndSection\>" skip="#.*$\|\"[^\"]*\"" contains=xf86confComment,xf86confOption,xf86confKeyword,xf86confSectionError
+	syn region xf86confSection matchgroup=xf86confSectionDelim start="^\s*Section\s\+\"\(Files\|Server[_ ]*Flags\|Input[_ ]*Device\|Device\|Video[_ ]*Adaptor\|Server[_ ]*Layout\|DRI\|Extensions\|Vendor\|Keyboard\|Pointer\|InputClass\|OutputClass\)\"" end="^\s*EndSection\>" skip="#.*$\|\"[^\"]*\"" contains=xf86confComment,xf86confOption,xf86confKeyword,xf86confSectionError
 	syn region xf86confSectionModule matchgroup=xf86confSectionDelim start="^\s*Section\s\+\"Module\"" end="^\s*EndSection\>" skip="#.*$\|\"[^\"]*\"" contains=xf86confSubsectionAny,xf86confComment,xf86confOption,xf86confKeyword
 	syn region xf86confSectionMonitor matchgroup=xf86confSectionDelim start="^\s*Section\s\+\"Monitor\"" end="^\s*EndSection\>" skip="#.*$\|\"[^\"]*\"" contains=xf86confSubsectionMode,xf86confModeLine,xf86confComment,xf86confOption,xf86confKeyword
 	syn region xf86confSectionModes matchgroup=xf86confSectionDelim start="^\s*Section\s\+\"Modes\"" end="^\s*EndSection\>" skip="#.*$\|\"[^\"]*\"" contains=xf86confSubsectionMode,xf86confModeLine,xf86confComment
@@ -147,6 +146,8 @@ syn keyword xf86confKeyword Hskew HTimings InputDevice IOBase MemBase Mode nextg
 syn keyword xf86confKeyword Modes Ramdac Screen TextClockFreq UseModes VendorName nextgroup=xf86confComment,xf86confValue
 syn keyword xf86confKeyword VertRefresh VideoRam ViewPort Virtual VScan VTimings nextgroup=xf86confComment,xf86confValue
 syn keyword xf86confKeyword Weight White nextgroup=xf86confComment,xf86confValue
+syn keyword xf86confMatch MatchDevicePath MatchDriver MatchLayout MatchOS MatchPnPID MatchProduct MatchTag MatchUSBID MatchVendor nextgroup=xf86confComment,xf86confString skipwhite
+syn keyword xf86confMatch MatchIsPointer MatchIsKeyboard MatchIsTouchpad MatchIsTouchscreen MatchIsJoystick nextgroup=xf86confComment,xf86confValue skipwhite
 syn keyword xf86confModeLine ModeLine nextgroup=xf86confComment,xf86confModeLineValue skipwhite skipnl
 
 " Constants
@@ -161,7 +162,7 @@ syn match xf86confSync "\(\s\+[+-][CHV]_*Sync\)\+" contained
 
 " Synchronization
 if b:xf86conf_xfree86_version >= 4
-	syn sync match xf86confSyncSection grouphere xf86confSection "^\s*Section\s\+\"\(Files\|Server[_ ]*Flags\|Input[_ ]*Device\|Device\|Video[_ ]*Adaptor\|Server[_ ]*Layout\|DRI\|Extensions\|Vendor\|Keyboard\|Pointer\|InputClass\)\""
+	syn sync match xf86confSyncSection grouphere xf86confSection "^\s*Section\s\+\"\(Files\|Server[_ ]*Flags\|Input[_ ]*Device\|Device\|Video[_ ]*Adaptor\|Server[_ ]*Layout\|DRI\|Extensions\|Vendor\|Keyboard\|Pointer\|InputClass\|OutputClass\)\""
 	syn sync match xf86confSyncSectionModule grouphere xf86confSectionModule "^\s*Section\s\+\"Module\""
 	syn sync match xf86confSyncSectionModes groupthere xf86confSectionModes "^\s*Section\s\+\"Modes\""
 else
@@ -185,6 +186,7 @@ hi def link xf86confOctalNumberError xf86confError
 hi def link xf86confError Error
 
 hi def link xf86confOption xf86confKeyword
+hi def link xf86confMatch xf86confKeyword
 hi def link xf86confModeLine xf86confKeyword
 hi def link xf86confKeyword Type
 

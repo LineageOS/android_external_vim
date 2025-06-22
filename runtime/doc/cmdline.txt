@@ -1,4 +1,4 @@
-*cmdline.txt*   For Vim version 8.2.  Last change: 2022 Jan 08
+*cmdline.txt*   For Vim version 9.1.  Last change: 2025 Mar 08
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -87,11 +87,18 @@ CTRL-Q		Same as CTRL-V.  But with some terminals it is used for
 CTRL-SHIFT-V				*c_CTRL-SHIFT-V* *c_CTRL-SHIFT-Q*
 CTRL-SHIFT-Q	Works just like CTRL-V, unless |modifyOtherKeys| is active,
 		then it inserts the Escape sequence for a key with modifiers.
+		In the GUI the |key-notation| is inserted without simplifying.
+		Note: When CTRL-SHIFT-V is intercepted by your system (e.g.,
+		to paste text) you can often use CTRL-SHIFT-Q instead.
+		However, in some terminals (e.g. GNOME Terminal), CTRL-SHIFT-Q
+		quits the terminal without confirmation.
 
 							*c_<Left>* *c_Left*
-<Left>		cursor left
+<Left>		cursor left.  See 'wildmenu' for behavior during wildmenu
+		completion mode.
 							*c_<Right>* *c_Right*
-<Right>		cursor right
+<Right>		cursor right.  See 'wildmenu' for behavior during wildmenu
+		completion mode.
 							*c_<S-Left>*
 <S-Left> or <C-Left>					*c_<C-Left>*
 		cursor one WORD left
@@ -101,7 +108,8 @@ CTRL-SHIFT-Q	Works just like CTRL-V, unless |modifyOtherKeys| is active,
 CTRL-B or <Home>				*c_CTRL-B* *c_<Home>* *c_Home*
 		cursor to beginning of command-line
 CTRL-E or <End>					*c_CTRL-E* *c_<End>* *c_End*
-		cursor to end of command-line
+		cursor to end of command-line.  See 'wildmenu' for behavior
+		during wildmenu completion mode.
 
 							*c_<LeftMouse>*
 <LeftMouse>	Move the cursor to the position of the mouse click.
@@ -198,9 +206,6 @@ CTRL-R CTRL-L				*c_CTRL-R_CTRL-L* *c_<C-R>_<C-L>*
 		currently displayed match is used.  With CTRL-W the part of
 		the word that was already typed is not inserted again.
 
-		CTRL-F and CTRL-P: {only when |+file_in_path| feature is
-		included}
-
 					*c_CTRL-R_CTRL-R* *c_<C-R>_<C-R>*
 					*c_CTRL-R_CTRL-O* *c_<C-R>_<C-O>*
 CTRL-R CTRL-R {register CTRL-F CTRL-P CTRL-W CTRL-A CTRL-L}
@@ -227,7 +232,7 @@ CTRL-\ e {expr}						*c_CTRL-\_e*
 		Example: >
 			:cmap <F7> <C-\>eAppendSome()<CR>
 			:func AppendSome()
-			   :let cmd = getcmdline() . " Some()"
+			   :let cmd = getcmdline() .. " Some()"
 			   :" place the cursor on the )
 			   :call setcmdpos(strlen(cmd))
 			   :return cmd
@@ -239,6 +244,7 @@ CTRL-\ e {expr}						*c_CTRL-\_e*
 CTRL-Y		When there is a modeless selection, copy the selection into
 		the clipboard. |modeless-selection|
 		If there is no selection CTRL-Y is inserted as a character.
+		See 'wildmenu' for behavior during wildmenu completion mode.
 
 CTRL-M or CTRL-J		*c_CTRL-M* *c_CTRL-J* *c_<NL>* *c_<CR>* *c_CR*
 <CR> or <NL>	start entered command
@@ -254,12 +260,14 @@ CTRL-C		quit command-line without executing
 
 							*c_<Up>* *c_Up*
 <Up>		recall older command-line from history, whose beginning
-		matches the current command-line (see below).
+		matches the current command-line (see below).  See 'wildmenu'
+		for behavior during wildmenu completion mode.
 		{not available when compiled without the |+cmdline_hist|
 		feature}
 							*c_<Down>* *c_Down*
 <Down>		recall more recent command-line from history, whose beginning
-		matches the current command-line (see below).
+		matches the current command-line (see below).  See 'wildmenu'
+		for behavior during wildmenu completion mode.
 		{not available when compiled without the |+cmdline_hist|
 		feature}
 
@@ -358,6 +366,7 @@ terminals)
 		A positive number represents the absolute index of an entry
 		as it is given in the first column of a :history listing.
 		This number remains fixed even if other entries are deleted.
+		(see |E1510|)
 
 		A negative number means the relative position of an entry,
 		counted from the newest entry (which has index -1) backwards.
@@ -374,7 +383,8 @@ terminals)
 
 :keepp[atterns] {command}			*:keepp* *:keeppatterns*
 		Execute {command}, without adding anything to the search
-		history
+		history and, in case of |:s| or |:&|, without modifying the
+		last substitute pattern or substitute string.
 
 ==============================================================================
 2. Command-line completion				*cmdline-completion*
@@ -383,6 +393,7 @@ When editing the command-line, a few commands can be used to complete the
 word before the cursor.  This is available for:
 
 - Command names: At the start of the command-line.
+- |++opt| values.
 - Tags: Only after the ":tag" command.
 - File names: Only after a command that accepts a file name or a setting for
   an option that can be set to a file name.  This is called file name
@@ -457,26 +468,30 @@ CTRL-T		When 'incsearch' is set, entering a search pattern for "/" or
 		keyboard T is above G.
 
 The 'wildchar' option defaults to <Tab> (CTRL-E when in Vi compatible mode; in
-a previous version <Esc> was used).  In the pattern standard wildcards '*' and
-'?' are accepted when matching file names.  '*' matches any string, '?'
-matches exactly one character.
+a previous version <Esc> was used).  In the pattern standard |wildcards| are
+accepted when matching file names.
 
 When repeating 'wildchar' or CTRL-N you cycle through the matches, eventually
 ending up back to what was typed.  If the first match is not what you wanted,
 you can use <S-Tab> or CTRL-P to go straight back to what you typed.
 
-The 'wildignorecase' option can be set to ignore case in filenames.
-
 The 'wildmenu' option can be set to show the matches just above the command
 line.
 
-If you like tcsh's autolist completion, you can use this mapping:
+The 'wildoptions' option provides additional configuration to use a popup menu
+for 'wildmenu', and to use fuzzy matching.
+
+The 'wildignorecase' option can be set to ignore case in filenames.  For
+completing other texts (e.g. command names), the 'ignorecase' option is used
+instead (fuzzy matching always ignores case, however).
+
+If you like tcsh's autolist completion, you can use this mapping: >
 	:cnoremap X <C-L><C-D>
 (Where X is the command key to use, <C-L> is CTRL-L and <C-D> is CTRL-D)
 This will find the longest match and then list all matching files.
 
 If you like tcsh's autolist completion, you can use the 'wildmode' option to
-emulate it.  For example, this mimics autolist=ambiguous:
+emulate it.  For example, this mimics autolist=ambiguous: >
 	:set wildmode=longest,list
 This will find the longest match with the first 'wildchar', then list all
 matching files with the next.
@@ -519,16 +534,26 @@ example, to match only files that end in ".c": >
 	:e *.c$
 This will not match a file ending in ".cpp".  Without the "$" it does match.
 
-The old value of an option can be obtained by hitting 'wildchar' just after
-the '='.  For example, typing 'wildchar' after ":set dir=" will insert the
-current value of 'dir'.  This overrules file name completion for the options
-that take a file name.
-
 If you would like using <S-Tab> for CTRL-P in an xterm, put this command in
 your .cshrc: >
 	xmodmap -e "keysym Tab = Tab Find"
 And this in your .vimrc: >
 	:cmap <Esc>[1~ <C-P>
+<						*complete-set-option*
+When setting an option using |:set=|, the old value of an option can be
+obtained by hitting 'wildchar' just after the '='.  For example, typing
+'wildchar' after ":set dir=" will insert the current value of 'dir'.  This
+overrules file name completion for the options that take a file name.
+
+When using |:set=|, |:set+=|, or |:set^=|, string options that have
+pre-defined names or syntax (e.g. 'diffopt', 'listchars') or are a list of
+single-character flags (e.g. 'shortmess') will also present a list of possible
+values for completion when using 'wildchar'.
+
+When using |:set-=|, comma-separated options like 'diffopt' or 'backupdir'
+will show each item separately.  Flag list options like 'shortmess' will show
+both the entire old value and the individual flags.  Otherwise completion will
+just fill in with the entire old value.
 
 ==============================================================================
 3. Ex command-lines					*cmdline-lines*
@@ -619,6 +644,7 @@ followed by another Vim command:
     :read !
     :scscope
     :sign
+    :tabdo
     :tcl
     :tcldo
     :tclfile
@@ -628,6 +654,12 @@ followed by another Vim command:
     :write !
     :[range]!
     a user defined command without the "-bar" argument |:command|
+
+    and the following |Vim9-script| keywords:
+    :abstract
+    :class
+    :enum
+    :interface
 
 Note that this is confusing (inherited from Vi): With ":g" the '|' is included
 in the command, with ":s" it is not.
@@ -730,7 +762,7 @@ If more line specifiers are given than required for the command, the first
 one(s) will be ignored.
 
 Line numbers may be specified with:		*:range* *{address}*
-	{number}	an absolute line number
+	{number}	an absolute line number  *E1247*
 	.		the current line			  *:.*
 	$		the last line in the file		  *:$*
 	%		equal to 1,$ (the entire file)		  *:%*
@@ -738,7 +770,9 @@ Line numbers may be specified with:		*:range* *{address}*
 	'T		position of mark T (uppercase); when the mark is in
 			another file it cannot be used in a range
 	/{pattern}[/]	the next line where {pattern} matches	  *:/*
+				also see |:range-pattern| below
 	?{pattern}[?]	the previous line where {pattern} matches *:?*
+				also see |:range-pattern| below
 	\/		the next line where the previously used search
 			pattern matches
 	\?		the previous line where the previously used search
@@ -746,11 +780,49 @@ Line numbers may be specified with:		*:range* *{address}*
 	\&		the next line where the previously used substitute
 			pattern matches
 
+						*:range-offset*
 Each may be followed (several times) by '+' or '-' and an optional number.
 This number is added or subtracted from the preceding line number.  If the
 number is omitted, 1 is used.  If there is nothing before the '+' or '-' then
 the current line is used.
+						*:range-closed-fold*
+When a line number after the comma is in a closed fold it is adjusted to the
+last line of the fold, thus the whole fold is included.
 
+When a number is added this is done after the adjustment to the last line of
+the fold.  This means these lines are additionally included in the range.  For
+example: >
+   :3,4+2print
+On this text:
+	1 one ~
+	2 two ~
+	3 three ~
+	4 four FOLDED ~
+	5 five FOLDED ~
+	6 six ~
+	7 seven ~
+	8 eight ~
+Where lines four and five are a closed fold, ends up printing lines 3 to 7.
+The 7 comes from the "4" in the range, which is adjusted to the end of the
+closed fold, which is 5, and then the offset 2 is added.
+
+An example for subtracting (which isn't very useful): >
+   :2,4-1print
+On this text:
+	1 one ~
+	2 two ~
+	3 three FOLDED ~
+	4 four FOLDED ~
+	5 five FOLDED ~
+	6 six FOLDED ~
+	7 seven ~
+	8 eight ~
+Where lines three to six are a closed fold, ends up printing lines 2 to 6.
+The 6 comes from the "4" in the range, which is adjusted to the end of the
+closed fold, which is 6, and then 1 is subtracted, then this is still in the
+closed fold and the last line of that fold is used, which is 6.
+
+							*:range-pattern*
 The "/" and "?" after {pattern} are required to separate the pattern from
 anything that follows.
 
@@ -806,9 +878,9 @@ always be swapped then.
 
 Count and Range						*N:*
 
-When giving a count before entering ":", this is translated into:
+When giving a count before entering ":", this is translated into: >
 		:.,.+(count - 1)
-In words: The 'count' lines at and after the cursor.  Example: To delete
+In words: The "count" lines at and after the cursor.  Example: To delete
 three lines: >
 		3:d<CR>		is translated into: .,.+2d<CR>
 <
@@ -923,9 +995,10 @@ Note: these are typed literally, they are not special keys!
 		   write.  *E495*
 							*:<abuf>* *<abuf>*
 	<abuf>     When executing autocommands, is replaced with the currently
-		   effective buffer number (for ":r file" and ":so file" it is
-		   the current buffer, the file being read/sourced is not in a
-		   buffer).  *E496*
+		   effective buffer number.  It is not set for all events,
+		   also see |bufnr()|.  For ":r file" and ":so file" it is the
+		   current buffer, the file being read/sourced is not in a
+		   buffer.  *E496*
 							*:<amatch>* *<amatch>*
 	<amatch>   When executing autocommands, is replaced with the match for
 		   which this autocommand was executed.  *E497*
@@ -935,11 +1008,11 @@ Note: these are typed literally, they are not special keys!
 		   When the match is with a file name, it is expanded to the
 		   full path.
 							*:<sfile>* *<sfile>*
-	<sfile>    When executing a ":source" command, is replaced with the
+	<sfile>    When executing a `:source` command, is replaced with the
 		   file name of the sourced file.  *E498*
 		   When executing a legacy function, is replaced with the call
 		   stack, as with <stack> (this is for backwards
-		   compatibility, using <stack> is preferred).
+		   compatibility, using <stack> or <script> is preferred).
 		   In Vim9 script using <sfile> in a function gives error
 		   *E1245* .
 		   Note that filename-modifiers are useless when <sfile> is
@@ -951,8 +1024,14 @@ Note: these are typed literally, they are not special keys!
 		   ".." in between items.  E.g.:
 		   "function {function-name1}[{lnum}]..{function-name2}[{lnum}]"
 		   If there is no call stack you get error *E489* .
+							*:<script>* *<script>*
+	<script>   When executing a `:source` command, is replaced with the file
+		   name of the sourced file.  When executing a function, is
+		   replaced with the file name of the script where it is
+		   defined.
+		   If the file name cannot be determined you get error *E1274* .
 							*:<slnum>* *<slnum>*
-	<slnum>	   When executing a ":source" command, is replaced with the
+	<slnum>	   When executing a `:source` command, is replaced with the
 		   line number.  *E842*
 		   When executing a function it's the line number relative to
 		   the start of the function.
@@ -1120,7 +1199,6 @@ Also see |`=|.
 In the command-line window the command line can be edited just like editing
 text in any window.  It is a special kind of window, because you cannot leave
 it in a normal way.
-{not available when compiled without the |+cmdwin| feature}
 
 
 OPEN						*c_CTRL-F* *q:* *q/* *q?*
@@ -1140,6 +1218,8 @@ character that indicates the type of command-line being edited, see
 
 Vim will be in Normal mode when the editor is opened, except when 'insertmode'
 is set.
+								*E1292*
+Once a command-line window is open it is not possible to open another one.
 
 The height of the window is specified with 'cmdwinheight' (or smaller if there
 is no room).  The window is always full width and is positioned just above the
@@ -1211,8 +1291,8 @@ save the command-line history and read it back later.
 If the 'wildchar' option is set to <Tab>, and the command-line window is used
 for an Ex command, then two mappings will be added to use <Tab> for completion
 in the command-line window, like this: >
-	:imap <buffer> <Tab> <C-X><C-V>
-	:nmap <buffer> <Tab> a<C-X><C-V>
+	:inoremap <buffer> <Tab> <C-X><C-V>
+	:nnoremap <buffer> <Tab> a<C-X><C-V>
 Note that hitting <Tab> in Normal mode will do completion on the next
 character.  That way it works at the end of the line.
 If you don't want these mappings, disable them with: >

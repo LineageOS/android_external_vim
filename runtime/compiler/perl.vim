@@ -1,24 +1,25 @@
-" Vim Compiler File
-" Compiler:     Perl syntax checks (perl -Wc)
-" Maintainer:   Christian J. Robinson <heptite@gmail.com>
-" Last Change:  2019 Jul 22
+" Vim compiler file
+" Compiler:      Perl syntax checks (perl -Wc)
+" Maintainer:    vim-perl <vim-perl@googlegroups.com>
+" Author:        Christian J. Robinson <heptite@gmail.com>
+" Homepage:      https://github.com/vim-perl/vim-perl
+" Bugs/requests: https://github.com/vim-perl/vim-perl/issues
+" License:       Vim License (see :help license)
+" Last Change:   2021 Nov 2
+"		2024 Apr 03 by The Vim Project (removed :CompilerSet definition)
 
 if exists("current_compiler")
   finish
 endif
 let current_compiler = "perl"
 
-if exists(":CompilerSet") != 2		" older Vim always used :setlocal
-  command -nargs=* CompilerSet setlocal <args>
-endif
-
 let s:savecpo = &cpo
 set cpo&vim
 
-if exists('g:perl_compiler_force_warnings') && g:perl_compiler_force_warnings == 0
-	let s:warnopt = 'w'
-else
+if get(g:, 'perl_compiler_force_warnings', 1)
 	let s:warnopt = 'W'
+else
+	let s:warnopt = 'w'
 endif
 
 if getline(1) =~# '-[^ ]*T'

@@ -7,9 +7,13 @@
 
 #if defined(__GNUC__) && !defined(__MINGW32__)
 # define INTERNAL __attribute__((visibility("internal")))
-# define UNUSED __attribute__((unused))
 #else
 # define INTERNAL
+#endif
+
+#if defined(__GNUC__) || defined(__MINGW32__)
+# define UNUSED __attribute__((unused))
+#else
 # define UNUSED
 #endif
 
@@ -56,6 +60,8 @@ struct VTermPen
   unsigned int conceal:1;
   unsigned int strike:1;
   unsigned int font:4; /* To store 0-9 */
+  unsigned int small:1;
+  unsigned int baseline:2;
 };
 
 struct VTermState
@@ -124,6 +130,7 @@ struct VTermState
     unsigned int bracketpaste:1;
     unsigned int report_focus:1;
     unsigned int modify_other_keys:1;
+    unsigned int kitty_keyboard:1;
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;
@@ -162,6 +169,7 @@ struct VTermState
         SELECTION_QUERY,
         SELECTION_SET_INITIAL,
         SELECTION_SET,
+        SELECTION_INVALID,
       } state : 8;
       uint32_t recvpartial;
       uint32_t sendpartial;
@@ -178,7 +186,7 @@ struct VTermState
 
 struct VTerm
 {
-  VTermAllocatorFunctions *allocator;
+  const VTermAllocatorFunctions *allocator;
   void *allocdata;
 
   int rows;
@@ -231,6 +239,8 @@ struct VTerm
     void *cbdata;
 
     int string_initial;
+
+    int emit_nul;
   } parser;
 
   /* len == malloc()ed size; cur == number of valid bytes */

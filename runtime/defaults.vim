@@ -1,7 +1,8 @@
 " The default vimrc file.
 "
-" Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last change:	2021 Nov 17
+" Maintainer:	The Vim Project <https://github.com/vim/vim>
+" Last Change:	2025 Apr 10
+" Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 "
 " This is loaded if no vimrc file was found.
 " Except when Vim is run with "-u NONE" or "-C".
@@ -32,13 +33,8 @@ silent! while 0
   set nocompatible
 silent! endwhile
 
-" Allow backspacing over everything in insert mode.
-set backspace=indent,eol,start
-
-set history=200		" keep 200 lines of command line history
 set ruler		" show the cursor position all the time
 set showcmd		" display incomplete commands
-set wildmenu		" display completion matches in a status line
 
 set ttimeout		" time out for key codes
 set ttimeoutlen=100	" wait up to 100ms after Esc for special key
@@ -64,9 +60,10 @@ if has('win32')
   set guioptions-=t
 endif
 
-" Don't use Ex mode, use Q for formatting.
+" Don't use Q for Ex mode, use it for formatting.  Except for Select mode.
 " Revert with ":unmap Q".
 map Q gq
+sunmap Q
 
 " CTRL-U in insert mode deletes a lot.  Use CTRL-G u to first break undo,
 " so that you can undo CTRL-U after inserting a line break.
@@ -96,30 +93,40 @@ if 1
   filetype plugin indent on
 
   " Put these in an autocmd group, so that you can revert them with:
-  " ":augroup vimStartup | exe 'au!' | augroup END"
+  " ":autocmd! vimStartup"
   augroup vimStartup
-    au!
+    autocmd!
 
     " When editing a file, always jump to the last known cursor position.
     " Don't do it when the position is invalid, when inside an event handler
-    " (happens when dropping a file on gvim) and for a commit message (it's
-    " likely a different one than last time).
+    " (happens when dropping a file on gvim), for a commit or rebase message
+    " (likely a different one than last time), and when using xxd(1) to filter
+    " and edit binary files (it transforms input files back and forth, causing
+    " them to have dual nature, so to speak) or when running the new tutor
     autocmd BufReadPost *
-      \ if line("'\"") >= 1 && line("'\"") <= line("$") && &ft !~# 'commit'
-      \ |   exe "normal! g`\""
+      \ let line = line("'\"")
+      \ | if line >= 1 && line <= line("$") && &filetype !~# 'commit'
+      \      && index(['xxd', 'gitrebase', 'tutor'], &filetype) == -1
+      \      && !&diff
+      \ |   execute "normal! g`\""
       \ | endif
 
+    " Set the default background for putty to dark. Putty usually sets the
+    " $TERM to xterm and by default it starts with a dark background which
+    " makes syntax highlighting often hard to read with bg=light
+    " undo this using:  ":au! vimStartup TermResponse"
+    autocmd TermResponse * if v:termresponse == "\e[>0;136;0c" | set bg=dark | endif
   augroup END
 
   " Quite a few people accidentally type "q:" instead of ":q" and get confused
   " by the command line window.  Give a hint about how to get out.
   " If you don't like this you can put this in your vimrc:
-  " ":augroup vimHints | exe 'au!' | augroup END"
+  " ":autocmd! vimHints"
   augroup vimHints
     au!
     autocmd CmdwinEnter *
-	  \ echohl Todo | 
-	  \ echo 'You discovered the command-line window! You can close it with ":q".' |
+	  \ echohl Todo |
+	  \ echo gettext('You discovered the command-line window! You can close it with ":q".') |
 	  \ echohl None
   augroup END
 

@@ -1,7 +1,11 @@
 " Vim filetype plugin file
-" Language:    MS-DOS .bat files
-" Maintainer:  Mike Williams <mrw@eandem.co.uk>
-" Last Change: 7th May 2020
+" Language:    MS-DOS/Windows .bat files
+" Maintainer:  Mike Williams <mrmrdubya@gmail.com>
+" Last Change: 12th February 2023
+"              2024 Jan 14 by Vim Project (browsefilter)
+"
+" Options Flags:
+" dosbatch_colons_comment       - any value to treat :: as comment line
 
 " Only do this when not done yet for this buffer
 if exists("b:did_ftplugin")
@@ -15,8 +19,13 @@ let s:cpo_save = &cpo
 set cpo&vim
 
 " BAT comment formatting
-setlocal comments=b:rem,b:@rem,b:REM,b:@REM,:::
-setlocal commentstring=::\ %s
+setlocal comments=b:rem,b:@rem,b:REM,b:@REM
+if exists("dosbatch_colons_comment")
+  setlocal comments+=:::
+  setlocal commentstring=::\ %s
+else
+  setlocal commentstring=REM\ %s
+endif
 setlocal formatoptions-=t formatoptions+=rol
 
 " Lookup DOS keywords using Windows command help.
@@ -29,12 +38,17 @@ if executable('help.exe')
 endif
 
 " Define patterns for the browse file filter
-if has("gui_win32") && !exists("b:browsefilter")
-  let b:browsefilter = "DOS Batch Files (*.bat, *.cmd)\t*.bat;*.cmd\nAll Files (*.*)\t*.*\n"
+if (has("gui_win32") || has("gui_gtk")) && !exists("b:browsefilter")
+  let b:browsefilter = "DOS Batch Files (*.bat, *.cmd)\t*.bat;*.cmd\n"
+  if has("win32")
+    let b:browsefilter ..= "All Files (*.*)\t*\n"
+  else
+    let b:browsefilter ..= "All Files (*)\t*\n"
+  endif
 endif
 
 let b:undo_ftplugin = "setlocal comments< formatoptions< keywordprg<"
-    \ . "| unlet! b:browsefiler"
+    \ . "| unlet! b:browsefilter"
 
 let &cpo = s:cpo_save
 unlet s:cpo_save

@@ -27,19 +27,19 @@
 #ifndef PROTO
 
 #ifndef LATTICE
-# include <exec/types.h>
 # include <exec/exec.h>
-# include <libraries/dos.h>
 # include <intuition/intuition.h>
 #endif
 
 // XXX These are included from os_amiga.h
+// #include <exec/types.h>
+// #include <libraries/dos.h>
+// #include <libraries/dosextens.h>
 // #include <proto/exec.h>
 // #include <proto/dos.h>
 // #include <proto/intuition.h>
 
 #include <exec/memory.h>
-#include <libraries/dosextens.h>
 
 #include <dos/dostags.h>	    // for 2.0 functions
 #include <dos/dosasl.h>
@@ -154,7 +154,7 @@ mch_inchar(
     char_u  *buf,
     int	    maxlen,
     long    time,		// milliseconds
-    int	    tb_change_cnt)
+    int	    tb_change_cnt UNUSED)
 {
     int	    len;
     long    utime;
@@ -234,13 +234,13 @@ mch_delay(long msec, int flags)
     void	    Delay(long);
 #endif
 
-    if (msec > 0)
-    {
-	if (flags & MCH_DELAY_IGNOREINPUT)
-	    Delay(msec / 20L);	    // Delay works with 20 msec intervals
-	else
-	    WaitForChar(raw_in, msec * 1000L);
-    }
+    if (msec <= 0)
+	return;
+
+    if (flags & MCH_DELAY_IGNOREINPUT)
+	Delay(msec / 20L);	    // Delay works with 20 msec intervals
+    else
+	WaitForChar(raw_in, msec * 1000L);
 }
 
 /*
@@ -571,24 +571,24 @@ mch_input_isatty(void)
     void
 fname_case(
     char_u	*name,
-    int		len)		// buffer size, ignored here
+    int		len UNUSED)		// buffer size, ignored here
 {
     struct FileInfoBlock    *fib;
     size_t		    flen;
 
     fib = get_fib(name);
-    if (fib != NULL)
-    {
-	flen = STRLEN(name);
-	// TODO: Check if this fix applies to AmigaOS < 4 too.
+    if (fib == NULL)
+	return;
+
+    flen = STRLEN(name);
+    // TODO: Check if this fix applies to AmigaOS < 4 too.
 #ifdef __amigaos4__
-	if (fib->fib_DirEntryType == ST_ROOT)
-	    strcat(fib->fib_FileName, ":");
+    if (fib->fib_DirEntryType == ST_ROOT)
+	strcat(fib->fib_FileName, ":");
 #endif
-	if (flen == strlen(fib->fib_FileName))	// safety check
-	    mch_memmove(name, fib->fib_FileName, flen);
-	free_fib(fib);
-    }
+    if (flen == strlen(fib->fib_FileName))	// safety check
+	mch_memmove(name, fib->fib_FileName, flen);
+    free_fib(fib);
 }
 
 /*
@@ -609,17 +609,17 @@ get_fib(char_u *fname)
 #else
     fib = ALLOC_ONE(struct FileInfoBlock);
 #endif
-    if (fib != NULL)
+    if (fib == NULL)
+	return;
+
+    flock = Lock((UBYTE *)fname, (long)ACCESS_READ);
+    if (flock == (BPTR)NULL || !Examine(flock, fib))
     {
-	flock = Lock((UBYTE *)fname, (long)ACCESS_READ);
-	if (flock == (BPTR)NULL || !Examine(flock, fib))
-	{
-	    free_fib(fib);  // in case of an error the memory is freed here
-	    fib = NULL;
-	}
-	if (flock)
-	    UnLock(flock);
+	free_fib(fib);  // in case of an error the memory is freed here
+	fib = NULL;
     }
+    if (flock)
+	UnLock(flock);
     return fib;
 }
 
@@ -677,8 +677,8 @@ mch_get_user_name(char_u *s, int len)
 
     if (pwd != NULL && pwd->pw_name && len > 0)
     {
-        vim_strncpy(s, (char_u *)pwd->pw_name, len - 1);
-        return OK;
+	vim_strncpy(s, (char_u *)pwd->pw_name, len - 1);
+	return OK;
     }
 #endif
     *s = NUL;
@@ -691,7 +691,7 @@ mch_get_user_name(char_u *s, int len)
     void
 mch_get_host_name(char_u *s, int len)
 {
-#if defined(__amigaos4__) && defined(__CLIB2__)
+#if !defined(__AROS__)
     gethostname(s, len);
 #else
     vim_strncpy(s, "Amiga", len - 1);
@@ -704,7 +704,9 @@ mch_get_host_name(char_u *s, int len)
     long
 mch_get_pid(void)
 {
-#if defined(__amigaos4__) || defined(__AROS__) || defined(__MORPHOS__)
+#if defined(__amigaos4__)
+    return (long) getpid();
+#elif defined(__AROS__) || defined(__MORPHOS__)
     // This is as close to a pid as we can come. We could use CLI numbers also,
     // but then we would have two different types of process identifiers.
     return((long)FindTask(0));
@@ -813,11 +815,11 @@ mch_getperm(char_u *name)
     long		    retval = -1;
 
     fib = get_fib(name);
-    if (fib != NULL)
-    {
-	retval = fib->fib_Protection;
-	free_fib(fib);
-    }
+    if (fib == NULL)
+	return -1;
+
+    retval = fib->fib_Protection;
+    free_fib(fib);
     return retval;
 }
 
@@ -837,7 +839,7 @@ mch_setperm(char_u *name, long perm)
  * Set hidden flag for "name".
  */
     void
-mch_hide(char_u *name)
+mch_hide(char_u *name UNUSED)
 {
     // can't hide a file
 }
@@ -854,15 +856,15 @@ mch_isdir(char_u *name)
     int			    retval = FALSE;
 
     fib = get_fib(name);
-    if (fib != NULL)
-    {
+    if (fib == NULL)
+	return FALSE;
+
 #ifdef __amigaos4__
-	retval = (FIB_IS_DRAWER(fib)) ? TRUE : FALSE;
+    retval = (FIB_IS_DRAWER(fib)) ? TRUE : FALSE;
 #else
-	retval = ((fib->fib_DirEntryType >= 0) ? TRUE : FALSE);
+    retval = ((fib->fib_DirEntryType >= 0) ? TRUE : FALSE);
 #endif
-	free_fib(fib);
-    }
+    free_fib(fib);
     return retval;
 }
 
@@ -875,12 +877,11 @@ mch_mkdir(char_u *name)
     BPTR	lock;
 
     lock = CreateDir(name);
-    if (lock != NULL)
-    {
-	UnLock(lock);
-	return 0;
-    }
-    return -1;
+    if (lock == NULL)
+	return -1;
+
+    UnLock(lock);
+    return 0;
 }
 
 /*
@@ -889,10 +890,50 @@ mch_mkdir(char_u *name)
  * Return -1 if unknown.
  */
     int
-mch_can_exe(char_u *name, char_u **path, int use_path)
+mch_can_exe(char_u *name, char_u **path UNUSED, int use_path)
 {
-    // TODO
-    return -1;
+    int exe = -1;
+#ifdef __amigaos4__
+    // Load file sections using elf.library or hunk.library.
+    BPTR seg = LoadSeg(name);
+
+    if (seg && GetSegListInfoTags(seg, GSLI_Native, NULL, TAG_DONE) !=
+	    GetSegListInfoTags(seg, GSLI_68KHUNK, NULL, TAG_DONE))
+    {
+	// Test if file permissions allow execution.
+	struct ExamineData *exd = ExamineObjectTags(EX_StringNameInput, name);
+
+	exe = (exd && !(exd->Protection & EXDF_NO_EXECUTE)) ? 1 : 0;
+	FreeDosObject(DOS_EXAMINEDATA, exd);
+    }
+    else
+    {
+	exe = 0;
+    }
+
+    UnLoadSeg(seg);
+
+    // Search for executable in path if applicable.
+    if (!exe && use_path)
+    {
+	// Save current working dir.
+	BPTR cwd = GetCurrentDir();
+	struct PathNode *head = DupCmdPathList(NULL);
+
+	// For each entry, recur to check for executable.
+	for (struct PathNode *tail = head; !exe && tail;
+			       tail = (struct PathNode *) BADDR(tail->pn_Next))
+	{
+	    SetCurrentDir(tail->pn_Lock);
+	    exe = mch_can_exe(name, path, 0);
+	}
+
+	// Go back to where we were.
+	FreeCmdPathList(head);
+	SetCurrentDir(cwd);
+    }
+#endif
+    return exe;
 }
 
 /*
@@ -902,7 +943,7 @@ mch_can_exe(char_u *name, char_u **path, int use_path)
  * NODE_OTHER: non-writable things
  */
     int
-mch_nodetype(char_u *name)
+mch_nodetype(char_u *name UNUSED)
 {
     // TODO
     return NODE_NORMAL;
@@ -1012,38 +1053,38 @@ mch_settmode(tmode_T tmode)
 mch_get_shellsize(void)
 {
     if (!term_console)
-        return FAIL;
+	return FAIL;
 
     if (raw_in && raw_out)
     {
-        // Save current console mode.
-        int old_tmode = cur_tmode;
-        char ctrl[] = "\x9b""0 q";
+	// Save current console mode.
+	int old_tmode = cur_tmode;
+	char ctrl[] = "\x9b""0 q";
 
-        // Set RAW mode.
-        mch_settmode(TMODE_RAW);
+	// Set RAW mode.
+	mch_settmode(TMODE_RAW);
 
-        // Write control sequence to console.
-        if (Write(raw_out, ctrl, sizeof(ctrl)) == sizeof(ctrl))
-        {
-            char scan[] = "\x9b""1;1;%d;%d r",
-                 answ[sizeof(scan) + 8] = { '\0' };
+	// Write control sequence to console.
+	if (Write(raw_out, ctrl, sizeof(ctrl)) == sizeof(ctrl))
+	{
+	    char scan[] = "\x9b""1;1;%d;%d r",
+		 answ[sizeof(scan) + 8] = { '\0' };
 
-            // Read return sequence from input.
-            if (Read(raw_in, answ, sizeof(answ) - 1) > 0)
-            {
-                // Parse result and set Vim globals.
-                if (sscanf(answ, scan, &Rows, &Columns) == 2)
-                {
-                    // Restore console mode.
-                    mch_settmode(old_tmode);
-                    return OK;
-                }
-            }
-        }
+	    // Read return sequence from input.
+	    if (Read(raw_in, answ, sizeof(answ) - 1) > 0)
+	    {
+		// Parse result and set Vim globals.
+		if (sscanf(answ, scan, &Rows, &Columns) == 2)
+		{
+		    // Restore console mode.
+		    mch_settmode(old_tmode);
+		    return OK;
+		}
+	    }
+	}
 
-        // Restore console mode.
-        mch_settmode(old_tmode);
+	// Restore console mode.
+	mch_settmode(old_tmode);
     }
 
     // I/O error. Default size fallback.
@@ -1131,17 +1172,17 @@ out:
     void
 mch_set_shellsize(void)
 {
-    if (term_console)
-    {
-	size_set = TRUE;
-	out_char(CSI);
-	out_num((long)Rows);
-	out_char('t');
-	out_char(CSI);
-	out_num((long)Columns);
-	out_char('u');
-	out_flush();
-    }
+    if (!term_console)
+	return;
+
+    size_set = TRUE;
+    out_char(CSI);
+    out_num((long)Rows);
+    out_char('t');
+    out_char(CSI);
+    out_num((long)Columns);
+    out_char('u');
+    out_flush();
 }
 
 /*
@@ -1209,7 +1250,8 @@ dos_packet(
     // Allocate space for a packet, make it public and clear it
     packet = (struct StandardPacket *)
 	AllocMem((long) sizeof(struct StandardPacket), MEMF_PUBLIC | MEMF_CLEAR);
-    if (!packet) {
+    if (!packet)
+    {
 	DeletePort(replyport);
 	return (0);
     }
@@ -1450,7 +1492,7 @@ mch_call_shell(
  * trouble with lattice-c programs.
  */
     void
-mch_breakcheck(int force)
+mch_breakcheck(int force UNUSED)
 {
    if (SetSignal(0L, (long)(SIGBREAKF_CTRL_C|SIGBREAKF_CTRL_D|SIGBREAKF_CTRL_E|SIGBREAKF_CTRL_F)) & SIGBREAKF_CTRL_C)
 	got_int = TRUE;
@@ -1715,7 +1757,7 @@ mch_getenv(char_u *var)
  */
 // ARGSUSED
     int
-mch_setenv(char *var, char *value, int x)
+mch_setenv(char *var, char *value, int x UNUSED)
 {
 #ifdef FEAT_ARP
     if (!dos2)

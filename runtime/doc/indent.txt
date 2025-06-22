@@ -1,4 +1,4 @@
-*indent.txt*    For Vim version 8.2.  Last change: 2019 Dec 07
+*indent.txt*    For Vim version 9.1.  Last change: 2024 Dec 16
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -22,9 +22,6 @@ indent and do not perform other formatting.  There are additional options that
 affect other kinds of formatting as well as indenting, see |format-comments|,
 |fo-table|, |gq| and |formatting| for the main ones.
 
-Note that this will not work when the |+smartindent| or |+cindent| features
-have been disabled at compile time.
-
 There are in fact four main methods available for indentation, each one
 overrides the previous if it is enabled, or non-empty for 'indentexpr':
 'autoindent'	uses the indent from the previous line.
@@ -42,11 +39,12 @@ is not a C compiler: it does not recognize all syntax.  One requirement is
 that toplevel functions have a '{' in the first column.  Otherwise they are
 easily confused with declarations.
 
-These four options control C program indenting:
+These five options control C program indenting:
 'cindent'	Enables Vim to perform C program indenting automatically.
 'cinkeys'	Specifies which keys trigger reindenting in insert mode.
 'cinoptions'	Sets your preferred indent style.
 'cinwords'	Defines keywords that start an extra indent in the next line.
+'cinscopedecls'	Defines strings that are recognized as a C++ scope declaration.
 
 If 'lisp' is not on and 'equalprg' is empty, the "=" operator indents using
 Vim's built-in algorithm rather than calling an external program.
@@ -119,7 +117,7 @@ If you really want to reindent when you type 'o', 'O', 'e', '0', '<', '>',
 "<!>", respectively, for those keys.
 
 For an emacs-style indent mode where lines aren't indented every time you
-press <Enter> but only if you press <Tab>, I suggest:
+press <Enter> but only if you press <Tab>, I suggest: >
 	:set cinkeys=0{,0},:,0#,!<Tab>,!^F
 You might also want to switch off 'autoindent' then.
 
@@ -293,8 +291,9 @@ The examples below assume a 'shiftwidth' of 4.
 <
 							*cino-g*
 	gN    Place C++ scope declarations N characters from the indent of the
-	      block they are in.  (default 'shiftwidth').  A scope declaration
-	      can be "public:", "protected:" or "private:".
+	      block they are in.  (default 'shiftwidth'). By default, a scope
+	      declaration is "public:", "protected:" or "private:". This can
+	      be adjusted with the 'cinscopedecls' option.
 
 		cino=		    cino=g0 >
 		  {		      {
@@ -713,29 +712,29 @@ clojure-mode.el:
 
 FORTRAN							*ft-fortran-indent*
 
-Block if, select case, where, and forall constructs are indented.  So are
-type, interface, associate, block, and enum constructs.  The indenting of
-subroutines, functions, modules, and program blocks is optional.  Comments,
-labelled statements and continuation lines are indented if the Fortran is in
-free source form, whereas they are not indented if the Fortran is in fixed
-source form because of the left margin requirements.  Hence manual indent
-corrections will be necessary for labelled statements and continuation lines
-when fixed source form is being used.  For further discussion of the method
-used for the detection of source format see |ft-fortran-syntax|.
+Block if, select case, select type, select rank,  where, forall, type,
+interface, associate, block, enum, critical, and change team constructs are
+indented. The indenting of subroutines, functions, modules, and program blocks
+is optional. Comments, labeled statements, and continuation lines are indented
+if the Fortran is in free source form, whereas they are not indented if the
+Fortran is in fixed source form because of the left margin requirements. Hence
+manual indent corrections will be necessary for labeled statements and
+continuation lines when fixed source form is being used.  For further
+discussion of the method used for the detection of source format see
+|ft-fortran-syntax|.
 
 Do loops ~
 All do loops are left unindented by default.  Do loops can be unstructured in
-Fortran with (possibly multiple) loops ending on a labelled executable
+Fortran with (possibly multiple) loops ending on a labeled executable
 statement of almost arbitrary type.  Correct indentation requires
-compiler-quality parsing.  Old code with do loops ending on labelled statements
-of arbitrary type can be indented with elaborate programs such as Tidy
-(http://www.unb.ca/chem/ajit/f_tidy.htm).  Structured do/continue loops are
-also left unindented because continue statements are also used for purposes
-other than ending a do loop.  Programs such as Tidy can convert structured
-do/continue loops to the do/enddo form.  Do loops of the do/enddo variety can
-be indented.  If you use only structured loops of the do/enddo form, you should
-declare this by setting the fortran_do_enddo variable in your .vimrc as
-follows >
+compiler-quality parsing.  Old code with do loops ending on labeled statements
+of arbitrary type can be indented with elaborate programs such as Tidy.
+Structured do/continue loops are also left unindented because continue
+statements are used for purposes other than ending a do loop.  Programs such
+as Tidy can convert structured do/continue loops to the do/enddo form.  Do
+loops of the do/enddo variety can be indented.  If you use only structured
+loops of the do/enddo form, you should declare this by setting the
+fortran_do_enddo variable in your .vimrc as follows >
 
    let fortran_do_enddo=1
 
@@ -749,15 +748,14 @@ to get do loops indented in .f90 files and left alone in Fortran files with
 other extensions such as .for.
 
 Program units ~
-The indenting of program units (subroutines, functions, modules, and program
-blocks) is enabled by default but can be suppressed if a lighter, screen-width
-preserving indent style is desired.  To suppress the indenting of program
-units for all fortran files set the global fortran_indent_less variable in
-your .vimrc as follows >
+Indenting of program units (subroutines, functions, modules, and program
+blocks) can be increased by setting the variable fortran_indent_more and can
+be decreased by setting the variable fortran_indent_less.  These variables
+can be set for all fortran files in your .vimrc as follows >
 
   let fortran_indent_less=1
 
-A finer level of suppression can be achieved by setting the corresponding
+A finer level of control can be achieved by setting the corresponding
 buffer-local variable as follows >
 
   let b:fortran_indent_less=1
@@ -777,6 +775,15 @@ You can set the indent for the first line after <script> and <style>
       "zero"	zero indent
       "auto"	auto indent (same indent as the blocktag)
       "inc"	auto indent + one indent step
+
+You can set the indent for attributes after an open <tag line: >
+
+      :let g:html_indent_attribute = 1
+<
+      VALUE	MEANING ~
+      1		auto indent, one indent step more than <tag
+      2		auto indent, two indent steps (default)
+      > 2	auto indent, more indent steps
 
 Many tags increase the indent for what follows per default (see "Add Indent
 Tags" in the script).  You can add further tags with: >
@@ -806,6 +813,38 @@ Detail:
 	       : GetCSSIndent()	    else
       <!-- --> : -1
 
+IDRIS2							*ft-idris2-indent*
+
+Idris 2 indentation can be configured with several variables that control the
+indentation level for different language constructs:
+
+The "g:idris2_indent_if" variable controls the indentation of `then` and `else`
+blocks after `if` statements. Defaults to 3.
+
+The "g:idris2_indent_case" variable controls the indentation of patterns in
+`case` expressions. Defaults to 5.
+
+The "g:idris2_indent_let" variable controls the indentation after `let`
+bindings. Defaults to 4.
+
+The "g:idris2_indent_rewrite" variable controls the indentation after `rewrite`
+expressions. Defaults to 8.
+
+The "g:idris2_indent_where" variable controls the indentation of `where`
+blocks. Defaults to 6.
+
+The "g:idris2_indent_do" variable controls the indentation in `do` blocks.
+Defaults to 3.
+
+Example configuration: >
+
+	let g:idris2_indent_if = 2
+	let g:idris2_indent_case = 4
+	let g:idris2_indent_let = 4
+	let g:idris2_indent_rewrite = 8
+	let g:idris2_indent_where = 6
+	let g:idris2_indent_do = 3
+<
 
 MATLAB			*ft-matlab-indent* *matlab-indent* *matlab-indenting*
 
@@ -974,26 +1013,42 @@ indentation: >
 
 PYTHON							*ft-python-indent*
 
-The amount of indent can be set for the following situations.  The examples
-given are the defaults.  Note that the variables are set to an expression, so
-that you can change the value of 'shiftwidth' later.
+The amount of indent can be set with the `g:python_indent` |Dictionary|, which
+needs to be created before adding the items: >
+	let g:python_indent = {}
+The examples given are the defaults.  Note that the dictionary values are set
+to an expression, so that you can change the value of 'shiftwidth' later
+without having to update these values.
 
 Indent after an open paren: >
-	let g:pyindent_open_paren = 'shiftwidth() * 2'
+	let g:python_indent.open_paren = 'shiftwidth() * 2'
 Indent after a nested paren: >
-	let g:pyindent_nested_paren = 'shiftwidth()'
+	let g:python_indent.nested_paren = 'shiftwidth()'
 Indent for a continuation line: >
-	let g:pyindent_continue = 'shiftwidth() * 2'
+	let g:python_indent.continue = 'shiftwidth() * 2'
+
+By default, the closing paren on a multiline construct lines up under the first
+non-whitespace character of the previous line.
+If you prefer that it's lined up under the first character of the line that
+starts the multiline construct, reset this key: >
+	let g:python_indent.closed_paren_align_last_line = v:false
 
 The method uses |searchpair()| to look back for unclosed parentheses.  This
 can sometimes be slow, thus it timeouts after 150 msec.  If you notice the
 indenting isn't correct, you can set a larger timeout in msec: >
-	let g:pyindent_searchpair_timeout = 500
+	let g:python_indent.searchpair_timeout = 500
 
 If looking back for unclosed parenthesis is still too slow, especially during
 a copy-paste operation, or if you don't need indenting inside multi-line
 parentheses, you can completely disable this feature: >
-	let g:pyindent_disable_parentheses_indenting = 1
+	let g:python_indent.disable_parentheses_indenting = 1
+
+For backward compatibility, these variables are also supported: >
+	g:pyindent_open_paren
+	g:pyindent_nested_paren
+	g:pyindent_continue
+	g:pyindent_searchpair_timeout
+	g:pyindent_disable_parentheses_indenting
 
 
 R								*ft-r-indent*
@@ -1018,8 +1073,8 @@ r_indent_comment_column, as in the example below:
    let r_indent_comment_column = 30
 <
 Any code after a line that ends with "<-" is indented. Emacs/ESS does not
-indent the code if it is a top level function. If you prefer that the
-Vim-R-plugin behaves like Emacs/ESS in this regard, put in your |vimrc|:
+indent the code if it is a top-level function. If you prefer a behavior like
+Emacs/ESS one in this regard, put in your |vimrc|:
 >
    let r_indent_ess_compatible = 1
 <
@@ -1206,13 +1261,37 @@ comments will be indented according to the correctly indented code.
 
 
 VIM							*ft-vim-indent*
+							*g:vim_indent*
+Vim scripts indentation can be configured with the `g:vim_indent` dictionary
+variable.  It supports 3 keys, `line_continuation`, `more_in_bracket_block`,
+and `searchpair_timeout`.
+`line_continuation` expects a number which will be added to the indent level of
+a continuation line starting with a backslash, and defaults to
+`shiftwidth() * 3` .  It also accepts a string, which is evaluated at runtime.
+`more_in_bracket_block` expects a boolean value; when on, an extra
+`shiftwidth()` is added inside blocks surrounded with brackets.  It defaults to
+`v:false`.
+`searchpair_timeout` expects a number which will be passed to `searchpair()` as
+a timeout.  Increasing the value might give more accurate results, but also
+causes the indentation to take more time.  It defaults to 100 (milliseconds).
+
+Example of configuration: >
+
+	let g:vim_indent = #{
+	    \ line_continuation: shiftwidth() * 3,
+	    \ more_in_bracket_block: v:false,
+	    \ searchpair_timeout: 100,
+	    \ }
+<
 							*g:vim_indent_cont*
-For indenting Vim scripts there is one variable that specifies the amount of
-indent for a continuation line, a line that starts with a backslash: >
+This variable is equivalent to `g:vim_indent.line_continuation`.
+It's supported for backward compatibility.
 
-	:let g:vim_indent_cont = shiftwidth() * 3
+YAML							*ft-yaml-indent*
 
-Three times shiftwidth is the default value.
+By default, the yaml indent script does not try to detect multiline scalars.
+If you want to enable this, set the following variable: >
 
-
+  let g:yaml_indent_multiline_scalar = 1
+<
  vim:tw=78:ts=8:noet:ft=help:norl:

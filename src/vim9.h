@@ -25,10 +25,20 @@ typedef enum {
     ISN_EXECUTE,    // :execute with isn_arg.number items on top of stack
     ISN_ECHOMSG,    // :echomsg with isn_arg.number items on top of stack
     ISN_ECHOCONSOLE, // :echoconsole with isn_arg.number items on top of stack
+    ISN_ECHOWINDOW, // :echowindow with isn_arg.number items on top of stack
     ISN_ECHOERR,    // :echoerr with isn_arg.number items on top of stack
     ISN_RANGE,	    // compute range from isn_arg.string, push to stack
     ISN_SUBSTITUTE, // :s command with expression
+
+    ISN_SOURCE,	    // source autoload script, isn_arg.number is the script ID
     ISN_INSTR,	    // instructions compiled from expression
+    ISN_CONSTRUCT,  // construct an object, using construct_T
+    ISN_GET_OBJ_MEMBER, // object member, index is isn_arg.number
+    ISN_GET_ITF_MEMBER, // interface member, index is isn_arg.classmember
+    ISN_STORE_THIS, // store value in "this" object member, index is
+		    // isn_arg.number
+    ISN_LOAD_CLASSMEMBER,  // load class member, using isn_arg.classmember
+    ISN_STORE_CLASSMEMBER,  // store in class member, using isn_arg.classmember
 
     // get and set variables
     ISN_LOAD,	    // push local variable isn_arg.number
@@ -43,6 +53,7 @@ typedef enum {
     ISN_LOADWDICT,  // push w: dict
     ISN_LOADTDICT,  // push t: dict
     ISN_LOADS,	    // push s: variable isn_arg.loadstore
+    ISN_LOADEXPORT, // push exported variable isn_arg.loadstore
     ISN_LOADOUTER,  // push variable from outer scope isn_arg.outer
     ISN_LOADSCRIPT, // push script-local variable isn_arg.script.
     ISN_LOADOPT,    // push option isn_arg.string
@@ -57,6 +68,7 @@ typedef enum {
     ISN_STOREW,	    // pop into window-local variable isn_arg.string
     ISN_STORET,	    // pop into tab-local variable isn_arg.string
     ISN_STORES,	    // pop into script variable isn_arg.loadstore
+    ISN_STOREEXPORT, // pop into exported script variable isn_arg.loadstore
     ISN_STOREOUTER,  // pop variable into outer scope isn_arg.outer
     ISN_STORESCRIPT, // pop into script variable isn_arg.script
     ISN_STOREOPT,    // pop into option isn_arg.storeopt
@@ -66,8 +78,8 @@ typedef enum {
     // ISN_STOREOTHER, // pop into other script variable isn_arg.other.
 
     ISN_STORENR,    // store number into local variable isn_arg.storenr.stnr_idx
-    ISN_STOREINDEX,	// store into list or dictionary, type isn_arg.vartype,
-			// value/index/variable on stack
+    ISN_STOREINDEX,	// store into list or dictionary, using
+			// isn_arg.storeindex; value/index/variable on stack
     ISN_STORERANGE,	// store into blob,
 			// value/index 1/index 2/variable on stack
 
@@ -87,32 +99,47 @@ typedef enum {
     ISN_PUSHS,		// push string isn_arg.string
     ISN_PUSHBLOB,	// push blob isn_arg.blob
     ISN_PUSHFUNC,	// push func isn_arg.string
-    ISN_PUSHCHANNEL,	// push channel isn_arg.channel
-    ISN_PUSHJOB,	// push channel isn_arg.job
+    ISN_PUSHCHANNEL,	// push NULL channel
+    ISN_PUSHJOB,	// push NULL job
+    ISN_PUSHOBJ,	// push NULL object
+    ISN_PUSHCLASS,	// push class, uses isn_arg.classarg
     ISN_NEWLIST,	// push list from stack items, size is isn_arg.number
+			// -1 for null_list
+    ISN_NEWTUPLE,	// push tuple from stack items, size is isn_arg.number
+			// -1 for null_list
     ISN_NEWDICT,	// push dict from stack items, size is isn_arg.number
+			// -1 for null_dict
+    ISN_NEWPARTIAL,	// push NULL partial
 
     ISN_AUTOLOAD,	// get item from autoload import, function or variable
 
     // function call
     ISN_BCALL,	    // call builtin function isn_arg.bfunc
     ISN_DCALL,	    // call def function isn_arg.dfunc
+    ISN_METHODCALL, // call method on interface, uses isn_arg.mfunc
     ISN_UCALL,	    // call user function or funcref/partial isn_arg.ufunc
     ISN_PCALL,	    // call partial, use isn_arg.pfunc
     ISN_PCALL_END,  // cleanup after ISN_PCALL with cpf_top set
     ISN_RETURN,	    // return, result is on top of stack
     ISN_RETURN_VOID, // Push void, then return
+    ISN_RETURN_OBJECT, // Push constructed object, then return
     ISN_FUNCREF,    // push a function ref to dfunc isn_arg.funcref
     ISN_NEWFUNC,    // create a global function from a lambda function
     ISN_DEF,	    // list functions
+    ISN_DEFER,	    // :defer  argument count is isn_arg.number
 
     // expression operations
     ISN_JUMP,	    // jump if condition is matched isn_arg.jump
     ISN_JUMP_IF_ARG_SET, // jump if argument is already set, uses
 			 // isn_arg.jumparg
+    ISN_JUMP_IF_ARG_NOT_SET, // jump if argument is not set, uses
+			 // isn_arg.jumparg
 
     // loop
     ISN_FOR,	    // get next item from a list, uses isn_arg.forloop
+    ISN_WHILE,	    // jump if condition false, store funcref count, uses
+		    // isn_arg.whileloop
+    ISN_ENDLOOP,    // handle variables for closures, uses isn_arg.endloop
 
     ISN_TRY,	    // add entry to ec_trystack, uses isn_arg.tryref
     ISN_THROW,	    // pop value of stack, store in v:exception
@@ -120,10 +147,11 @@ typedef enum {
     ISN_CATCH,	    // drop v:exception
     ISN_FINALLY,    // start of :finally block
     ISN_ENDTRY,	    // take entry off from ec_trystack
-    ISN_TRYCONT,    // handle :continue inside a :try statement
+    ISN_TRYCONT,    // handle :continue or :break inside a :try statement
 
     // more expression operations
     ISN_ADDLIST,    // add two lists
+    ISN_ADDTUPLE,   // add two tuples
     ISN_ADDBLOB,    // add two blobs
 
     // operation with two arguments; isn_arg.op.op_type is exprtype_T
@@ -134,22 +162,27 @@ typedef enum {
     // comparative operations; isn_arg.op.op_type is exprtype_T, op_ic used
     ISN_COMPAREBOOL,
     ISN_COMPARESPECIAL,
+    ISN_COMPARENULL,
     ISN_COMPARENR,
     ISN_COMPAREFLOAT,
     ISN_COMPARESTRING,
     ISN_COMPAREBLOB,
     ISN_COMPARELIST,
+    ISN_COMPARETUPLE,
     ISN_COMPAREDICT,
     ISN_COMPAREFUNC,
     ISN_COMPAREANY,
+    ISN_COMPAREOBJECT,
 
     // expression operations
-    ISN_CONCAT,
+    ISN_CONCAT,     // concatenate isn_arg.number strings
     ISN_STRINDEX,   // [expr] string index
     ISN_STRSLICE,   // [expr:expr] string slice
     ISN_LISTAPPEND, // append to a list, like add()
     ISN_LISTINDEX,  // [expr] list index
     ISN_LISTSLICE,  // [expr:expr] list slice
+    ISN_TUPLEINDEX,  // [expr] tuple index
+    ISN_TUPLESLICE,  // [expr:expr] tuple slice
     ISN_BLOBINDEX,  // [expr] blob index
     ISN_BLOBSLICE,  // [expr:expr] blob slice
     ISN_ANYINDEX,   // [expr] runtime index
@@ -165,7 +198,6 @@ typedef enum {
     ISN_2STRING_ANY, // like ISN_2STRING but check type
     ISN_NEGATENR,   // apply "-" to number
 
-    ISN_CHECKNR,    // check value can be used as a number
     ISN_CHECKTYPE,  // check value type is isn_arg.type.ct_type
     ISN_CHECKLEN,   // check list length is isn_arg.checklen.cl_min_len
     ISN_SETTYPE,    // set dict type to isn_arg.type.ct_type
@@ -174,6 +206,7 @@ typedef enum {
     ISN_USEDICT,    // use or clear dict saved by ISN_MEMBER/ISN_STRINGMEMBER
 
     ISN_PUT,	    // ":put", uses isn_arg.put
+    ISN_IPUT,	    // ":iput", uses isn_arg.put
 
     ISN_CMDMOD,	    // set cmdmod
     ISN_CMDMOD_REV, // undo ISN_CMDMOD
@@ -193,6 +226,8 @@ typedef enum {
     ISN_CEXPR_AUCMD, // first part of :cexpr  isn_arg.number is cmdidx
     ISN_CEXPR_CORE,  // second part of :cexpr, uses isn_arg.cexpr
 
+    ISN_SCRIPTCTX_SET, // set script context for expression evaluation
+
     ISN_FINISH	    // end marker in list of instructions
 } isntype_T;
 
@@ -208,6 +243,14 @@ typedef struct {
     int	    cdf_idx;	    // index in "def_functions" for ISN_DCALL
     int	    cdf_argcount;   // number of arguments on top of stack
 } cdfunc_T;
+
+// arguments to ISN_METHODCALL
+typedef struct {
+    class_T *cmf_itf;	    // interface used
+    int	    cmf_idx;	    // index in "def_functions" for ISN_METHODCALL
+    int	    cmf_argcount;   // number of arguments on top of stack
+    int	    cmf_is_super;   // doing "super.Func", use cmf_itf, not cmf_idx
+} cmfunc_T;
 
 // arguments to ISN_PCALL
 typedef struct {
@@ -231,8 +274,8 @@ typedef enum {
     JUMP_ALWAYS,
     JUMP_NEVER,
     JUMP_IF_FALSE,		// pop and jump if false
+    JUMP_WHILE_FALSE,		// pop and jump if false for :while
     JUMP_AND_KEEP_IF_TRUE,	// jump if top of stack is truthy, drop if not
-    JUMP_AND_KEEP_IF_FALSE,	// jump if top of stack is falsy, drop if not
     JUMP_IF_COND_TRUE,		// jump if top of stack is true, drop if not
     JUMP_IF_COND_FALSE,		// jump if top of stack is false, drop if not
 } jumpwhen_T;
@@ -240,20 +283,34 @@ typedef enum {
 // arguments to ISN_JUMP
 typedef struct {
     jumpwhen_T	jump_when;
-    int		jump_where;	    // position to jump to
+    int		jump_where;	// position to jump to
 } jump_T;
 
-// arguments to ISN_JUMP_IF_ARG_SET
+// arguments to ISN_JUMP_IF_ARG_SET and ISN_JUMP_IF_ARG_NOT_SET
 typedef struct {
-    int		jump_arg_off;	    // argument index, negative
-    int		jump_where;	    // position to jump to
+    int		jump_arg_off;	// argument index, negative
+    int		jump_where;	// position to jump to
 } jumparg_T;
 
 // arguments to ISN_FOR
 typedef struct {
-    int	    for_idx;	    // loop variable index
-    int	    for_end;	    // position to jump to after done
+    short	for_loop_idx;	// loop variable index
+    int		for_end;	// position to jump to after done
 } forloop_T;
+
+// arguments to ISN_WHILE
+typedef struct {
+    short	while_funcref_idx;  // variable index for funcref count
+    int		while_end;	    // position to jump to after done
+} whileloop_T;
+
+// arguments to ISN_ENDLOOP
+typedef struct {
+    short    end_funcref_idx;	// variable index of funcrefs.ga_len
+    short    end_depth;		// nested loop depth
+    short    end_var_idx;	// first variable declared in the loop
+    short    end_var_count;	// number of variables declared in the loop
+} endloop_T;
 
 // indirect arguments to ISN_TRY
 typedef struct {
@@ -290,6 +347,7 @@ typedef struct {
     type_T	*ct_type;
     int8_T	ct_off;		// offset in stack, -1 is bottom
     int8_T	ct_arg_idx;	// argument index or zero
+    int8_T	ct_is_var;	// when TRUE checking variable instead of arg
 } checktype_T;
 
 // arguments to ISN_STORENR
@@ -328,16 +386,30 @@ typedef struct {
     int		ul_forceit;	// forceit flag
 } unlet_T;
 
+// extra arguments for funcref_T
+typedef struct {
+    char_u	  *fre_func_name;	// function name for legacy function
+    loopvarinfo_T fre_loopvar_info;	// info about variables inside loops
+    class_T	  *fre_class;		// class for a method
+    int		  fre_object_method;	// class or object method
+    int		  fre_method_idx;	// method index on "fre_class"
+} funcref_extra_T;
+
 // arguments to ISN_FUNCREF
 typedef struct {
-    int		fr_dfunc_idx;	// function index for :def function
-    char_u	*fr_func_name;	// function name for legacy function
+    int		    fr_dfunc_idx;   // function index for :def function
+    funcref_extra_T *fr_extra;	    // optional extra information
 } funcref_T;
 
 // arguments to ISN_NEWFUNC
 typedef struct {
-    char_u	*nf_lambda;	// name of the lambda already defined
-    char_u	*nf_global;	// name of the global function to be created
+    char_u	  *nfa_lambda;	    // name of the lambda already defined
+    char_u	  *nfa_global;	    // name of the global function to be created
+    loopvarinfo_T nfa_loopvar_info; // ifno about variables inside loops
+} newfuncarg_T;
+
+typedef struct {
+    newfuncarg_T *nf_arg;
 } newfunc_T;
 
 // arguments to ISN_CHECKLEN
@@ -375,6 +447,8 @@ typedef struct {
     int		outer_depth;	// nesting level, stack frames to go up
 } isn_outer_T;
 
+#define OUTER_LOOP_DEPTH -9	// used for outer_depth for loop variables
+
 // arguments to ISN_SUBSTITUTE
 typedef struct {
     char_u	*subs_cmd;	// :s command
@@ -396,7 +470,7 @@ typedef struct {
 // arguments to ISN_2STRING and ISN_2STRING_ANY
 typedef struct {
     int		offset;
-    int		tolerant;
+    int		flags;
 } tostring_T;
 
 // arguments to ISN_2BOOL
@@ -411,6 +485,43 @@ typedef struct {
     int		dbg_break_lnum;	    // first line to break after
 } debug_T;
 
+// arguments to ISN_DEFER
+typedef struct {
+    int		defer_var_idx;	    // local variable index for defer list
+    int		defer_argcount;	    // number of arguments
+} deferins_T;
+
+// arguments to ISN_ECHOWINDOW
+typedef struct {
+    int		ewin_count;	    // number of arguments
+    long	ewin_time;	    // time argument (msec)
+} echowin_T;
+
+// arguments to ISN_CONSTRUCT
+typedef struct {
+    int		construct_size;	    // size of object in bytes
+    class_T	*construct_class;   // class the object is created from
+} construct_T;
+
+// arguments to ISN_STORE_CLASSMEMBER, ISN_LOAD_CLASSMEMBER, ISN_GET_ITF_MEMBER
+typedef struct {
+    class_T	*cm_class;
+    int		cm_idx;
+} classmember_T;
+
+// arguments to ISN_STOREINDEX
+typedef struct {
+    vartype_T	si_vartype;
+    class_T	*si_class;
+} storeindex_T;
+
+// arguments to ISN_LOCKUNLOCK
+typedef struct {
+    char_u	*lu_string;	// for exec_command
+    class_T	*lu_cl_exec;	// executing, null if not class/obj method
+    int		lu_is_arg;	// is lval_root a function arg
+} lockunlock_T;
+
 /*
  * Instruction
  */
@@ -422,19 +533,21 @@ struct isn_S {
 	varnumber_T	    number;
 	blob_T		    *blob;
 	vartype_T	    vartype;
-#ifdef FEAT_FLOAT
 	float_T		    fnumber;
-#endif
 	channel_T	    *channel;
 	job_T		    *job;
 	partial_T	    *partial;
+	class_T		    *classarg;
 	jump_T		    jump;
 	jumparg_T	    jumparg;
 	forloop_T	    forloop;
+	whileloop_T	    whileloop;
+	endloop_T	    endloop;
 	try_T		    tryref;
 	trycont_T	    trycont;
 	cbfunc_T	    bfunc;
 	cdfunc_T	    dfunc;
+	cmfunc_T	    *mfunc;
 	cpfunc_T	    pfunc;
 	cufunc_T	    ufunc;
 	echo_T		    echo;
@@ -460,6 +573,13 @@ struct isn_S {
 	tobool_T	    tobool;
 	getitem_T	    getitem;
 	debug_T		    debug;
+	deferins_T	    defer;
+	echowin_T	    echowin;
+	construct_T	    construct;
+	classmember_T	    classmember;
+	storeindex_T	    storeindex;
+	lockunlock_T	    lockunlock;
+	sctx_T		    setsctx;
     } isn_arg;
 };
 
@@ -470,7 +590,9 @@ struct dfunc_S {
     ufunc_T	*df_ufunc;	    // struct containing most stuff
     int		df_refcount;	    // how many ufunc_T point to this dfunc_T
     int		df_idx;		    // index in def_functions
-    int		df_deleted;	    // if TRUE function was deleted
+    char	df_deleted;	    // if TRUE function was deleted
+    char	df_delete_busy;	    // TRUE when in
+				    // delete_def_function_contents()
     int		df_script_seq;	    // Value of sctx_T sc_seq when the function
 				    // was compiled.
     char_u	*df_name;	    // name used for error messages
@@ -490,11 +612,14 @@ struct dfunc_S {
 
     int		df_varcount;	    // number of local variables
     int		df_has_closure;	    // one if a closure was created
+    int		df_defer_var_idx;   // index of local variable that has a list
+				    // of deferred function calls; zero if not
+				    // set
 };
 
 // Number of entries used by stack frame for a function call.
 // - ec_dfunc_idx:   function index
-// - ec_iidx:        instruction index
+// - ec_iidx:	     instruction index
 // - ec_instr:       instruction list pointer
 // - ec_outer:	     stack used for closures
 // - funclocal:	     function-local data
@@ -511,12 +636,12 @@ struct dfunc_S {
 extern garray_T def_functions;
 
 // Used for "lnum" when a range is to be taken from the stack.
-#define LNUM_VARIABLE_RANGE -999
+#define LNUM_VARIABLE_RANGE (-999)
 
 // Used for "lnum" when a range is to be taken from the stack and "!" is used.
-#define LNUM_VARIABLE_RANGE_ABOVE -888
+#define LNUM_VARIABLE_RANGE_ABOVE (-888)
 
-// Keep in sync with COMPILE_TYPE()
+// Keep in sync with get_compile_type()
 #ifdef FEAT_PROFILE
 # define INSTRUCTIONS(dfunc) \
 	(debug_break_level > 0 || may_break_in_function(dfunc->df_ufunc) \
@@ -526,7 +651,7 @@ extern garray_T def_functions;
 		: (dfunc)->df_instr))
 #else
 # define INSTRUCTIONS(dfunc) \
-	(debug_break_level > 0 || may_break_in_function(dfunc->df_ufunc) \
+	(debug_break_level > 0 || may_break_in_function((dfunc)->df_ufunc) \
 		? (dfunc)->df_instr_debug \
 		: (dfunc)->df_instr)
 #endif
@@ -572,12 +697,21 @@ typedef struct {
     endlabel_T	*is_end_label;	    // instructions to set end label
 } ifscope_T;
 
+// info used by :for and :while needed for ENDLOOP
+typedef struct {
+    int	    li_local_count;	    // ctx_locals.ga_len at loop start
+    int	    li_closure_count;	    // ctx_closure_count at loop start
+    int	    li_funcref_idx;	    // index of var that holds funcref count
+    int	    li_depth;		    // nested loop depth
+} loop_info_T;
+
 /*
  * info specific for the scope of :while
  */
 typedef struct {
     int		ws_top_label;	    // instruction idx at WHILE
     endlabel_T	*ws_end_label;	    // instructions to set end
+    loop_info_T ws_loop_info;	    // info for LOOPEND
 } whilescope_T;
 
 /*
@@ -586,6 +720,7 @@ typedef struct {
 typedef struct {
     int		fs_top_label;	    // instruction idx at FOR
     endlabel_T	*fs_end_label;	    // break instructions
+    loop_info_T	fs_loop_info;	    // info for LOOPEND
 } forscope_T;
 
 /*
@@ -618,6 +753,7 @@ struct scope_S {
     scopetype_T se_type;
     int		se_local_count;	    // ctx_locals.ga_len before scope
     skip_T	se_skip_save;	    // ctx_skip before the block
+    int		se_loop_depth;	    // number of loop scopes, including this
     union {
 	ifscope_T	se_if;
 	whilescope_T	se_while;
@@ -633,8 +769,12 @@ typedef struct {
     char_u	*lv_name;
     type_T	*lv_type;
     int		lv_idx;		// index of the variable on the stack
+    int		lv_loop_depth;	// depth for variable inside a loop or -1
+    int		lv_loop_idx;	// index of first variable inside a loop or -1
     int		lv_from_outer;	// nesting level, using ctx_outer scope
-    int		lv_const;	// when TRUE cannot be assigned to
+    int		lv_const;	// ASSIGN_VAR (can be assigned to),
+				// ASSIGN_FINAL (no assignment) or ASSIGN_CONST
+				// (value cannot be changed)
     int		lv_arg;		// when TRUE this is an argument
 } lvar_T;
 
@@ -649,7 +789,9 @@ typedef enum {
     dest_window,
     dest_tab,
     dest_vimvar,
+    dest_class_member,
     dest_script,
+    dest_script_v9,
     dest_reg,
     dest_expr,
 } assign_dest_T;
@@ -680,18 +822,23 @@ typedef struct {
     lvar_T	    lhs_local_lvar; // used for existing local destination
     lvar_T	    lhs_arg_lvar;   // used for argument destination
     lvar_T	    *lhs_lvar;	    // points to destination lvar
+
+    class_T	    *lhs_class;		    // for dest_class_member
+    int		    lhs_classmember_idx;    // for dest_class_member
+
     int		    lhs_scriptvar_sid;
     int		    lhs_scriptvar_idx;
 
     int		    lhs_has_type;   // type was specified
     type_T	    *lhs_type;
-    type_T	    *lhs_member_type;
+    int		    lhs_member_idx;    // object member index
+    type_T	    *lhs_member_type;  // list/dict/object member type
 
     int		    lhs_append;	    // used by ISN_REDIREND
 } lhs_T;
 
 /*
- * Context for compiling lines of Vim script.
+ * Context for compiling lines of a :def function.
  * Stores info about the local variables and condition stack.
  */
 struct cctx_S {
@@ -707,14 +854,15 @@ struct cctx_S {
 
     garray_T	ctx_locals;	    // currently visible local variables
 
-    int		ctx_has_closure;    // set to one if a closure was created in
-				    // the function
-
-    garray_T	ctx_imports;	    // imported items
+    int		ctx_has_closure;    // set to one if a FUNCREF was used in the
+				    // function
+    int		ctx_closure_count;  // incremented for each closure created in
+				    // the function.
 
     skip_T	ctx_skip;
     scope_T	*ctx_scope;	    // current scope, NULL at toplevel
     int		ctx_had_return;	    // last seen statement was "return"
+    int		ctx_had_throw;	    // last seen statement was "throw"
 
     cctx_T	*ctx_outer;	    // outer scope for lambda or nested
 				    // function
@@ -729,7 +877,25 @@ struct cctx_S {
 				    // lhs_name is not NULL
 };
 
+/*
+ * List of special functions for "compile_arguments()".
+ */
+typedef enum {
+    CA_NOT_SPECIAL,
+    CA_SEARCHPAIR,	    // {skip} in searchpair() and searchpairpos()
+    CA_SUBSTITUTE,	    // {sub} in substitute(), when prefixed with \=
+} ca_special_T;
+
 // flags for typval2type()
 #define TVTT_DO_MEMBER	    1
 #define TVTT_MORE_SPECIFIC  2	// get most specific type for member
 
+// flags for call_def_function()
+#define DEF_USE_PT_ARGV	    1	// use the partial arguments
+
+// Flag used for conversion to string by may_generate_2STRING()
+#define TOSTRING_NONE		0x0
+// Convert a List to series of values separated by newline
+#define TOSTRING_INTERPOLATE	0x1
+// Convert a List to a textual representation of the list "[...]"
+#define TOSTRING_TOLERANT	0x2

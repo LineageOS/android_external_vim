@@ -3,6 +3,7 @@
 # danish.nsi: Danish language strings for gvim NSIS installer.
 #
 # Locale ID    : 1030
+# Locale Name  : da
 # fileencoding : UTF-8
 # Author       : scootergrisen
 
@@ -13,6 +14,20 @@
 # These strings should be always English.  Otherwise dosinst.c fails.
 LangString ^SetupCaption     ${LANG_DANISH}         "$(^Name) Setup"
 LangString ^UninstallCaption ${LANG_DANISH}         "$(^Name) Uninstall"
+
+##############################################################################
+# Translated license file for the license page                            {{{1
+##############################################################################
+
+LicenseLangString page_lic_file 0 "..\lang\LICENSE.nsis.txt"
+#LicenseLangString page_lic_file ${LANG_DANISH} "..\lang\LICENSE.da.nsis.txt"
+
+##############################################################################
+# Translated README.txt file, which is opened after installation          {{{1
+##############################################################################
+
+LangString vim_readme_file 0 "README.txt"
+#LangString vim_readme_file ${LANG_DANISH} "README.da.txt"
 
 ##############################################################################
 # MUI Configuration Strings                                               {{{1
@@ -78,9 +93,6 @@ LangString str_desc_plugin_home     ${LANG_DANISH}     "Opret plugin-mapper i HO
 
 LangString str_section_plugin_vim   ${LANG_DANISH}     "Delte"
 LangString str_desc_plugin_vim      ${LANG_DANISH}     "Opret plugin-mapper i Vim-installationsmappe, det bruges af alle på systemet."
-
-LangString str_section_vis_vim      ${LANG_DANISH}     "VisVim-udvidelser"
-LangString str_desc_vis_vim         ${LANG_DANISH}     "VisVim-udvidelser til integrering i Microsoft Visual Studio."
 
 LangString str_section_nls          ${LANG_DANISH}     "Understøttelse af modersmål"
 LangString str_desc_nls             ${LANG_DANISH}     "Installer filer til understøttelse af modersmål."

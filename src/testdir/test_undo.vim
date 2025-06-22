@@ -3,6 +3,9 @@
 " undo-able pieces.  Do that by setting 'undolevels'.
 " Also tests :earlier and :later.
 
+source check.vim
+source screendump.vim
+
 func Test_undotree()
   new
 
@@ -90,6 +93,65 @@ func FillBuffer()
   endfor
 endfunc
 
+func Test_undotree_bufnr()
+  new
+  let buf1 = bufnr()
+
+  normal! Aabc
+  set ul=100
+
+  " Save undo tree without bufnr as ground truth for buffer 1
+  let d1 = undotree()
+
+  new
+  let buf2 = bufnr()
+
+  normal! Adef
+  set ul=100
+
+  normal! Aghi
+  set ul=100
+
+  " Save undo tree without bufnr as ground truth for buffer 2
+  let d2 = undotree()
+
+  " Check undotree() with bufnr argument
+  let d = undotree(buf1)
+  call assert_equal(d1, d)
+  call assert_notequal(d2, d)
+
+  let d = undotree(buf2)
+  call assert_notequal(d1, d)
+  call assert_equal(d2, d)
+
+  " Switch buffers and check again
+  wincmd p
+
+  let d = undotree(buf1)
+  call assert_equal(d1, d)
+
+  let d = undotree(buf2)
+  call assert_notequal(d1, d)
+  call assert_equal(d2, d)
+
+  " error cases
+  call assert_fails('call undotree(-1)', 'E158:')
+  call assert_fails('call undotree("nosuchbuf")', 'E158:')
+
+  " after creating a buffer nosuchbuf, undotree('nosuchbuf') should
+  " not error out
+  new nosuchbuf
+  let d = {'seq_last': 0, 'entries': [], 'time_cur': 0, 'save_last': 0, 'synced': 1, 'save_cur': 0, 'seq_cur': 0}
+  call assert_equal(d, undotree("nosuchbuf"))
+  " clean up
+  bw nosuchbuf
+
+  " Drop created windows
+  set ul&
+  new
+  bw!
+endfunc
+
 func Test_global_local_undolevels()
   new one
   set undolevels=5
@@ -131,6 +193,7 @@ func Test_global_local_undolevels()
   " Drop created windows
   set ul&
   new
+  bw! one two
   only!
 endfunc
 
@@ -191,7 +254,7 @@ func Test_undo_del_chars()
   later 1h
   call assert_equal('123-abc', getline(1))
 
-  close!
+  bw!
 endfunc
 
 func Test_undolist()
@@ -212,7 +275,17 @@ func Test_undolist()
   call feedkeys('achange3\<Esc>', 'xt')
   let a = execute('undolist')
   call assert_match("^\nnumber changes  when  *saved\n *2  *2  *.*\n *3  *2 .*$", a)
-  close!
+
+  " 3 save number
+  if has("persistent_undo")
+    setl undofile
+    w Xundolist.txt
+    defer delete('Xundolist.txt')
+    let lastline = execute('undolist')->split("\n")[-1]
+    call assert_match('seconds\? ago         \?1', lastline)
+
+  endif
+  bw!
 endfunc
 
 func Test_U_command()
@@ -224,7 +297,7 @@ func Test_U_command()
   call assert_equal('', getline(1))
   norm! U
   call assert_equal('change1change2', getline(1))
-  close!
+  bw!
 endfunc
 
 func Test_undojoin()
@@ -331,15 +404,20 @@ func Test_insert_expr()
   call feedkeys("u", 'x')
   call assert_equal(['a', 'b', 'c', '12', 'd'], getline(2, '$'))
 
-  close!
+  bw!
 endfunc
 
 func Test_undofile_earlier()
+  if has('win32')
+    " FIXME: This test is flaky on MS-Windows.
+    let g:test_is_flaky = 1
+  endif
+
   " Issue #1254
   " create undofile with timestamps older than Vim startup time.
   let t0 = localtime() - 43200
   call test_settime(t0)
-  new Xfile
+  new XfileEarlier
   call feedkeys("ione\<Esc>", 'xt')
   set ul=100
   call test_settime(t0 + 1)
@@ -353,12 +431,12 @@ func Test_undofile_earlier()
   bwipe!
   " restore normal timestamps.
   call test_settime(0)
-  new Xfile
+  new XfileEarlier
   rundo Xundofile
   earlier 1d
   call assert_equal('', getline(1))
   bwipe!
-  call delete('Xfile')
+  call delete('XfileEarlier')
   call delete('Xundofile')
 endfunc
 
@@ -379,21 +457,18 @@ func Test_undofile_truncated()
 
   " try several sizes
   for size in range(20, 500, 33)
-    call writefile(contents[0:size], 'Xundofile')
+    call writefile(contents[0:size], 'Xundofile', 'D')
     call assert_fails('rundo Xundofile', 'E825:')
   endfor
 
   bwipe!
-  call delete('Xundofile')
 endfunc
 
 func Test_rundo_errors()
   call assert_fails('rundo XfileDoesNotExist', 'E822:')
 
-  call writefile(['abc'], 'Xundofile')
+  call writefile(['abc'], 'Xundofile', 'D')
   call assert_fails('rundo Xundofile', 'E823:')
-
-  call delete('Xundofile')
 endfunc
 
 func Test_undofile_next()
@@ -519,7 +594,7 @@ funct Test_undofile()
   endif
   call assert_equal('', undofile(''))
 
-  " Test undofile() with 'undodir' set to to an existing directory.
+  " Test undofile() with 'undodir' set to an existing directory.
   call mkdir('Xundodir')
   set undodir=Xundodir
   let cwd = getcwd()
@@ -755,5 +830,89 @@ func Test_redo_multibyte_in_insert_mode()
   call assert_equal("He\ufb05llo", getline(1))
   bwipe!
 endfunc
+
+func Test_undo_mark()
+  new
+  " The undo is applied to the only line.
+  call setline(1, 'hello')
+  call feedkeys("ggyiw$p", 'xt')
+  undo
+  call assert_equal([0, 1, 1, 0], getpos("'["))
+  call assert_equal([0, 1, 1, 0], getpos("']"))
+  " The undo removes the last line.
+  call feedkeys("Goaaaa\<Esc>", 'xt')
+  call feedkeys("obbbb\<Esc>", 'xt')
+  undo
+  call assert_equal([0, 2, 1, 0], getpos("'["))
+  call assert_equal([0, 2, 1, 0], getpos("']"))
+  bwipe!
+endfunc
+
+func Test_undo_after_write()
+  CheckScreendump
+  " use a terminal to make undo work like when text is typed
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      edit Xtestfile.txt
+      set undolevels=100 undofile
+      imap . <Cmd>write<CR>
+      write
+  END
+  call writefile(lines, 'Xtest_undo_after_write', 'D')
+  let buf = RunVimInTerminal('-S Xtest_undo_after_write', #{rows: 6})
+
+  call term_sendkeys(buf, "Otest.\<CR>boo!!!\<Esc>")
+  sleep 100m
+  call term_sendkeys(buf, "u")
+  call VerifyScreenDump(buf, 'Test_undo_after_write_1', {})
+
+  call term_sendkeys(buf, "u")
+  call VerifyScreenDump(buf, 'Test_undo_after_write_2', {})
+
+  call StopVimInTerminal(buf)
+  call delete('Xtestfile.txt')
+  call delete('.Xtestfile.txt.un~')
+endfunc
+
+func Test_undo_range_normal()
+  new
+  call setline(1, ['asa', 'bsb'])
+  let &l:undolevels = &l:undolevels
+  %normal dfs
+  call assert_equal(['a', 'b'], getline(1, '$'))
+  undo
+  call assert_equal(['asa', 'bsb'], getline(1, '$'))
+  bwipe!
+endfunc
+
+func Test_load_existing_undofile()
+  CheckFeature persistent_undo
+  sp samples/test_undo.txt
+  let mess=execute(':verbose rundo samples/test_undo.txt.undo')
+  call assert_match('Finished reading undo file', mess)
+
+  call assert_equal(['one', 'two', 'three'], getline(1, '$'))
+  norm! u
+  call assert_equal(['one', 'two'], getline(1, '$'))
+  norm! u
+  call assert_equal(['one'], getline(1, '$'))
+  norm! u
+  call assert_equal([''], getline(1, '$'))
+  let mess = execute(':norm! u')
+  call assert_equal([''], getline(1, '$'))
+  call assert_match('Already at oldest change', mess)
+  exe ":norm! \<c-r>"
+  call assert_equal(['one'], getline(1, '$'))
+  exe ":norm! \<c-r>"
+  call assert_equal(['one', 'two'], getline(1, '$'))
+  exe ":norm! \<c-r>"
+  call assert_equal(['one', 'two', 'three'], getline(1, '$'))
+  let mess = execute(":norm! \<c-r>")
+  call assert_equal(['one', 'two', 'three'], getline(1, '$'))
+  call assert_match('Already at newest change', mess)
+  bw!
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

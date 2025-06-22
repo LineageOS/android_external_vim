@@ -1,6 +1,6 @@
 " Test filter() and map()
 
-source vim9.vim
+import './vim9.vim' as v9
 
 " list with expression string
 func Test_filter_map_list_expr_string()
@@ -14,6 +14,18 @@ func Test_filter_map_list_expr_string()
   call assert_equal([0, 2, 4, 6], map([1, 2, 3, 4], 'v:key * 2'))
   call assert_equal([9, 9, 9, 9], map([1, 2, 3, 4], 9))
   call assert_equal([7, 7, 7], map([1, 2, 3], ' 7 '))
+
+  " foreach()
+  let list01 = [1, 2, 3, 4]
+  let list02 = []
+  call assert_equal([1, 2, 3, 4], foreach(list01, 'call add(list02, v:val * 2)'))
+  call assert_equal([2, 4, 6, 8], list02)
+  let list02 = []
+  call assert_equal([1, 2, 3, 4], foreach(list01, 'call add(list02, v:key * 2)'))
+  call assert_equal([0, 2, 4, 6], list02)
+  let list02 = []
+  call assert_equal([1, 2, 3, 4], foreach(list01, 'call add(list02, 9)'))
+  call assert_equal([9, 9, 9, 9], list02)
 endfunc
 
 " dict with expression string
@@ -29,6 +41,14 @@ func Test_filter_map_dict_expr_string()
   call assert_equal({"foo": 2, "bar": 4, "baz": 6}, map(copy(dict), 'v:val * 2'))
   call assert_equal({"foo": "f", "bar": "b", "baz": "b"}, map(copy(dict), 'v:key[0]'))
   call assert_equal({"foo": 9, "bar": 9, "baz": 9}, map(copy(dict), 9))
+
+  " foreach()
+  let dict01 = {}
+  call assert_equal(dict, foreach(copy(dict), 'let dict01[v:key] = v:val * 2'))
+  call assert_equal({"foo": 2, "bar": 4, "baz": 6}, dict01)
+  let dict01 = {}
+  call assert_equal(dict, foreach(copy(dict), 'let dict01[v:key] = v:key[0]'))
+  call assert_equal({"foo": "f", "bar": "b", "baz": "b"}, dict01)
 endfunc
 
 " list with funcref
@@ -54,6 +74,16 @@ func Test_filter_map_list_expr_funcref()
     return a:index * 2
   endfunc
   call assert_equal([0, 2, 4, 6], map([1, 2, 3, 4], function('s:filter4')))
+
+  " foreach()
+  func! s:foreach1(index, val) abort
+    call add(g:test_variable, a:val + 1)
+    return [ 11, 12, 13, 14 ]
+  endfunc
+  let g:test_variable = []
+  call assert_equal([0, 1, 2, 3, 4], foreach(range(5), function('s:foreach1')))
+  call assert_equal([1, 2, 3, 4, 5], g:test_variable)
+  call remove(g:, 'test_variable')
 endfunc
 
 func Test_filter_map_nested()
@@ -90,11 +120,46 @@ func Test_filter_map_dict_expr_funcref()
     return a:key[0]
   endfunc
   call assert_equal({"foo": "f", "bar": "b", "baz": "b"}, map(copy(dict), function('s:filter4')))
+
+  " foreach()
+  func! s:foreach1(key, val) abort
+    call extend(g:test_variable, {a:key: a:val * 2})
+    return [ 11, 12, 13, 14 ]
+  endfunc
+  let g:test_variable = {}
+  call assert_equal(dict, foreach(copy(dict), function('s:foreach1')))
+  call assert_equal({"foo": 2, "bar": 4, "baz": 6}, g:test_variable)
+  call remove(g:, 'test_variable')
+endfunc
+
+func Test_map_filter_locked()
+  let list01 = [1, 2, 3, 4]
+  lockvar 1 list01
+  call assert_fails('call filter(list01, "v:val > 1")', 'E741:')
+  call assert_equal([2, 4, 6, 8], map(list01, 'v:val * 2'))
+  call assert_equal([1, 2, 3, 4], map(list01, 'v:val / 2'))
+  call assert_equal([2, 4, 6, 8], mapnew(list01, 'v:val * 2'))
+  let g:test_variable = []
+  call assert_equal([1, 2, 3, 4], foreach(list01, 'call add(g:test_variable, v:val * 2)'))
+  call remove(g:, 'test_variable')
+  call assert_fails('call filter(list01, "v:val > 1")', 'E741:')
+  unlockvar 1 list01
+  lockvar! list01
+  call assert_fails('call filter(list01, "v:val > 1")', 'E741:')
+  call assert_fails('call map(list01, "v:val * 2")', 'E741:')
+  call assert_equal([2, 4, 6, 8], mapnew(list01, 'v:val * 2'))
+  let g:test_variable = []
+  call assert_equal([1, 2, 3, 4], foreach(list01, 'call add(g:test_variable, v:val * 2)'))
+  call assert_fails('call foreach(list01, "let list01[0] = -1")', 'E741:')
+  call assert_fails('call filter(list01, "v:val > 1")', 'E741:')
+  call remove(g:, 'test_variable')
+  unlockvar! list01
 endfunc
 
 func Test_map_filter_fails()
   call assert_fails('call map([1], "42 +")', 'E15:')
   call assert_fails('call filter([1], "42 +")', 'E15:')
+  call assert_fails('call foreach([1], "let a = }")', 'E15:')
   call assert_fails("let l = filter([1, 2, 3], '{}')", 'E728:')
   call assert_fails("let l = filter({'k' : 10}, '{}')", 'E728:')
   call assert_fails("let l = filter([1, 2], {})", 'E731:')
@@ -106,6 +171,9 @@ func Test_map_filter_fails()
   call assert_fails("let l = filter([1, 2], function('min'))", 'E118:')
   call assert_equal([1, 2, 3], filter([1, 2, 3], test_null_partial()))
   call assert_fails("let l = filter([1, 2], {a, b, c -> 1})", 'E119:')
+  call assert_fails('call foreach([1], "xyzzy")', 'E492:')
+  call assert_fails('call foreach([1], "let a = foo")', 'E121:')
+  call assert_fails('call foreach(test_null_function(), "")', 'E1525:')
 endfunc
 
 func Test_map_and_modify()
@@ -116,6 +184,33 @@ func Test_map_and_modify()
   let d = #{a: 1, b: 2, c: 3}
   call assert_fails('call map(d, "remove(d, v:key)[0]")', 'E741:')
   call assert_fails('echo map(d, {k,v -> remove(d, k)})', 'E741:')
+
+  let b = 0z1234
+  call assert_fails('call filter(b, "remove(b, 0)")', 'E741:')
+endfunc
+
+func Test_filter_and_modify()
+  let l = [0]
+  " cannot change the list halfway thru filter()
+  call assert_fails('call filter(l, "remove(l, 0)")', 'E741:')
+
+  let d = #{a: 0, b: 0, c: 0}
+  call assert_fails('call filter(d, "remove(d, v:key)")', 'E741:')
+
+  let b = 0z1234
+  call assert_fails('call filter(b, "remove(b, 0)")', 'E741:')
+endfunc
+
+func Test_foreach_and_modify()
+  let l = [0]
+  " cannot change the list halfway thru foreach()
+  call assert_fails('call foreach(l, "let a = remove(l, 0)")', 'E741:')
+
+  let d = #{a: 0, b: 0, c: 0}
+  call assert_fails('call foreach(d, "let a = remove(d, v:key)")', 'E741:')
+
+  let b = 0z1234
+  call assert_fails('call foreach(b, "let a = remove(b, 0)")', 'E741:')
 endfunc
 
 func Test_mapnew_dict()
@@ -145,6 +240,36 @@ func Test_mapnew_blob()
   call assert_equal(0z129956, bout)
 endfunc
 
+func Test_foreach_blob()
+  let lines =<< trim END
+    LET g:test_variable = []
+    call assert_equal(0z0001020304, foreach(0z0001020304, 'call add(g:test_variable, v:val)'))
+    call assert_equal([0, 1, 2, 3, 4], g:test_variable)
+  END
+  call v9.CheckLegacyAndVim9Success(lines)
+
+  func! s:foreach1(index, val) abort
+    call add(g:test_variable, a:val)
+    return [ 11, 12, 13, 14 ]
+  endfunc
+  let g:test_variable = []
+  call assert_equal(0z0001020304, foreach(0z0001020304, function('s:foreach1')))
+  call assert_equal([0, 1, 2, 3, 4], g:test_variable)
+
+  let lines =<< trim END
+    def Foreach1(_, val: any): list<number>
+      add(g:test_variable, val)
+      return [ 11, 12, 13, 14 ]
+    enddef
+    g:test_variable = []
+    assert_equal(0z0001020304, foreach(0z0001020304, Foreach1))
+    assert_equal([0, 1, 2, 3, 4], g:test_variable)
+  END
+  call v9.CheckDefSuccess(lines)
+
+  call remove(g:, 'test_variable')
+endfunc
+
 " Test for using map(), filter() and mapnew() with a string
 func Test_filter_map_string()
   " filter()
@@ -166,7 +291,7 @@ func Test_filter_map_string()
     call assert_equal('', filter('', "v:val == 'a'"))
     call assert_equal('', filter(test_null_string(), "v:val == 'a'"))
   END
-  call CheckLegacyAndVim9Success(lines)
+  call v9.CheckLegacyAndVim9Success(lines)
 
   " map()
   let lines =<< trim END
@@ -185,7 +310,7 @@ func Test_filter_map_string()
     call assert_fails('echo map("abc", "10")', 'E928:')
     call assert_fails('echo map("abc", "a10")', 'E121:')
   END
-  call CheckLegacyAndVim9Success(lines)
+  call v9.CheckLegacyAndVim9Success(lines)
 
   " mapnew()
   let lines =<< trim END
@@ -202,7 +327,38 @@ func Test_filter_map_string()
     call assert_equal('', mapnew('', "v:val == 'a'"))
     call assert_equal('', mapnew(test_null_string(), "v:val == 'a'"))
   END
-  call CheckLegacyAndVim9Success(lines)
+  call v9.CheckLegacyAndVim9Success(lines)
+
+  " foreach()
+  let lines =<< trim END
+    VAR s = "abc"
+    LET g:test_variable = []
+    call assert_equal(s, foreach(s, 'call add(g:test_variable, v:val)'))
+    call assert_equal(['a', 'b', 'c'], g:test_variable)
+    LET g:test_variable = []
+    LET s = 'あiうえお'
+    call assert_equal(s, foreach(s, 'call add(g:test_variable, v:val)'))
+    call assert_equal(['あ', 'i', 'う', 'え', 'お'], g:test_variable)
+  END
+  call v9.CheckLegacyAndVim9Success(lines)
+  func! s:foreach1(index, val) abort
+    call add(g:test_variable, a:val)
+    return [ 11, 12, 13, 14 ]
+  endfunc
+  let g:test_variable = []
+  call assert_equal('abcd', foreach('abcd', function('s:foreach1')))
+  call assert_equal(['a', 'b', 'c', 'd'], g:test_variable)
+  let lines =<< trim END
+    def Foreach1(_, val: string): list<number>
+      add(g:test_variable, val)
+      return [ 11, 12, 13, 14 ]
+    enddef
+    g:test_variable = []
+    assert_equal('abcd', foreach('abcd', Foreach1))
+    assert_equal(['a', 'b', 'c', 'd'], g:test_variable)
+  END
+  call v9.CheckDefSuccess(lines)
+  call remove(g:, 'test_variable')
 
   let lines =<< trim END
     #" map() and filter()
@@ -228,7 +384,7 @@ func Test_filter_map_string()
     call assert_equal('@ström', map('Åström', LSTART i, x LMIDDLE x =~ nr2char(0xc5) .. '\%C' ? '@' : x LEND))
     call assert_equal('Åstr@m', map('Åström', LSTART i, x LMIDDLE x =~ nr2char(0xf6) .. '\%C' ? '@' : x LEND))
   END
-  call CheckLegacyAndVim9Success(lines)
+  call v9.CheckLegacyAndVim9Success(lines)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

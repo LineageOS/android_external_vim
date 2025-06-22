@@ -7,6 +7,13 @@ endif
 
 source view_util.vim
 
+" When 'term' is changed some status requests may be sent.  The responses may
+" interfere with what is being tested.  A short sleep is used to process any of
+" those responses first.
+func WaitForResponses()
+  sleep 50m
+endfunc
+
 " Get the name of the Python executable.
 " Also keeps it in s:python.
 func PythonProg()
@@ -15,10 +22,16 @@ func PythonProg()
   if has('unix')
     " We also need the job feature or the pkill command to make sure the server
     " can be stopped.
-    if !(executable('python') && (has('job') || executable('pkill')))
+    if !(has('job') || executable('pkill'))
       return ''
     endif
-    let s:python = 'python'
+    if executable('python3')
+      let s:python = 'python3'
+    elseif executable('python')
+      let s:python = 'python'
+    else
+      return ''
+    end
   elseif has('win32')
     " Use Python Launcher for Windows (py.exe) if available.
     " NOTE: if you get a "Python was not found" error, disable the Python
@@ -46,7 +59,7 @@ func RunCommand(cmd)
     let job = job_start(a:cmd, {"stoponexit": "hup"})
     call job_setoptions(job, {"stoponexit": "kill"})
   elseif has('win32')
-    exe 'silent !start cmd /c start "test_channel" ' . a:cmd
+    exe 'silent !start cmd /D /c start "test_channel" ' . a:cmd
   else
     exe 'silent !' . a:cmd . '&'
   endif
@@ -56,8 +69,8 @@ endfunc
 " Read the port number from the Xportnr file.
 func GetPort()
   let l = []
-  " with 200 it sometimes failed
-  for i in range(400)
+  " with 200 it sometimes failed, with 400 is rarily failed
+  for i in range(600)
     try
       let l = readfile("Xportnr")
     catch
@@ -92,16 +105,18 @@ func RunServer(cmd, testfunc, args)
   try
     let g:currentJob = RunCommand(pycmd)
 
-    " Wait for up to 2 seconds for the port number to be there.
+    " Wait for some time for the port number to be there.
     let port = GetPort()
     if port == 0
-      call assert_false(1, "Can't start " . a:cmd)
+      call assert_report(strftime("%H:%M:%S") .. " Can't start " .. a:cmd)
       return
     endif
 
     call call(function(a:testfunc), [port])
+  catch /E901.*Address family for hostname not supported/
+    throw 'Skipped: Invalid network setup ("' .. v:exception .. '" in ' .. v:throwpoint .. ')'
   catch
-    call assert_false(1, 'Caught exception: "' . v:exception . '" in ' . v:throwpoint)
+    call assert_report('Caught exception: "' . v:exception . '" in ' . v:throwpoint)
   finally
     call s:kill_server(a:cmd)
   endtry
@@ -119,6 +134,34 @@ func s:kill_server(cmd)
   else
     call system("pkill -f " . a:cmd)
   endif
+endfunc
+
+" Callback function to be invoked by a child terminal job. The parent could
+" then wait for the notification using WaitForChildNotification()
+let g:child_notification = 0
+func Tapi_notify_parent(bufnum, arglist)
+  let g:child_notification = 1
+endfunc
+
+" Generates a command that we can pass to a terminal job that it uses to
+" notify us. Argument 'escape' will specify whether to escape the double
+" quote.
+func TermNotifyParentCmd(escape)
+  call assert_false(has("win32"), 'Windows does not support terminal API right now. Use another method to synchronize timing.')
+  let cmd = '\033]51;["call", "Tapi_notify_parent", []]\007'
+  if a:escape
+    return escape(cmd, '"')
+  endif
+  return cmd
+endfunc
+
+" Wait for a child process to notify us. This allows us to sequence events in
+" conjunction with the child. Currently the only supported notification method
+" is for a terminal job to call Tapi_notify_parent() using terminal API.
+func WaitForChildNotification(...)
+  let timeout = get(a:000, 0, 5000)
+  call WaitFor({-> g:child_notification == 1}, timeout)
+  let g:child_notification = 0
 endfunc
 
 " Wait for up to five seconds for "expr" to become true.  "expr" can be a
@@ -147,7 +190,7 @@ endfunc
 " A second argument can be used to specify a different timeout in msec.
 "
 " Return zero for success, one for failure (like the assert function).
-func WaitForAssert(assert, ...)
+func g:WaitForAssert(assert, ...)
   let timeout = get(a:000, 0, 5000)
   if s:WaitForCommon(v:null, a:assert, timeout) < 0
     return 1
@@ -185,11 +228,11 @@ func s:WaitForCommon(expr, assert, timeout)
       call remove(v:errors, -1)
     endif
 
-    sleep 10m
+    sleep 1m
     if exists('*reltimefloat')
       let slept = float2nr(reltimefloat(reltime(start)) * 1000)
     else
-      let slept += 10
+      let slept += 1
     endif
   endwhile
 
@@ -225,14 +268,31 @@ func s:feedkeys(timer)
   call feedkeys('x', 'nt')
 endfunc
 
+" Get the name of the Vim executable that we expect has been build in the src
+" directory.
+func s:GetJustBuildVimExe()
+  if has("win32")
+    if !filereadable('..\vim.exe') && filereadable('..\vimd.exe')
+      " looks like the debug executable was intentionally build, so use it
+      return '..\vimd.exe'
+    endif
+    return '..\vim.exe'
+  endif
+  return '../vim'
+endfunc
+
 " Get $VIMPROG to run the Vim executable.
 " The Makefile writes it as the first line in the "vimcmd" file.
+" Falls back to the Vim executable in the src directory.
 func GetVimProg()
-  if !filereadable('vimcmd')
-    " Assume the script was sourced instead of running "make".
-    return '../vim'
+  if filereadable('vimcmd')
+    return readfile('vimcmd')[0]
   endif
-  return readfile('vimcmd')[0]
+  echo 'Cannot read the "vimcmd" file, falling back to ../vim.'
+
+  " Probably the script was sourced instead of running "make".
+  " We assume Vim was just build in the src directory then.
+  return s:GetJustBuildVimExe()
 endfunc
 
 let g:valgrind_cnt = 1
@@ -240,12 +300,13 @@ let g:valgrind_cnt = 1
 " Get the command to run Vim, with -u NONE and --not-a-term arguments.
 " If there is an argument use it instead of "NONE".
 func GetVimCommand(...)
-  if !filereadable('vimcmd')
-    echo 'Cannot read the "vimcmd" file, falling back to ../vim.'
-    let lines = ['../vim']
-  else
+  if filereadable('vimcmd')
     let lines = readfile('vimcmd')
+  else
+    echo 'Cannot read the "vimcmd" file, falling back to ../vim.'
+    let lines = [s:GetJustBuildVimExe()]
   endif
+
   if a:0 == 0
     let name = 'NONE'
   else
@@ -266,7 +327,9 @@ func GetVimCommand(...)
     let cmd = cmd . ' -u ' . name
   endif
   let cmd .= ' --not-a-term'
-  let cmd = substitute(cmd, 'VIMRUNTIME=\S\+', '', '')
+  let cmd .= ' --gui-dialog-file guidialogfile'
+  " remove any environment variables
+  let cmd = substitute(cmd, '[A-Z_]\+=\S\+ *', '', 'g')
 
   " If using valgrind, make sure every run uses a different log file.
   if cmd =~ 'valgrind.*--log-file='
@@ -276,6 +339,20 @@ func GetVimCommand(...)
 
   return cmd
 endfunc
+
+" Return one when it looks like the tests are run with valgrind, which means
+" that everything is much slower.
+func RunningWithValgrind()
+  return GetVimCommand() =~ '\<valgrind\>'
+endfunc
+
+func RunningAsan()
+  return exists("$ASAN_OPTIONS")
+endfunc
+
+func ValgrindOrAsan()
+  return RunningWithValgrind() || RunningAsan()
+endfun
 
 " Get the command to run Vim, with --clean instead of "-u NONE".
 func GetVimCommandClean()
@@ -323,7 +400,7 @@ func RunVimPiped(before, after, arguments, pipecmd)
   " Optionally run Vim under valgrind
   " let cmd = 'valgrind --tool=memcheck --leak-check=yes --num-callers=25 --log-file=valgrind ' . cmd
 
-  exe "silent !" . a:pipecmd . cmd . args . ' ' . a:arguments
+  exe "silent !" .. a:pipecmd .. ' ' ..  cmd .. args .. ' ' .. a:arguments
 
   if len(a:before) > 0
     call delete('Xbefore.vim')

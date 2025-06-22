@@ -1,4 +1,4 @@
-*pi_tar.txt*	For Vim version 8.2.  Last change: 2020 Jan 07
+*pi_tar.txt*	For Vim version 9.1.  Last change: 2025 Mar 16
 
 		       +====================+
 		       | Tar File Interface |
@@ -74,31 +74,40 @@ Copyright 2005-2017:					*tar-copyright*
 	let g:loaded_tarPlugin= 1
 	let g:loaded_tar      = 1
 <
+							*tar-mappings*
+   MAPPINGS~
+
+   The following (buffer-local) mappings are available in a tar buffer:
+
+	<CR>		Open selected file for editing, any changes will be
+			written back to the archive.
+	<LeftMouse>	same as <CR>
+	x		Extract selected file.
 
 ==============================================================================
 3. Options						*tar-options*
 
    These options are variables that one may change, typically in one's
    <.vimrc> file.
-                         Default
-   Variable               Value   Explanation
-   *g:tar_browseoptions*  "Ptf"   used to get a list of contents
-   *g:tar_readoptions*    "OPxf"  used to extract a file from a tarball
-   *g:tar_cmd*            "tar"   the name of the tar program
-   *g:tar_nomax*            0     if true, file window will not be maximized
-   *g:tar_secure*         undef   if exists:
+			 Default
+   Variable		  Value   Explanation
+   *g:tar_browseoptions*    "Ptf"   used to get a list of contents
+   *g:tar_readoptions*	  "OPxf"  used to extract a file from a tarball
+   *g:tar_cmd*		  "tar"   the name of the tar program
+   *g:tar_nomax*	    0	  if true, file window will not be maximized
+   *g:tar_secure*	  undef   if exists:
 					"--"s will be used to prevent unwanted
 					option expansion in tar commands.
 					Please be sure that your tar command
 					accepts "--"; Posix compliant tar
 					utilities do accept them.
 				  if not exists:
-				  	The tar plugin will reject any tar
+					The tar plugin will reject any tar
 					files or member files that begin with
 					"-"
 				  Not all tar's support the "--" which is why
 				  it isn't default.
-   *g:tar_writeoptions*   "uf"    used to update/replace a file
+   *g:tar_writeoptions*	  "uf"    used to update/replace a file
 
 
 ==============================================================================
@@ -164,7 +173,8 @@ Copyright 2005-2017:					*tar-copyright*
 	v2			* converted to use Vim7's new autoload feature
 				  by Bram Moolenaar
 	v1	(original)	* Michael Toren
-				  (see http://michael.toren.net/code/)
+				  (see http://michael.toren.net/code/
+				   link seems dead)
 
 ==============================================================================
 vim:tw=78:ts=8:noet:ft=help

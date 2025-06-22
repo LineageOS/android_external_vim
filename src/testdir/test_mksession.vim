@@ -32,6 +32,42 @@ func Test__mksession_arglocal()
   call delete('Xtest_mks.out')
 endfunc
 
+func Test_mksession_arglocal_localdir()
+  call mkdir('Xa', 'R')
+  call writefile(['This is Xb'], 'Xa/Xb.txt', 'D')
+  let olddir = getcwd()
+  let oldargs = argv()
+
+  for tabpage in [v:false, v:true]
+    let msg = tabpage ? 'tabpage-local' : 'window-local'
+
+    exe tabpage ? 'tabnew' : 'botright new'
+    exe tabpage ? 'tcd Xa' : 'lcd Xa'
+    let localdir = getcwd()
+    arglocal
+    $argadd Xb.txt
+    let localargs = argv()
+    exe tabpage ? 'tabprev' : 'wincmd p'
+    call assert_equal(olddir, getcwd(), msg)
+    call assert_equal(oldargs, argv(), msg)
+    mksession! Xtest_mks_localdir.out
+    exe tabpage ? '+tabclose' : '$close'
+    bwipe! Xa/Xb.txt
+
+    source Xtest_mks_localdir.out
+    exe tabpage ? 'tabnext' : 'wincmd b'
+    call assert_equal(localdir, getcwd(), msg)
+    call assert_equal(localargs, argv(), msg)
+    $argument
+    call assert_equal('This is Xb', getline(1), msg)
+
+    bwipe!
+    call assert_equal(olddir, getcwd(), msg)
+    call assert_equal(oldargs, argv(), msg)
+    call delete('Xtest_mks_localdir.out')
+  endfor
+endfunc
+
 func Test_mksession()
   tabnew
   let wrap_save = &wrap
@@ -245,6 +281,7 @@ func Test_mksession_one_buffer_two_windows()
   let count1 = 0
   let count2 = 0
   let count2buf = 0
+  let bufexists = 0
   for line in lines
     if line =~ 'edit \f*Xtest1$'
       let count1 += 1
@@ -255,10 +292,14 @@ func Test_mksession_one_buffer_two_windows()
     if line =~ 'buffer \f\{-}Xtest2'
       let count2buf += 1
     endif
+    if line =~ 'bufexists(fnamemodify(.*, ":p")'
+      let bufexists += 1
+    endif
   endfor
   call assert_equal(1, count1, 'Xtest1 count')
   call assert_equal(2, count2, 'Xtest2 count')
   call assert_equal(2, count2buf, 'Xtest2 buffer count')
+  call assert_equal(2, bufexists)
 
   close
   bwipe!
@@ -563,7 +604,7 @@ endfunc
 func Test_mkview_terminal_windows()
   CheckFeature terminal
 
-  " create two window on the same terminal to check this is handled OK
+  " create two windows on the same terminal to check this is handled OK
   terminal
   let term_buf = bufnr()
   exe 'sbuf ' .. term_buf
@@ -578,21 +619,29 @@ func Test_mkview_open_folds()
 
   call append(0, ['a', 'b', 'c'])
   1,3fold
-  " zR affects 'foldlevel', make sure the option is applied after the folds
-  " have been recreated.
-  normal zR
   write! Xtestfile
 
+  call assert_notequal(-1, foldclosed(1))
+  call assert_notequal(-1, foldclosed(2))
+  call assert_notequal(-1, foldclosed(3))
+
+  " Save the view with folds closed
+  mkview! Xtestview
+
+  " zR affects 'foldlevel', make sure the option is applied after the folds
+  " have been recreated.
+  " Open folds to ensure they get closed when restoring the view
+  normal zR
+
   call assert_equal(-1, foldclosed(1))
   call assert_equal(-1, foldclosed(2))
   call assert_equal(-1, foldclosed(3))
 
-  mkview! Xtestview
   source Xtestview
 
-  call assert_equal(-1, foldclosed(1))
-  call assert_equal(-1, foldclosed(2))
-  call assert_equal(-1, foldclosed(3))
+  call assert_notequal(-1, foldclosed(1))
+  call assert_notequal(-1, foldclosed(2))
+  call assert_notequal(-1, foldclosed(3))
 
   call delete('Xtestview')
   call delete('Xtestfile')
@@ -695,11 +744,11 @@ endfunc
 
 func Test_mkview_no_file_name()
   new
-  " :mkview or :mkview {nr} should fail in a unnamed buffer.
+  " :mkview or :mkview {nr} should fail in an unnamed buffer.
   call assert_fails('mkview', 'E32:')
   call assert_fails('mkview 1', 'E32:')
 
-  " :mkview {file} should succeed in a unnamed buffer.
+  " :mkview {file} should succeed in an unnamed buffer.
   mkview Xview
   help
   source Xview
@@ -860,6 +909,34 @@ func Test_mksession_sesdir()
   call delete('Xproj', 'rf')
 endfunc
 
+" Test for saving and restoring the tab-local working directory when there is
+" only a single tab and 'tabpages' is not in 'sessionoptions'.
+func Test_mksession_tcd_single_tabs()
+  only | tabonly
+
+  let save_cwd = getcwd()
+  set sessionoptions-=tabpages
+  set sessionoptions+=curdir
+  call mkdir('Xtopdir1')
+  call mkdir('Xtopdir2')
+
+  " There are two tab pages, the current one has local cwd set to 'Xtopdir2'.
+  exec 'tcd ' .. save_cwd .. '/Xtopdir1'
+  tabnew
+  exec 'tcd ' .. save_cwd .. '/Xtopdir2'
+  mksession! Xtest_tcd_single
+
+  source Xtest_tcd_single
+  call assert_equal(2, haslocaldir())
+  call assert_equal('Xtopdir2', fnamemodify(getcwd(-1, 0), ':t'))
+  %bwipe
+
+  set sessionoptions&
+  call chdir(save_cwd)
+  call delete('Xtopdir1', 'rf')
+  call delete('Xtopdir2', 'rf')
+endfunc
+
 " Test for storing the 'lines' and 'columns' settings
 func Test_mksession_resize()
   mksession! Xtest_mks1.out
@@ -932,6 +1009,7 @@ func Test_mksession_foldopt()
   close
   %bwipe
   set sessionoptions&
+  call delete('Xtest_mks.out')
 endfunc
 
 " Test for mksession with "help" but not "options" in 'sessionoptions'
@@ -1002,6 +1080,71 @@ func Test_mksession_winminheight()
   set sessionoptions&
 endfunc
 
+" Test for mksession with and without options restores shortmess
+func Test_mksession_shortmess()
+  " Without options
+  set sessionoptions-=options
+  split
+  mksession! Xtest_mks.out
+  let found_save = 0
+  let found_restore = 0
+  let lines = readfile('Xtest_mks.out')
+  for line in lines
+    let line = trim(line)
+
+    if line ==# 'let s:shortmess_save = &shortmess'
+      let found_save += 1
+    endif
+
+    if found_save !=# 0 && line ==# 'let &shortmess = s:shortmess_save'
+      let found_restore += 1
+    endif
+  endfor
+  call assert_equal(1, found_save)
+  call assert_equal(1, found_restore)
+  call delete('Xtest_mks.out')
+  close
+  set sessionoptions&
+
+  " With options
+  set sessionoptions+=options
+  split
+  mksession! Xtest_mks.out
+  let found_restore = 0
+  let lines = readfile('Xtest_mks.out')
+  for line in lines
+    if line =~# 's:shortmess_save'
+      let found_restore += 1
+    endif
+  endfor
+  call assert_equal(0, found_restore)
+  call delete('Xtest_mks.out')
+  close
+  set sessionoptions&
+endfunc
+
+" Test that when Vim loading session has 'A' in 'shortmess' it does not
+" complain about an existing swapfile.
+func Test_mksession_shortmess_with_A()
+  edit Xtestfile
+  write
+  let fname = swapname('%')
+  let cont = readblob(fname)
+  set sessionoptions-=options
+  mksession Xtestsession
+  bwipe!
+
+  " Recreate the swap file to pretend the file is being edited
+  call writefile(cont, fname, 'D')
+  set shortmess+=A
+  source Xtestsession
+
+  set shortmess&
+  set sessionoptions&
+  call delete('Xtestsession')
+  call delete('Xtestfile')
+endfunc
+
 " Test for mksession with 'compatible' option
 func Test_mksession_compatible()
   mksession! Xtest_mks1.out
@@ -1046,10 +1189,10 @@ endfunc
 func Test_mkvimrc()
   let entries = [
         \ ['', 'nothing', '<Nop>'],
-        \ ['n', 'normal', 'NORMAL'],
-        \ ['v', 'visual', 'VISUAL'],
-        \ ['s', 'select', 'SELECT'],
-        \ ['x', 'visualonly', 'VISUALONLY'],
+        \ ['n', 'normal', 'NORMAL<Up>'],
+        \ ['v', 'visual', 'VISUAL<S-Down>'],
+        \ ['s', 'select', 'SELECT<C-Left>'],
+        \ ['x', 'visualonly', 'VISUALONLY<M-Right>'],
         \ ['o', 'operator', 'OPERATOR'],
         \ ['i', 'insert', 'INSERT'],
         \ ['l', 'lang', 'LANG'],
@@ -1129,8 +1272,8 @@ endfunc
 
 " Test for creating views with manual folds
 func Test_mkview_manual_fold()
-  call writefile(range(1,10), 'Xfile')
-  new Xfile
+  call writefile(range(1,10), 'Xmkvfile', 'D')
+  new Xmkvfile
   " create recursive folds
   5,6fold
   4,7fold
@@ -1153,9 +1296,43 @@ func Test_mkview_manual_fold()
   source Xview
   call assert_equal([-1, -1, -1, -1, -1, -1], [foldclosed(3), foldclosed(4),
         \ foldclosed(5), foldclosed(6), foldclosed(7), foldclosed(8)])
-  call delete('Xfile')
   call delete('Xview')
   bw!
+endfunc
+
+" Test for handling invalid folds within views
+func Test_mkview_ignore_invalid_folds()
+  call writefile(range(1,10), 'Xmkvfile', 'D')
+  new Xmkvfile
+  " create some folds
+  5,6fold
+  4,7fold
+  mkview Xview
+  normal zE
+  " delete lines to make folds invalid
+  call deletebufline('', 6, '$')
+  source Xview
+  call assert_equal([-1, -1, -1, -1, -1, -1], [foldclosed(3), foldclosed(4),
+        \ foldclosed(5), foldclosed(6), foldclosed(7), foldclosed(8)])
+  call delete('Xview')
+  bw!
+endfunc
+
+" Test default 'viewdir' value
+func Test_mkview_default_home()
+  if has('win32')
+    " use escape() to handle backslash path separators
+    call assert_match('^' .. escape($ORIGHOME, '\') .. '/vimfiles', &viewdir)
+  elseif has('unix')
+    call assert_match(
+          \ '^' .. $ORIGHOME .. '/.vim\|' ..
+          \ '^' .. $XDG_CONFIG_HOME .. '/vim'
+          \ , &viewdir)
+  elseif has('amiga')
+    call assert_match('^home:vimfiles', &viewdir)
+  elseif has('mac')
+    call assert_match('^' .. $VIM .. '/vimfiles', &viewdir)
+  endif
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

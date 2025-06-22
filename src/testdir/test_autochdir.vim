@@ -28,9 +28,9 @@ endfunc
 func Test_set_filename_other_window()
   let cwd = getcwd()
   call test_autochdir()
-  call mkdir('Xa')
-  call mkdir('Xb')
-  call mkdir('Xc')
+  call mkdir('Xa', 'R')
+  call mkdir('Xb', 'R')
+  call mkdir('Xc', 'R')
   try
     args Xa/aaa.txt Xb/bbb.txt
     set acd
@@ -45,9 +45,6 @@ func Test_set_filename_other_window()
     bwipe! aaa.txt
     bwipe! bbb.txt
     bwipe! ccc.txt
-    call delete('Xa', 'rf')
-    call delete('Xb', 'rf')
-    call delete('Xc', 'rf')
   endtry
 endfunc
 
@@ -56,10 +53,10 @@ func Test_acd_win_execute()
   set acd
   call test_autochdir()
 
-  call mkdir('Xfile')
+  call mkdir('XacdDir', 'R')
   let winid = win_getid()
-  new Xfile/file
-  call assert_match('testdir.Xfile$', getcwd())
+  new XacdDir/file
+  call assert_match('testdir.XacdDir$', getcwd())
   cd ..
   call assert_match('testdir$', getcwd())
   call win_execute(winid, 'echo')
@@ -68,7 +65,6 @@ func Test_acd_win_execute()
   bwipe!
   set noacd
   call chdir(cwd)
-  call delete('Xfile', 'rf')
 endfunc
 
 func Test_verbose_pwd()
@@ -78,7 +74,7 @@ func Test_verbose_pwd()
   edit global.txt
   call assert_match('\[global\].*testdir$', execute('verbose pwd'))
 
-  call mkdir('Xautodir')
+  call mkdir('Xautodir', 'R')
   split Xautodir/local.txt
   lcd Xautodir
   call assert_match('\[window\].*testdir[/\\]Xautodir', execute('verbose pwd'))
@@ -86,28 +82,40 @@ func Test_verbose_pwd()
   set acd
   wincmd w
   call assert_match('\[autochdir\].*testdir$', execute('verbose pwd'))
-  execute 'lcd' cwd
-  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   execute 'tcd' cwd
   call assert_match('\[tabpage\].*testdir$', execute('verbose pwd'))
   execute 'cd' cwd
   call assert_match('\[global\].*testdir$', execute('verbose pwd'))
+  execute 'lcd' cwd
+  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   edit
   call assert_match('\[autochdir\].*testdir$', execute('verbose pwd'))
+  enew
+  wincmd w
+  call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
+  wincmd w
+  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   wincmd w
   call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
   set noacd
   call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
   wincmd w
-  call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
+  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   execute 'cd' cwd
-  call assert_match('\[global\].*testdir', execute('verbose pwd'))
+  call assert_match('\[global\].*testdir$', execute('verbose pwd'))
   wincmd w
   call assert_match('\[window\].*testdir[/\\]Xautodir', execute('verbose pwd'))
 
   bwipe!
   call chdir(cwd)
-  call delete('Xautodir', 'rf')
 endfunc
+
+func Test_multibyte()
+  " using an invalid character should not cause a crash
+  set wic
+  call assert_fails('tc ˚ççç¶*', has('win32') ? 'E480:' : 'E344:')
+  set nowic
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

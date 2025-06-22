@@ -1,13 +1,16 @@
-" Vim support file to switch off loading plugins for file types
-"
-" Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2011 Oct 20
+vim9script
 
-if exists("did_load_ftplugin")
-  unlet did_load_ftplugin
+# Vim support file to switch off loading plugins for file types
+#
+# Maintainer:	The Vim Project <https://github.com/vim/vim>
+# Last Change:	2023 Aug 10
+# Former Maintainer:	Bram Moolenaar <Bram@vim.org>
+
+if exists("g:did_load_ftplugin")
+  unlet g:did_load_ftplugin
 endif
 
-" Remove all autocommands in the filetypeplugin group, if any exist.
+# Remove all autocommands in the filetypeplugin group, if any exist.
 if exists("#filetypeplugin")
   silent! au! filetypeplugin *
 endif

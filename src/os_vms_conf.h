@@ -1,6 +1,13 @@
 /*
  * os_vms_conf.h.  Replaces auto/config.h for VMS
+ *
  */
+
+#if defined(__VMS) || defined(__vms)
+#if !defined(VMS)
+#define VMS
+#endif
+#endif
 
 #define CASE_INSENSITIVE_FILENAME   // Open VMS is case insensitive
 #define SPACE_IN_FILENAME	    // There could be space between user and passwd
@@ -24,9 +31,6 @@
 
 // Define when __DATE__ " " __TIME__ can be used
 #define HAVE_DATE_TIME
-
-// Defined to the size of an int
-#define VIM_SIZEOF_INT  4
 
 // #undef USEBCOPY
 #define USEMEMMOVE
@@ -65,17 +69,8 @@
 // Define if you have the nanosleep() function.
 // #undef HAVE_NANOSLEEP
 
-// Define if you can safely include both <sys/time.h> and <time.h>.
-#define TIME_WITH_SYS_TIME
-
 // Define if you can safely include both <sys/time.h> and <sys/select.h>.
 // #undef SYS_SELECT_WITH_SYS_TIME
-
-// Define as the return type of signal handlers (int or void).
-#define RETSIGTYPE void
-
-// Define as the command at the end of signal handlers ("" or "return 0;").
-#define SIGRETURN return
 
 // Define if struct sigcontext is present
 #define HAVE_SIGCONTEXT
@@ -119,7 +114,6 @@
 #define HAVE_SETENV
 #define HAVE_SETJMP_H
 #define HAVE_MATH_H
-#define HAVE_FLOAT_FUNCS
 #define HAVE_GETTIMEOFDAY
 #define HAVE_PWD_H
 #define HAVE_NETDB_H
@@ -148,8 +142,12 @@
 #undef  HAVE_LSTAT
 #undef  HAVE_STDINT_H
 
+// Default features
+#define FEAT_IPV6
+#define FEAT_XTERM_SAVE
+
 // Hardware specific
-#ifdef  VAX
+#if defined(__VAX) || defined(VAX)
 #undef  HAVE_GETTIMEOFDAY
 #undef  HAVE_USLEEP
 #undef  HAVE_STRCASECMP
@@ -158,27 +156,39 @@
 #undef  HAVE_ISNAN
 #undef  HAVE_XOS_R_H
 #define HAVE_NO_LONG_LONG
+#define VIM_SIZEOF_INT  4
 #define VIM_SIZEOF_LONG 4
 #define LONG_LONG_MIN  (-2147483647-1)
 #define LONG_LONG_MAX  (2147483647)
 #define ULONG_LONG_MAX (4294967295U)
-#else // AXP and IA64
+
+#else // ALPHA, IA64, X86_64
 #define HAVE_GETTIMEOFDAY
 #define HAVE_USLEEP
 #define HAVE_STRCASECMP
 #define HAVE_STRINGS_H
 #define HAVE_SIGSETJMP
 #define HAVE_ISNAN
-#define HAVE_XOS_R_H
-#define HAVE_NO_LONG_LONG
+#undef  HAVE_XOS_R_H
+#undef  HAVE_NO_LONG_LONG
+#define VIM_SIZEOF_INT  4
 #define VIM_SIZEOF_LONG 8
 #define LONG_LONG_MIN  (-9223372036854775807-1)
 #define LONG_LONG_MAX  (9223372036854775807)
 #define ULONG_LONG_MAX (18446744073709551615U)
+
+#if defined(__x86_64) || defined(__x86_64__)
+#if !defined(X86_64)
+#define X86_64
+#endif
+#define HAVE_ISNAN
+#define HAVE_ISINF
+#define HAVE_XOS_R_H
+#endif
 #endif
 
 // Compiler specific
-#ifdef  VAXC
+#if defined(VAXC) || defined(__VAXC)
 #undef  HAVE_SELECT
 #undef  HAVE_FCNTL_H
 #undef  HAVE_UNISTD_H
@@ -208,11 +218,11 @@
 
 // GUI support defines
 #if defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_GTK)
-#define X_INCLUDE_GRP_H             // To use getgrgid
+#define X_INCLUDE_GRP_H		// To use getgrgid
 #define XUSE_MTSAFE_API
 #define HAVE_X11
 #define WANT_X11
-#ifdef HAVE_XPM
+#ifdef  HAVE_XPM
 #define HAVE_X11_XPM_H
 #endif
 #define USE_FONTSET

@@ -1,6 +1,6 @@
 # NSIS file to create a self-installing exe for Vim.
 # It requires NSIS version 3.0 or later.
-# Last Change:	2014 Nov 5
+# Last Change:	2025 Feb 24
 
 Unicode true
 
@@ -14,61 +14,105 @@ Unicode true
 
 # Location of runtime files
 !ifndef VIMRT
-  !define VIMRT ".."
+  !define VIMRT "..\runtime"
 !endif
 
-# Location of extra tools: diff.exe
+# Location of extra tools: diff.exe, winpty{32|64}.dll, winpty-agent.exe, etc.
 !ifndef VIMTOOLS
-  !define VIMTOOLS ..\..
+  !define VIMTOOLS "..\.."
 !endif
 
 # Location of gettext.
 # It must contain two directories: gettext32 and gettext64.
 # See README.txt for detail.
 !ifndef GETTEXT
-  !define GETTEXT ${VIMRT}
+  !define GETTEXT ${VIMTOOLS}
 !endif
 
-# Comment the next line if you don't have UPX.
-# Get it at https://upx.github.io/
-!define HAVE_UPX
+# If you have UPX, use the switch /DHAVE_UPX=1 on the command line makensis.exe.
+# This property will be set to 1. Get it at https://upx.github.io/
+!ifndef HAVE_UPX
+  !define HAVE_UPX 0
+!endif
 
-# Comment the next line if you do not want to add Native Language Support
-!define HAVE_NLS
+# If you do not want to add Native Language Support, use the switch /DHAVE_NLS=0
+# in the command line makensis.exe. This property will be set to 0.
+!ifndef HAVE_NLS
+  !define HAVE_NLS 1
+!endif
 
-# Uncomment the next line if you want to include VisVim extension:
-#!define HAVE_VIS_VIM
+# To create an English-only the installer, use the switch /DHAVE_MULTI_LANG=0 on
+# the command line makensis.exe. This property will be set to 0.
+!ifndef HAVE_MULTI_LANG
+  !define HAVE_MULTI_LANG 1
+!endif
 
-# Comment the following line to create an English-only installer:
-!define HAVE_MULTI_LANG
+# if you want to create a 64-bit the installer, use the switch /DWIN64=1 on
+# the command line makensis.exe. This property will be set to 1.
+!ifndef WIN64
+  !define WIN64 0
+!endif
 
-# Uncomment the next line if you want to create a 64-bit installer.
-#!define WIN64
+# if you don't want to include libgcc_s_sjlj-1.dll in the package, use the
+# switch /DINCLUDE_LIBGCC=0 on the command line makensis.exe.
+!ifndef INCLUDE_LIBGCC
+  !define INCLUDE_LIBGCC 1
+!endif
 
 !include gvim_version.nsh	# for version number
 
-# Definition of Patch for Vim
+# Definition of Patch for Vim.
 !ifndef PATCHLEVEL
   !define PATCHLEVEL 0
 !endif
 
 # ----------- No configurable settings below this line -----------
 
-!include "Library.nsh"		# For DLL install
-!ifdef HAVE_VIS_VIM
-  !include "UpgradeDLL.nsh"	# for VisVim.dll
-!endif
+!include "Library.nsh"		# for DLL install
 !include "LogicLib.nsh"
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
 !include "Sections.nsh"
 !include "x64.nsh"
+!include "StrFunc.nsh"
+${StrRep}
+
+# See https://nsis.sourceforge.io/LogicLib
+;FileExists is already part of LogicLib, but returns true for directories
+;as well as files
+!macro _FileExists2 _a _b _t _f
+	!insertmacro _LOGICLIB_TEMP
+	StrCpy $_LOGICLIB_TEMP "0"
+;if path is not blank, continue to next check
+	StrCmp `${_b}` `` +4 0
+;if path exists, continue to next check (IfFileExists returns true if this
+;is a directory)
+	IfFileExists `${_b}` `0` +3
+;if path is not a directory, continue to confirm exists
+	IfFileExists `${_b}\*.*` +2 0
+	StrCpy $_LOGICLIB_TEMP "1" ;file exists
+;now we have a definitive value - the file exists or it does not
+	StrCmp $_LOGICLIB_TEMP "1" `${_t}` `${_f}`
+!macroend
+!undef FileExists
+!define FileExists `"" FileExists2`
+!macro _DirExists _a _b _t _f
+	!insertmacro _LOGICLIB_TEMP
+	StrCpy $_LOGICLIB_TEMP "0"
+;if path is not blank, continue to next check
+	StrCmp `${_b}` `` +3 0
+;if directory exists, continue to confirm exists
+	IfFileExists `${_b}\*.*` 0 +2
+	StrCpy $_LOGICLIB_TEMP "1"
+	StrCmp $_LOGICLIB_TEMP "1" `${_t}` `${_f}`
+!macroend
+!define DirExists `"" DirExists`
 
 !define PRODUCT		"Vim ${VER_MAJOR}.${VER_MINOR}"
 !define UNINST_REG_KEY	"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 !define UNINST_REG_KEY_VIM  "${UNINST_REG_KEY}\${PRODUCT}"
 
-!ifdef WIN64
+!if ${WIN64}
 Name "${PRODUCT} (x64)"
 !else
 Name "${PRODUCT}"
@@ -81,11 +125,11 @@ ManifestDPIAware true
 SetDatablockOptimize on
 RequestExecutionLevel highest
 
-!ifdef HAVE_UPX
+!if ${HAVE_UPX}
   !packhdr temp.dat "upx --best --compress-icons=1 temp.dat"
 !endif
 
-!ifdef WIN64
+!if ${WIN64}
 !define BIT	64
 !else
 !define BIT	32
@@ -102,6 +146,8 @@ RequestExecutionLevel highest
 
 # Show all languages, despite user's codepage:
 !define MUI_LANGDLL_ALLLANGUAGES
+# Always show dialog choice language
+#!define MUI_LANGDLL_ALWAYSSHOW
 !define MUI_LANGDLL_REGISTRY_ROOT       "HKCU"
 !define MUI_LANGDLL_REGISTRY_KEY        "Software\Vim"
 !define MUI_LANGDLL_REGISTRY_VALUENAME  "Installer Language"
@@ -119,13 +165,13 @@ RequestExecutionLevel highest
 
 !define MUI_COMPONENTSPAGE_SMALLDESC
 !define MUI_LICENSEPAGE_CHECKBOX
-!define MUI_FINISHPAGE_RUN
-!define MUI_FINISHPAGE_RUN_FUNCTION        LaunchApplication
-!define MUI_FINISHPAGE_RUN_TEXT            $(str_show_readme)
+!define MUI_FINISHPAGE_SHOWREADME
+!define MUI_FINISHPAGE_SHOWREADME_TEXT	    $(str_show_readme)
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION  LaunchApplication
 
 # This adds '\Vim' to the user choice automagically.  The actual value is
 # obtained below with CheckOldVim.
-!ifdef WIN64
+!if ${WIN64}
   !define DEFAULT_INSTDIR "$PROGRAMFILES64\Vim"
 !else
   !define DEFAULT_INSTDIR "$PROGRAMFILES\Vim"
@@ -145,7 +191,7 @@ SilentInstall normal
 
 # Installer pages
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${VIMRT}\doc\uganda.nsis.txt"
+!insertmacro MUI_PAGE_LICENSE $(page_lic_file)
 !insertmacro MUI_PAGE_COMPONENTS
 Page custom SetCustom ValidateCustom
 #!define MUI_PAGE_CUSTOMFUNCTION_LEAVE VimFinalCheck
@@ -169,13 +215,16 @@ Page custom SetCustom ValidateCustom
 !include "lang\english.nsi"
 
 # Include support for other languages:
-!ifdef HAVE_MULTI_LANG
+!if ${HAVE_MULTI_LANG}
+    !include "lang\portuguesebr.nsi"
     !include "lang\danish.nsi"
     !include "lang\dutch.nsi"
     !include "lang\german.nsi"
+    !include "lang\greek.nsi"
     !include "lang\italian.nsi"
     !include "lang\japanese.nsi"
     !include "lang\russian.nsi"
+    !include "lang\serbian.nsi"
     !include "lang\simpchinese.nsi"
     !include "lang\tradchinese.nsi"
     !include "lang\turkish.nsi"
@@ -185,7 +234,7 @@ Page custom SetCustom ValidateCustom
 # Version resources
 
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "Vim"
-VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "Vim Developers"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "The Vim Project"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "Vim"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Copyright (C) 1996"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "Vi Improved - A Text Editor"
@@ -200,6 +249,9 @@ Var vim_nsd_mouse
 Var vim_compat_stat
 Var vim_keymap_stat
 Var vim_mouse_stat
+!if ${HAVE_NLS}
+Var lng_usr
+!endif
 
 
 # Reserve files
@@ -233,6 +285,28 @@ FunctionEnd
 
 !insertmacro GetParent ""
 !insertmacro GetParent "un."
+
+# Get home directory
+!macro GetHomeDir un
+Function ${un}GetHomeDir
+  Push $0
+  Push $1
+  ReadEnvStr $0 "HOME"
+  ${If} $0 == ""
+    ReadEnvStr $0 "HOMEDRIVE"
+    ReadEnvStr $1 "HOMEPATH"
+    StrCpy $0 "$0$1"
+    ${If} $0 == ""
+      ReadEnvStr $0 "USERPROFILE"
+    ${EndIf}
+  ${EndIf}
+  Pop $1
+  Exch $0  # put $0 on top of stack, restore $0 to original value
+FunctionEnd
+!macroend
+
+!insertmacro GetHomeDir ""
+!insertmacro GetHomeDir "un."
 
 # Check if Vim is already installed.
 # return: Installed directory. If not found, it will be empty.
@@ -303,7 +377,7 @@ FunctionEnd
 
 Function LaunchApplication
    SetOutPath $0
-   ShellExecAsUser::ShellExecAsUser "" "$0\gvim.exe" '-R "$0\README.txt"'
+   ShellExecAsUser::ShellExecAsUser "" "$0\gvim.exe" '-R "$0\$(vim_readme_file)"'
 FunctionEnd
 
 ##########################################################
@@ -355,35 +429,46 @@ Section "$(str_section_exe)" id_section_exe
 	File /oname=xxd.exe ${VIMSRC}\xxdw32.exe
 	File ..\vimtutor.bat
 	File ..\README.txt
+	File /oname=LICENSE.txt ..\LICENSE
 	File ..\uninstall.txt
 	File ${VIMRT}\*.vim
 
+!if /FileExists "${VIMTOOLS}\diff.exe"
 	File ${VIMTOOLS}\diff.exe
+!endif
+!if /FileExists "${VIMTOOLS}\winpty${BIT}.dll"
 	File ${VIMTOOLS}\winpty${BIT}.dll
+!endif
+!if /FileExists "${VIMTOOLS}\winpty-agent.exe"
 	File ${VIMTOOLS}\winpty-agent.exe
+!endif
+!if /FileExists "${VIMTOOLS}\libsodium.dll"
+	File ${VIMTOOLS}\libsodium.dll
+!endif
 
 	SetOutPath $0\colors
-	File ${VIMRT}\colors\*.*
-	SetOutPath $0\colors\tools
-	File ${VIMRT}\colors\tools\*.*
-	SetOutPath $0\colors\lists
-	File ${VIMRT}\colors\lists\*.*
+	File /r ${VIMRT}\colors\*.*
 
 	SetOutPath $0\compiler
 	File ${VIMRT}\compiler\*.*
 
 	SetOutPath $0\doc
-	File ${VIMRT}\doc\*.txt
+	File /x uganda.nsis.txt ${VIMRT}\doc\*.txt
 	File ${VIMRT}\doc\tags
 
 	SetOutPath $0\ftplugin
 	File ${VIMRT}\ftplugin\*.*
 
 	SetOutPath $0\indent
-	File ${VIMRT}\indent\*.*
+	File ${VIMRT}\indent\README.txt
+	File ${VIMRT}\indent\*.vim
+
+	SetOutPath $0\keymap
+	File ${VIMRT}\keymap\README.txt
+	File ${VIMRT}\keymap\*.vim
 
 	SetOutPath $0\macros
-	File /r ${VIMRT}\macros\*.*
+	File /r /x *.info ${VIMRT}\macros\*.*
 
 	SetOutPath $0\pack
 	File /r ${VIMRT}\pack\*.*
@@ -392,16 +477,16 @@ Section "$(str_section_exe)" id_section_exe
 	File ${VIMRT}\plugin\*.*
 
 	SetOutPath $0\autoload
-	File ${VIMRT}\autoload\*.*
+	File /r ${VIMRT}\autoload\*.*
 
-	SetOutPath $0\autoload\dist
-	File ${VIMRT}\autoload\dist\*.*
+	SetOutPath $0\import\dist
+	File ${VIMRT}\import\dist\*.*
 
-	SetOutPath $0\autoload\xml
-	File ${VIMRT}\autoload\xml\*.*
+	SetOutPath $0\bitmaps
+	File ${VIMSRC}\vim.ico
 
 	SetOutPath $0\syntax
-	File ${VIMRT}\syntax\*.*
+	File /r /x testdir /x generator /x Makefile ${VIMRT}\syntax\*.*
 
 	SetOutPath $0\spell
 	File ${VIMRT}\spell\*.txt
@@ -413,7 +498,7 @@ Section "$(str_section_exe)" id_section_exe
 	File ${VIMRT}\tools\*.*
 
 	SetOutPath $0\tutor
-	File ${VIMRT}\tutor\*.*
+	File /x Makefile /x *.info ${VIMRT}\tutor\*.*
 SectionEnd
 
 ##########################################################
@@ -527,7 +612,8 @@ SectionGroup $(str_group_plugin) id_group_plugin
 	Section "$(str_section_plugin_home)" id_section_pluginhome
 		SectionIn 1 3
 
-		StrCpy $1 "$1 -create-directories home"
+		# use ShellExecAsUser below instead
+		# StrCpy $1 "$1 -create-directories home"
 	SectionEnd
 
 	Section "$(str_section_plugin_vim)" id_section_pluginvim
@@ -538,26 +624,29 @@ SectionGroup $(str_group_plugin) id_group_plugin
 SectionGroupEnd
 
 ##########################################################
-!ifdef HAVE_VIS_VIM
-Section "$(str_section_vis_vim)" id_section_visvim
-	SectionIn 3
-
-	SetOutPath $0
-	!insertmacro UpgradeDLL "${VIMSRC}\VisVim\VisVim.dll" "$0\VisVim.dll" "$0"
-	File ${VIMSRC}\VisVim\README_VisVim.txt
-SectionEnd
-!endif
-
-##########################################################
-!ifdef HAVE_NLS
+!if ${HAVE_NLS}
 Section "$(str_section_nls)" id_section_nls
 	SectionIn 1 3
 
+	SetOutPath $INSTDIR
+!if /FileExists "..\lang\README.*.txt"
+	File ..\lang\README.*.txt
+	CopyFiles /SILENT /FILESONLY $INSTDIR\README.$lng_usr.txt \
+	       	$INSTDIR\vim${VER_MAJOR}${VER_MINOR}\README.$lng_usr.txt
+	Delete $INSTDIR\README.*.txt
+!endif
+!if /FileExists "..\lang\LICENSE.??.txt"
+	File ..\lang\LICENSE.??.txt
+!if /FileExists "..\lang\LICENSE.??_??.txt"
+	File ..\lang\LICENSE.??_??.txt
+!endif
+	CopyFiles /SILENT /FILESONLY $INSTDIR\LICENSE.$lng_usr.txt \
+	       	$INSTDIR\vim${VER_MAJOR}${VER_MINOR}\LICENSE.$lng_usr.txt
+	Delete $INSTDIR\LICENSE.*.txt
+!endif
+
 	SetOutPath $0\lang
-	File /r ${VIMRT}\lang\*.*
-	SetOutPath $0\keymap
-	File ${VIMRT}\keymap\README.txt
-	File ${VIMRT}\keymap\*.vim
+	File /r /x Makefile ${VIMRT}\lang\*.*
 	SetOutPath $0
 	!insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED \
 	    "${GETTEXT}\gettext${BIT}\libintl-8.dll" \
@@ -565,12 +654,14 @@ Section "$(str_section_nls)" id_section_nls
 	!insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED \
 	    "${GETTEXT}\gettext${BIT}\libiconv-2.dll" \
 	    "$0\libiconv-2.dll" "$0"
-  !if /FileExists "${GETTEXT}\gettext${BIT}\libgcc_s_sjlj-1.dll"
+!if ${INCLUDE_LIBGCC}
+!if /FileExists "${GETTEXT}\gettext${BIT}\libgcc_s_sjlj-1.dll"
 	# Install libgcc_s_sjlj-1.dll only if it is needed.
 	!insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED \
 	    "${GETTEXT}\gettext${BIT}\libgcc_s_sjlj-1.dll" \
 	    "$0\libgcc_s_sjlj-1.dll" "$0"
-  !endif
+!endif
+!endif
 
 	${If} ${SectionIsSelected} ${id_section_editwith}
 	  ${If} ${RunningX64}
@@ -596,12 +687,14 @@ Section "$(str_section_nls)" id_section_nls
 	  !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED \
 	      "${GETTEXT}\gettext32\libiconv-2.dll" \
 	      "$0\GvimExt32\libiconv-2.dll" "$0\GvimExt32"
-  !if /FileExists "${GETTEXT}\gettext32\libgcc_s_sjlj-1.dll"
+!if ${INCLUDE_LIBGCC}
+!if /FileExists "${GETTEXT}\gettext32\libgcc_s_sjlj-1.dll"
 	  # Install libgcc_s_sjlj-1.dll only if it is needed.
 	  !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED \
 	      "${GETTEXT}\gettext32\libgcc_s_sjlj-1.dll" \
 	      "$0\GvimExt32\libgcc_s_sjlj-1.dll" "$0\GvimExt32"
-  !endif
+!endif
+!endif
 	${EndIf}
 SectionEnd
 !endif
@@ -612,6 +705,13 @@ Section -call_install_exe
 	DetailPrint "$(str_msg_registering)"
 	nsExec::Exec "$0\install.exe $1"
 	Pop $3
+
+	${If} ${SectionIsSelected} ${id_section_pluginhome}
+	  ReadEnvStr $3 "COMSPEC"
+	  Call GetHomeDir
+	  Pop $4
+	  ShellExecAsUser::ShellExecAsUser "" "$3" '/c "cd /d "$4" & mkdir vimfiles & cd vimfiles & mkdir colors compiler doc ftdetect ftplugin indent keymap plugin syntax"' SW_HIDE
+	${EndIf}
 SectionEnd
 
 ##########################################################
@@ -635,13 +735,7 @@ Section -post
 	  SectionGetSize ${id_section_editwith} $4
 	  IntOp $3 $3 + $4
 	${EndIf}
-!ifdef HAVE_VIS_VIM
-	${If} ${SectionIsSelected} ${id_section_visvim}
-	  SectionGetSize ${id_section_visvim} $4
-	  IntOp $3 $3 + $4
-	${EndIf}
-!endif
-!ifdef HAVE_NLS
+!if ${HAVE_NLS}
 	${If} ${SectionIsSelected} ${id_section_nls}
 	  SectionGetSize ${id_section_nls} $4
 	  IntOp $3 $3 + $4
@@ -671,10 +765,7 @@ Section -post
 	!insertmacro SaveSectionSelection ${id_section_vimrc}      "select_vimrc"
 	!insertmacro SaveSectionSelection ${id_section_pluginhome} "select_pluginhome"
 	!insertmacro SaveSectionSelection ${id_section_pluginvim}  "select_pluginvim"
-!ifdef HAVE_VIS_VIM
-	!insertmacro SaveSectionSelection ${id_section_visvim}     "select_visvim"
-!endif
-!ifdef HAVE_NLS
+!if ${HAVE_NLS}
 	!insertmacro SaveSectionSelection ${id_section_nls}        "select_nls"
 !endif
 	${If} ${RunningX64}
@@ -707,9 +798,24 @@ SectionEnd
 !macroend
 
 Function .onInit
-!ifdef HAVE_MULTI_LANG
+!if ${HAVE_MULTI_LANG}
   # Select a language (or read from the registry).
   !insertmacro MUI_LANGDLL_DISPLAY
+!endif
+
+!if ${HAVE_NLS}
+  ClearErrors
+  System::Call 'kernel32::GetUserDefaultLocaleName(t.r19, *i${NSIS_MAX_STRLEN})'
+  StrCmp $R9 "zh-cn" coincide 0
+  StrCmp $R9 "zh-tw" coincide 0
+  StrCmp $R9 "pt-br" 0 part
+  coincide:
+  System::Call 'User32::CharLower(t r19 r19)*i${NSIS_MAX_STRLEN}'
+  ${StrRep} $lng_usr "$R9" "-" "_"
+  Goto done
+  part:
+  StrCpy $lng_usr $R9 2
+  done:
 !endif
 
   ${If} $INSTDIR == ${DEFAULT_INSTDIR}
@@ -745,10 +851,7 @@ Function .onInit
   !insertmacro LoadSectionSelection ${id_section_vimrc}      "select_vimrc"
   !insertmacro LoadSectionSelection ${id_section_pluginhome} "select_pluginhome"
   !insertmacro LoadSectionSelection ${id_section_pluginvim}  "select_pluginvim"
-!ifdef HAVE_VIS_VIM
-  !insertmacro LoadSectionSelection ${id_section_visvim}     "select_visvim"
-!endif
-!ifdef HAVE_NLS
+!if ${HAVE_NLS}
   !insertmacro LoadSectionSelection ${id_section_nls}        "select_nls"
 !endif
   # Load the default _vimrc settings from the registry (if any).
@@ -806,12 +909,12 @@ Function SetCustom
 
 
 	# 1st group - Compatibility
-	${NSD_CreateGroupBox} 0 0 100% 32% $(str_msg_compat_title)
+	${NSD_CreateGroupBox} 0u 0u 296u 44u $(str_msg_compat_title)
 	Pop $3
 
-	${NSD_CreateLabel} 5% 10% 35% 8% $(str_msg_compat_desc)
+	${NSD_CreateLabel} 16u 14u 269u 10u $(str_msg_compat_desc)
 	Pop $3
-	${NSD_CreateDropList} 18% 19% 75% 8% ""
+	${NSD_CreateDropList} 42u 26u 237u 13u ""
 	Pop $vim_nsd_compat
 	${NSD_CB_AddString} $vim_nsd_compat $(str_msg_compat_vi)
 	${NSD_CB_AddString} $vim_nsd_compat $(str_msg_compat_vim)
@@ -831,12 +934,12 @@ Function SetCustom
 
 
 	# 2nd group - Key remapping
-	${NSD_CreateGroupBox} 0 35% 100% 31% $(str_msg_keymap_title)
+	${NSD_CreateGroupBox} 0u 48u 296u 44u $(str_msg_keymap_title)
 	Pop $3
 
-	${NSD_CreateLabel} 5% 45% 90% 8% $(str_msg_keymap_desc)
+	${NSD_CreateLabel} 16u 62u 269u 10u $(str_msg_keymap_desc)
 	Pop $3
-	${NSD_CreateDropList} 38% 54% 55% 8% ""
+	${NSD_CreateDropList} 42u 74u 236u 13u ""
 	Pop $vim_nsd_keymap
 	${NSD_CB_AddString} $vim_nsd_keymap $(str_msg_keymap_default)
 	${NSD_CB_AddString} $vim_nsd_keymap $(str_msg_keymap_windows)
@@ -850,12 +953,12 @@ Function SetCustom
 
 
 	# 3rd group - Mouse behavior
-	${NSD_CreateGroupBox} 0 69% 100% 31% $(str_msg_mouse_title)
+	${NSD_CreateGroupBox} 0u 95u 296u 44u $(str_msg_mouse_title)
 	Pop $3
 
-	${NSD_CreateLabel} 5% 79% 90% 8% $(str_msg_mouse_desc)
+	${NSD_CreateLabel} 16u 108u 269u 10u $(str_msg_mouse_desc)
 	Pop $3
-	${NSD_CreateDropList} 23% 87% 70% 8% ""
+	${NSD_CreateDropList} 42u 121u 237u 13u ""
 	Pop $vim_nsd_mouse
 	${NSD_CB_AddString} $vim_nsd_mouse $(str_msg_mouse_default)
 	${NSD_CB_AddString} $vim_nsd_mouse $(str_msg_mouse_windows)
@@ -922,10 +1025,7 @@ FunctionEnd
     !insertmacro MUI_DESCRIPTION_TEXT ${id_group_plugin}        $(str_desc_plugin)
     !insertmacro MUI_DESCRIPTION_TEXT ${id_section_pluginhome}  $(str_desc_plugin_home)
     !insertmacro MUI_DESCRIPTION_TEXT ${id_section_pluginvim}   $(str_desc_plugin_vim)
-!ifdef HAVE_VIS_VIM
-    !insertmacro MUI_DESCRIPTION_TEXT ${id_section_visvim}      $(str_desc_vis_vim)
-!endif
-!ifdef HAVE_NLS
+!if ${HAVE_NLS}
     !insertmacro MUI_DESCRIPTION_TEXT ${id_section_nls}         $(str_desc_nls)
 !endif
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
@@ -935,7 +1035,7 @@ FunctionEnd
 # Uninstaller Functions and Sections
 
 Function un.onInit
-!ifdef HAVE_MULTI_LANG
+!if ${HAVE_MULTI_LANG}
   # Get the language from the registry.
   !insertmacro MUI_UNGETLANGUAGE
 !endif
@@ -945,15 +1045,8 @@ Section "un.$(str_unsection_register)" id_unsection_register
 	SectionIn RO
 
 	# Apparently $INSTDIR is set to the directory where the uninstaller is
-	# created.  Thus the "vim61" directory is included in it.
+	# created.  Thus the "vim91" directory is included in it.
 	StrCpy $0 "$INSTDIR"
-
-!ifdef HAVE_VIS_VIM
-	# If VisVim was installed, unregister the DLL.
-	${If} ${FileExists} "$0\VisVim.dll"
-	  ExecWait "regsvr32.exe /u /s $0\VisVim.dll"
-	${EndIf}
-!endif
 
 	# delete the context menu entry and batch files
 	DetailPrint "$(str_msg_unregistering)"
@@ -1038,6 +1131,7 @@ Section "un.$(str_unsection_exe)" id_unsection_exe
 	RMDir /r $0\compiler
 	RMDir /r $0\doc
 	RMDir /r $0\ftplugin
+	RMDir /r $0\import
 	RMDir /r $0\indent
 	RMDir /r $0\macros
 	RMDir /r $0\pack
@@ -1046,11 +1140,9 @@ Section "un.$(str_unsection_exe)" id_unsection_exe
 	RMDir /r $0\syntax
 	RMDir /r $0\tools
 	RMDir /r $0\tutor
-!ifdef HAVE_VIS_VIM
-	RMDir /r $0\VisVim
-!endif
 	RMDir /r $0\lang
 	RMDir /r $0\keymap
+	RMDir /r $0\bitmaps
 	Delete $0\*.exe
 	Delete $0\*.bat
 	Delete $0\*.vim
@@ -1060,14 +1152,17 @@ Section "un.$(str_unsection_exe)" id_unsection_exe
 	  MessageBox MB_OK|MB_ICONEXCLAMATION $(str_msg_rm_exe_fail) /SD IDOK
 	${EndIf}
 
-	# No error message if the "vim62" directory can't be removed, the
+	# No error message if the "vim91" directory can't be removed, the
 	# gvimext.dll may still be there.
 	RMDir $0
 SectionEnd
 
 # Remove "vimfiles" directory under the specified directory.
 !macro RemoveVimfiles dir
-	${If} ${FileExists} ${dir}\vimfiles
+	${If} ${FileExists} ${dir}\_viminfo
+	  Delete ${dir}\_viminfo
+	${EndIf}
+	${If} ${DirExists} ${dir}\vimfiles
 	  RMDir ${dir}\vimfiles\colors
 	  RMDir ${dir}\vimfiles\compiler
 	  RMDir ${dir}\vimfiles\doc
@@ -1077,6 +1172,9 @@ SectionEnd
 	  RMDir ${dir}\vimfiles\keymap
 	  RMDir ${dir}\vimfiles\plugin
 	  RMDir ${dir}\vimfiles\syntax
+	  ${If} ${FileExists} ${dir}\vimfiles\.netrwhist*
+	    Delete ${dir}\vimfiles\.netrwhist*
+	  ${EndIf}
 	  RMDir ${dir}\vimfiles
 	${EndIf}
 !macroend
@@ -1084,15 +1182,8 @@ SectionEnd
 SectionGroup "un.$(str_ungroup_plugin)" id_ungroup_plugin
 	Section /o "un.$(str_unsection_plugin_home)" id_unsection_plugin_home
 		# get the home dir
-		ReadEnvStr $0 "HOME"
-		${If} $0 == ""
-		  ReadEnvStr $0 "HOMEDRIVE"
-		  ReadEnvStr $1 "HOMEPATH"
-		  StrCpy $0 "$0$1"
-		  ${If} $0 == ""
-		    ReadEnvStr $0 "USERPROFILE"
-		  ${EndIf}
-		${EndIf}
+		Call un.GetHomeDir
+		Pop $0
 
 		${If} $0 != ""
 		  !insertmacro RemoveVimfiles $0

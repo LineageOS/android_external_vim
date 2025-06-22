@@ -56,10 +56,25 @@ func Test_AAA_python_setup()
 endfunc
 
 func Test_pydo()
-  " Check deleting lines does not trigger an ml_get error.
   new
+
+  " Check deleting lines does not trigger an ml_get error.
   call setline(1, ['one', 'two', 'three'])
   pydo vim.command("%d_")
+  call assert_equal([''], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  pydo vim.command("1,2d_")
+  call assert_equal(['three'], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  pydo vim.command("2,3d_"); return "REPLACED"
+  call assert_equal(['REPLACED'], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  2,3pydo vim.command("1,2d_"); return "REPLACED"
+  call assert_equal(['three'], getline(1, '$'))
+
   bwipe!
 
   " Check switching to another buffer does not trigger an ml_get error.
@@ -248,7 +263,10 @@ s+='B'
   python << trim eof
     s+='E'
   eof
-  call assert_equal('ABCDE', pyxeval('s'))
+python << trimm
+s+='F'
+trimm
+  call assert_equal('ABCDEF', pyxeval('s'))
 endfunc
 
 " Test for the buffer range object
@@ -386,6 +404,107 @@ func Test_python_list()
   " Using dict as an index
   call AssertException(['py ll[{}] = 10'],
         \ 'Vim(python):TypeError: index must be int or slice, not dict')
+endfunc
+
+" Test for the python Tuple object
+func Test_python_tuple()
+  " Try to convert a null tuple
+  call AssertException(["py l = vim.eval('test_null_tuple()')"],
+        \ 'Vim(python):SystemError: error return without exception set')
+
+  " Try to convert a Tuple with a null Tuple item
+  call AssertException(["py t = vim.eval('(test_null_tuple(),)')"],
+        \ 'Vim(python):SystemError: error return without exception set')
+
+  " Try to convert a List with a null Tuple item
+  call AssertException(["py t = vim.eval('[test_null_tuple()]')"],
+        \ 'Vim(python):SystemError: error return without exception set')
+
+  " Try to convert a Tuple with a null List item
+  call AssertException(["py t = vim.eval('(test_null_list(),)')"],
+        \ 'Vim(python):SystemError: error return without exception set')
+
+  " Try to bind a null Tuple variable (works because an empty tuple is used)
+  let cmds =<< trim END
+    let t = test_null_tuple()
+    py tt = vim.bindeval('t')
+  END
+  call AssertException(cmds, '')
+
+  " Creating a tuple using different iterators
+  py t1 = vim.Tuple(['abc', 20, 1.2, (4, 5)])
+  call assert_equal(('abc', 20, 1.2, (4, 5)), pyeval('t1'))
+  py t2 = vim.Tuple('abc')
+  call assert_equal(('a', 'b', 'c'), pyeval('t2'))
+  py t3 = vim.Tuple({'color': 'red', 'model': 'ford'})
+  call assert_equal(('color', 'model'), pyeval('t3'))
+  py t4 = vim.Tuple()
+  call assert_equal((), pyeval('t4'))
+  py t5 = vim.Tuple(x**2 for x in range(5))
+  call assert_equal((0, 1, 4, 9, 16), pyeval('t5'))
+  py t6 = vim.Tuple(('abc', 20, 1.2, (4, 5)))
+  call assert_equal(('abc', 20, 1.2, (4, 5)), pyeval('t6'))
+
+  " Convert between Vim tuple/list and python tuple/list
+  py t = vim.Tuple(vim.bindeval("('a', ('b',), ['c'], {'s': 'd'})"))
+  call assert_equal(('a', ('b',), ['c'], {'s': 'd'}), pyeval('t'))
+  call assert_equal(['a', ('b',), ['c'], {'s': 'd'}], pyeval('list(t)'))
+  call assert_equal(('a', ('b',), ['c'], {'s': 'd'}), pyeval('tuple(t)'))
+
+  py l = vim.List(vim.bindeval("['e', ('f',), ['g'], {'s': 'h'}]"))
+  call assert_equal(('e', ('f',), ['g'], {'s': 'h'}), pyeval('tuple(l)'))
+
+  " Tuple assignment
+  py tt = vim.bindeval('("a", "b")')
+  call AssertException(['py tt[0] = 10'],
+        \ "Vim(python):TypeError: 'vim.tuple' object does not support item assignment")
+  py tt = vim.bindeval('("a", "b")')
+  call AssertException(['py tt[0:1] = (10, 20)'],
+        \ "Vim(python):TypeError: 'vim.tuple' object does not support item assignment")
+
+  " iterating over tuple from Python
+  py print([x for x in vim.bindeval("('a', 'b')")])
+
+  " modifying a list item within a tuple
+  let t = ('a', ['b', 'c'], 'd')
+  py vim.bindeval('t')[1][1] = 'x'
+  call assert_equal(('a', ['b', 'x'], 'd'), t)
+
+  " length of a tuple
+  let t = ()
+  py p_t = vim.bindeval('t')
+  call assert_equal(0, pyeval('len(p_t)'))
+  let t = ('a', )
+  py p_t = vim.bindeval('t')
+  call assert_equal(1, pyeval('len(p_t)'))
+  let t = ('a', 'b', 'c')
+  py p_t = vim.bindeval('t')
+  call assert_equal(3, pyeval('len(p_t)'))
+
+  " membership test
+  let t = ('a', 'b', 'c')
+  py p_t = vim.bindeval('t')
+  call assert_true(pyeval("b'c' in p_t"))
+  call assert_true(pyeval("b'd' not in p_t"))
+
+  py x = vim.eval('("a", (2), [3], {})')
+  call assert_equal(('a', '2', ['3'], {}), pyeval('x'))
+
+  " Using a keyword argument for a tuple
+  call AssertException(['py x = vim.Tuple(a=1)'],
+        \ 'Vim(python):TypeError: tuple constructor does not accept keyword arguments')
+
+  " Using dict as an index
+  call AssertException(['py x = tt[{}]'],
+        \ 'Vim(python):TypeError: index must be int or slice, not dict')
+  call AssertException(['py x = tt["abc"]'],
+        \ 'Vim(python):TypeError: index must be int or slice, not str')
+
+  call AssertException(['py del tt.locked'],
+        \ 'Vim(python):AttributeError: cannot delete vim.Tuple attributes')
+
+  call AssertException(['py tt.foobar = 1'],
+        \ 'Vim(python):AttributeError: cannot set attribute foobar')
 endfunc
 
 " Test for the python Dict object
@@ -686,7 +805,6 @@ func Test_python_function_call()
 endfunc
 
 func Test_python_float()
-  CheckFeature float
   let l = [0.0]
   py l = vim.bindeval('l')
   py l.extend([0.0])
@@ -770,10 +888,23 @@ func Test_python_lock_scope_attr()
         \ 'Vim(python):TypeError: cannot modify fixed list')
 endfunc
 
+" Test for locking/unlocking a tuple
+func Test_tuple_lock()
+  let t = (1, 2, 3)
+  py t = vim.bindeval('t')
+  py t.locked = True
+  call assert_equal(1, islocked('t'))
+  py t.locked = False
+  call assert_equal(0, islocked('t'))
+endfunc
+
 " Test for pyeval()
 func Test_python_pyeval()
   let l = pyeval('range(3)')
   call assert_equal([0, 1, 2], l)
+
+  let t = pyeval('("a", "b", "c")')
+  call assert_equal(("a", "b", "c"), t)
 
   let d = pyeval('{"a": "b", "c": 1, "d": ["e"]}')
   call assert_equal([['a', 'b'], ['c', 1], ['d', ['e']]], sort(items(d)))
@@ -785,9 +916,7 @@ func Test_python_pyeval()
   py v = vim.eval('test_null_function()')
   call assert_equal(v:none, pyeval('v'))
 
-  if has('float')
-    call assert_equal(0.0, pyeval('0.0'))
-  endif
+  call assert_equal(0.0, pyeval('0.0'))
 
   " Evaluate an invalid values
   call AssertException(['let v = pyeval(''"\0"'')'], 'E859:')
@@ -795,6 +924,53 @@ func Test_python_pyeval()
   call AssertException(['let v = pyeval("undefined_name")'],
         \ "Vim(let):NameError: name 'undefined_name' is not defined")
   call AssertException(['let v = pyeval("vim")'], 'E859:')
+endfunc
+
+" Test for pyeval with locals
+func Test_python_pyeval_locals()
+  let str = 'a string'
+  let num = 0xbadb33f
+  let d = {'a': 1, 'b': 2, 'c': str}
+  let l = [ str, num, d ]
+  let t = ( str, num, d )
+
+  let locals = #{
+        \ s: str,
+        \ n: num,
+        \ d: d,
+        \ l: l,
+        \ t: t,
+        \ }
+
+  " check basics
+  call assert_equal('a string', pyeval('s', locals))
+  call assert_equal(0xbadb33f, pyeval('n', locals))
+  call assert_equal(d, pyeval('d', locals))
+  call assert_equal(l, pyeval('l', locals))
+  call assert_equal(t, pyeval('t', locals))
+  call assert_equal('a-b-c', 'b"-".join(t)'->pyeval({'t': ('a', 'b', 'c')}))
+
+  py << trim EOF
+  def __UpdateDict(d, upd):
+    d.update(upd)
+    return d
+
+  def __ExtendList(l, *args):
+    l.extend(*args)
+    return l
+  EOF
+
+  " check assign to dict member works like bindeval
+  call assert_equal(3, pyeval('__UpdateDict( d, {"c": 3} )["c"]', locals))
+  call assert_equal(3, d['c'])
+
+  " check append lo list
+  call assert_equal(4, pyeval('len(__ExtendList(l, ["new item"]))', locals))
+  call assert_equal("new item", l[-1])
+
+  " check calling a function
+  let StrLen = function('strlen')
+  call assert_equal(3, pyeval('f("abc")', {'f': StrLen}))
 endfunc
 
 " Test for vim.bindeval()
@@ -937,6 +1113,92 @@ func Test_python_list_slice()
   py ll = vim.bindeval('l')
   call AssertException(["py x = ll[:]"],
         \ 'Vim(python):SystemError: error return without exception set')
+endfunc
+
+" Slice
+func Test_python_tuple_slice()
+  py tt = vim.bindeval('(0, 1, 2, 3, 4, 5)')
+  py t = tt[:4]
+  call assert_equal((0, 1, 2, 3), pyeval('t'))
+  py t = tt[2:]
+  call assert_equal((2, 3, 4, 5), pyeval('t'))
+  py t = tt[:-4]
+  call assert_equal((0, 1), pyeval('t'))
+  py t = tt[-2:]
+  call assert_equal((4, 5), pyeval('t'))
+  py t = tt[2:4]
+  call assert_equal((2, 3), pyeval('t'))
+  py t = tt[4:2]
+  call assert_equal((), pyeval('t'))
+  py t = tt[-4:-2]
+  call assert_equal((2, 3), pyeval('t'))
+  py t = tt[-2:-4]
+  call assert_equal((), pyeval('t'))
+  py t = tt[:]
+  call assert_equal((0, 1, 2, 3, 4, 5), pyeval('t'))
+  py t = tt[0:6]
+  call assert_equal((0, 1, 2, 3, 4, 5), pyeval('t'))
+  py t = tt[-10:10]
+  call assert_equal((0, 1, 2, 3, 4, 5), pyeval('t'))
+  py t = tt[4:2:-1]
+  call assert_equal((4, 3), pyeval('t'))
+  py t = tt[::2]
+  call assert_equal((0, 2, 4), pyeval('t'))
+  py t = tt[4:2:1]
+  call assert_equal((), pyeval('t'))
+
+  " Error case: Use an invalid index
+  call AssertException(['py x = tt[-10]'], 'Vim(python):IndexError: tuple index out of range')
+
+  " Use a step value of 0
+  call AssertException(['py x = tt[0:3:0]'],
+        \ 'Vim(python):ValueError: slice step cannot be zero')
+
+  " Error case: Invalid slice type
+  call AssertException(["py x = tt['abc']"],
+        \ "Vim(python):TypeError: index must be int or slice, not str")
+
+  " Error case: List with a null tuple item
+  let t = (test_null_tuple(),)
+  py tt = vim.bindeval('t')
+  call AssertException(["py x = tt[:]"], 'Vim(python):SystemError: error return without exception set')
+endfunc
+
+func Test_python_pytuple_to_vimtuple()
+  let t = pyeval("('a', 'b')")
+  call assert_equal(('a', 'b'), t)
+  let t = pyeval("()")
+  call assert_equal((), t)
+  let t = pyeval("('x',)")
+  call assert_equal(('x',), t)
+  let t = pyeval("((1, 2), (), (3, 4))")
+  call assert_equal(((1, 2), (), (3, 4)), t)
+  let t = pyeval("((1, 2), {'a': 10}, [5, 6])")
+  call assert_equal(((1, 2), {'a': 10}, [5, 6]), t)
+
+  " Invalid python tuple
+  py << trim END
+    class FailingIter(object):
+      def __iter__(self):
+        raise NotImplementedError('iter')
+  END
+  call assert_fails('call pyeval("(1, FailingIter, 2)")',
+        \ 'E859: Failed to convert returned python object to a Vim value')
+
+  py del FailingIter
+endfunc
+
+" Test for tuple garbage collection
+func Test_python_tuple_garbage_collect()
+  let t = (1, (2, 3), [4, 5], {'a': 6})
+  py py_t = vim.bindeval('t')
+  let save_testing = v:testing
+  let v:testing = 1
+  call test_garbagecollect_now()
+  let v:testing = save_testing
+
+  let new_t = pyeval('py_t')
+  call assert_equal((1, (2, 3), [4, 5], {'a': 6}), new_t)
 endfunc
 
 " Vars
@@ -1565,11 +1827,11 @@ func Test_python_buffer()
   %bw!
 
   " Range object for a deleted buffer
-  new Xfile
+  new Xpbuffile
   call setline(1, ['one', 'two', 'three'])
   py b = vim.current.buffer
   py r = vim.current.buffer.range(0, 2)
-  call assert_equal('<range Xfile (0:2)>', pyeval('repr(r)'))
+  call assert_equal('<range Xpbuffile (0:2)>', pyeval('repr(r)'))
   %bw!
   call AssertException(['py r[:] = []'],
         \ 'Vim(python):vim.error: attempt to refer to deleted buffer')
@@ -1598,7 +1860,7 @@ endfunc
 " Test vim.buffers object
 func Test_python_buffers()
   %bw!
-  edit Xfile
+  edit Xpbuffile
   py cb = vim.current.buffer
   set hidden
   edit a
@@ -1626,8 +1888,8 @@ func Test_python_buffers()
     cb.append('i3:' + str(next(i3)))
     del i3
   EOF
-  call assert_equal(['i:<buffer Xfile>',
-        \ 'i2:<buffer Xfile>', 'i:<buffer a>', 'i3:<buffer Xfile>'],
+  call assert_equal(['i:<buffer Xpbuffile>',
+        \ 'i2:<buffer Xpbuffile>', 'i:<buffer a>', 'i3:<buffer Xpbuffile>'],
         \ getline(2, '$'))
   %d
 
@@ -1645,7 +1907,7 @@ func Test_python_buffers()
 
     cb.append(str(len(vim.buffers)))
   EOF
-  call assert_equal([bufnr('Xfile') .. ':<buffer Xfile>=<buffer Xfile>',
+  call assert_equal([bufnr('Xpbuffile') .. ':<buffer Xpbuffile>=<buffer Xpbuffile>',
         \ bufnr('a') .. ':<buffer a>=<buffer a>',
         \ bufnr('b') .. ':<buffer b>=<buffer b>',
         \ bufnr('c') .. ':<buffer c>=<buffer c>', '4'], getline(2, '$'))
@@ -1675,15 +1937,15 @@ func Test_python_buffers()
     del i4
     del bnums
   EOF
-  call assert_equal(['i4:<buffer Xfile>',
-        \ 'i4:<buffer Xfile>', 'StopIteration'], getline(2, '$'))
+  call assert_equal(['i4:<buffer Xpbuffile>',
+        \ 'i4:<buffer Xpbuffile>', 'StopIteration'], getline(2, '$'))
   %bw!
 endfunc
 
 " Test vim.{tabpage,window}list and vim.{tabpage,window} objects
 func Test_python_tabpage_window()
   %bw
-  edit Xfile
+  edit Xpbuffile
   py cb = vim.current.buffer
   tabnew 0
   tabnew 1
@@ -1748,7 +2010,7 @@ func Test_python_tabpage_window()
     Current tab pages:
       <tabpage 0>(1): 1 windows, current is <window object (unknown)>
       Windows:
-        <window object (unknown)>(1): displays buffer <buffer Xfile>; cursor is at (2, 0)
+        <window object (unknown)>(1): displays buffer <buffer Xpbuffile>; cursor is at (2, 0)
       <tabpage 1>(2): 1 windows, current is <window object (unknown)>
       Windows:
         <window object (unknown)>(1): displays buffer <buffer 0>; cursor is at (1, 0)
@@ -1764,14 +2026,14 @@ func Test_python_tabpage_window()
         <window 3>(4): displays buffer <buffer 2>; cursor is at (1, 0)
     Number of windows in current tab page: 4
   END
-  call assert_equal(expected, getbufline(bufnr('Xfile'), 2, '$'))
+  call assert_equal(expected, getbufline(bufnr('Xpbuffile'), 2, '$'))
   %bw!
 endfunc
 
 " Test vim.current
 func Test_python_vim_current()
   %bw
-  edit Xfile
+  edit Xpbuffile
   py cb = vim.current.buffer
   tabnew 0
   tabnew 1
@@ -1797,8 +2059,8 @@ func Test_python_vim_current()
     Current window: <window 0>: <window 0> is <window 0>
     Current buffer: <buffer c.2>: <buffer c.2> is <buffer c.2> is <buffer c.2>
   END
-  call assert_equal(expected, getbufline(bufnr('Xfile'), 2, '$'))
-  call deletebufline(bufnr('Xfile'), 1, '$')
+  call assert_equal(expected, getbufline(bufnr('Xpbuffile'), 2, '$'))
+  call deletebufline(bufnr('Xpbuffile'), 1, '$')
 
   " Assigning: fails
   py << trim EOF
@@ -1821,10 +2083,10 @@ func Test_python_vim_current()
     Type error at assigning None to vim.current.tabpage
     Type error at assigning None to vim.current.buffer
   END
-  call assert_equal(expected, getbufline(bufnr('Xfile'), 2, '$'))
-  call deletebufline(bufnr('Xfile'), 1, '$')
+  call assert_equal(expected, getbufline(bufnr('Xpbuffile'), 2, '$'))
+  call deletebufline(bufnr('Xpbuffile'), 1, '$')
 
-  call setbufline(bufnr('Xfile'), 1, 'python interface')
+  call setbufline(bufnr('Xpbuffile'), 1, 'python interface')
   py << trim EOF
     # Assigning: success
     vim.current.tabpage = vim.tabpages[-2]
@@ -1840,13 +2102,13 @@ func Test_python_vim_current()
   let expected =<< trim END
     Current tab page: <tabpage 2>
     Current window: <window 0>
-    Current buffer: <buffer Xfile>
+    Current buffer: <buffer Xpbuffile>
     Current line: 'python interface'
   END
-  call assert_equal(expected, getbufline(bufnr('Xfile'), 2, '$'))
+  call assert_equal(expected, getbufline(bufnr('Xpbuffile'), 2, '$'))
   py vim.current.line = 'one line'
   call assert_equal('one line', getline('.'))
-  call deletebufline(bufnr('Xfile'), 1, '$')
+  call deletebufline(bufnr('Xpbuffile'), 1, '$')
 
   py << trim EOF
     ws = list(vim.windows)
@@ -1866,7 +2128,7 @@ func Test_python_vim_current()
     w.valid: [True, False]
     t.valid: [True, False, True, False]
   END
-  call assert_equal(expected, getbufline(bufnr('Xfile'), 2, '$'))
+  call assert_equal(expected, getbufline(bufnr('Xpbuffile'), 2, '$'))
   %bw!
 endfunc
 
@@ -1918,6 +2180,7 @@ func Test_python_dir_method()
             ('range',      vim.current.range),
             ('dictionary', vim.bindeval('{}')),
             ('list',       vim.bindeval('[]')),
+            ('tuple',       vim.bindeval('()')),
             ('function',   vim.bindeval('function("tr")')),
             ('output',     sys.stdout),
         ):
@@ -1933,6 +2196,7 @@ func Test_python_dir_method()
     range:__dir__,__members__,append,end,start
     dictionary:__dir__,__members__,get,has_key,items,keys,locked,pop,popitem,scope,update,values
     list:__dir__,__members__,extend,locked
+    tuple:__dir__,__members__,locked
     function:__dir__,__members__,args,auto_rebind,self,softspace
     output:__dir__,__members__,close,closed,flush,isatty,readable,seekable,softspace,writable,write,writelines
   END
@@ -1945,7 +2209,9 @@ func Test_python_new()
   call assert_equal({'a': 1}, pyeval('vim.Dictionary(a=1)'))
   call assert_equal({'a': 1}, pyeval('vim.Dictionary(((''a'', 1),))'))
   call assert_equal([], pyeval('vim.List()'))
+  call assert_equal((), pyeval('vim.Tuple()'))
   call assert_equal(['a', 'b', 'c', '7'], pyeval('vim.List(iter(''abc7''))'))
+  call assert_equal(('a', 'b', 'c', '7'), pyeval('vim.Tuple(iter(''abc7''))'))
   call assert_equal(function('tr'), pyeval('vim.Function(''tr'')'))
   call assert_equal(function('tr', [123, 3, 4]),
         \ pyeval('vim.Function(''tr'', args=[123, 3, 4])'))
@@ -2409,7 +2675,7 @@ endfunc
 
 " Test chdir
 func Test_python_chdir()
-  new Xfile
+  new Xpycfile
   py cb = vim.current.buffer
   py << trim EOF
     import os
@@ -2420,7 +2686,7 @@ func Test_python_chdir()
     path = fnamemodify('.', ':p:h:t')
     if path != 'src' and path != 'src2':
       # Running tests from a shadow directory, so move up another level
-      # This will result in @% looking like shadow/testdir/Xfile, hence the
+      # This will result in @% looking like shadow/testdir/Xpycfile, hence the
       # extra fnamemodify
       os.chdir('..')
       cb.append(fnamemodify('.', ':p:h:t'))
@@ -2436,8 +2702,8 @@ func Test_python_chdir()
     cb.append(vim.eval('@%'))
     del fnamemodify
   EOF
-  call assert_equal(['testdir', 'Xfile', 'src', 'testdir/Xfile', 'testdir',
-        \ 'Xfile'], getline(2, '$'))
+  call assert_equal(['testdir', 'Xpycfile', 'src', 'testdir/Xpycfile', 'testdir',
+        \ 'Xpycfile'], getline(2, '$'))
   close!
   call AssertException(["py vim.chdir(None)"], "Vim(python):TypeError:")
 endfunc

@@ -24,22 +24,12 @@
 # include <gtk/gtk.h>
 #else
 # include <X11/keysym.h>
-# ifdef FEAT_GUI_MOTIF
-#  include <Xm/PushB.h>
-#  include <Xm/Separator.h>
-#  include <Xm/List.h>
-#  include <Xm/Label.h>
-#  include <Xm/AtomMgr.h>
-#  include <Xm/Protocols.h>
-# else
-   // Assume Athena
-#  include <X11/Shell.h>
-#  ifdef FEAT_GUI_NEXTAW
-#   include <X11/neXtaw/Label.h>
-#  else
-#   include <X11/Xaw/Label.h>
-#  endif
-# endif
+# include <Xm/PushB.h>
+# include <Xm/Separator.h>
+# include <Xm/List.h>
+# include <Xm/Label.h>
+# include <Xm/AtomMgr.h>
+# include <Xm/Protocols.h>
 #endif
 
 #ifndef FEAT_GUI_GTK
@@ -103,7 +93,7 @@ gui_mch_create_beval_area(
 
     if (mesg != NULL && mesgCB != NULL)
     {
-	iemsg(_(e_cannot_create_ballooneval_with_both_message_and_callback));
+	iemsg(e_cannot_create_ballooneval_with_both_message_and_callback);
 	return NULL;
     }
 
@@ -383,39 +373,38 @@ pointer_event(BalloonEval *beval, int x, int y, unsigned state)
 
     distance = ABS(x - beval->x) + ABS(y - beval->y);
 
-    if (distance > 4)
+    if (distance <= 4)
+	return;
+
+    /*
+     * Moved out of the balloon location: cancel it.
+     * Remember button state
+     */
+    beval->state = state;
+    cancelBalloon(beval);
+
+    // Mouse buttons are pressed - no balloon now
+    if (!(state & ((int)GDK_BUTTON1_MASK | (int)GDK_BUTTON2_MASK
+		    | (int)GDK_BUTTON3_MASK)))
     {
-	/*
-	 * Moved out of the balloon location: cancel it.
-	 * Remember button state
-	 */
-	beval->state = state;
-	cancelBalloon(beval);
+	beval->x = x;
+	beval->y = y;
 
-	// Mouse buttons are pressed - no balloon now
-	if (!(state & ((int)GDK_BUTTON1_MASK | (int)GDK_BUTTON2_MASK
-						    | (int)GDK_BUTTON3_MASK)))
+	if (state & (int)GDK_MOD1_MASK)
 	{
-	    beval->x = x;
-	    beval->y = y;
-
-	    if (state & (int)GDK_MOD1_MASK)
+	    /*
+	     * Alt is pressed -- enter super-evaluate-mode,
+	     * where there is no time delay
+	     */
+	    if (beval->msgCB != NULL)
 	    {
-		/*
-		 * Alt is pressed -- enter super-evaluate-mode,
-		 * where there is no time delay
-		 */
-		if (beval->msgCB != NULL)
-		{
-		    beval->showState = ShS_PENDING;
-		    (*beval->msgCB)(beval, state);
-		}
+		beval->showState = ShS_PENDING;
+		(*beval->msgCB)(beval, state);
 	    }
-	    else
-	    {
-		beval->timerID = g_timeout_add((guint)p_bdlay,
-					       &timeout_cb, beval);
-	    }
+	}
+	else
+	{
+	    beval->timerID = g_timeout_add((guint)p_bdlay, &timeout_cb, beval);
 	}
     }
 }
@@ -618,7 +607,7 @@ pointerEvent(BalloonEval *beval, XEvent *event)
 	    break;
 
 	/*
-	 * Motif and Athena version: Keystrokes will be caught by the
+	 * Motif version: Keystrokes will be caught by the
 	 * "textArea" widget, and handled in gui_x11_key_hit_cb().
 	 */
 	case KeyPress:
@@ -655,7 +644,8 @@ pointerEvent(BalloonEval *beval, XEvent *event)
 
 		XtTranslateKeycode(gui.dpy, event->xkey.keycode,
 				event->xkey.state, &modifier, &keysym);
-		if ((keysym == XK_Shift_L) || (keysym == XK_Shift_R)) {
+		if ((keysym == XK_Shift_L) || (keysym == XK_Shift_R))
+		{
 		    beval->showState = ShS_UPDATE_PENDING;
 		    (*beval->msgCB)(beval, 0);
 		}
@@ -708,17 +698,17 @@ timerRoutine(XtPointer dx, XtIntervalId *id UNUSED)
     static void
 requestBalloon(BalloonEval *beval)
 {
-    if (beval->showState != ShS_PENDING)
+    if (beval->showState == ShS_PENDING)
+	return;
+
+    // Determine the beval to display
+    if (beval->msgCB != NULL)
     {
-	// Determine the beval to display
-	if (beval->msgCB != NULL)
-	{
-	    beval->showState = ShS_PENDING;
-	    (*beval->msgCB)(beval, beval->state);
-	}
-	else if (beval->msg != NULL)
-	    drawBalloon(beval);
+	beval->showState = ShS_PENDING;
+	(*beval->msgCB)(beval, beval->state);
     }
+    else if (beval->msg != NULL)
+	drawBalloon(beval);
 }
 
 #ifdef FEAT_GUI_GTK
@@ -910,85 +900,85 @@ set_printable_label_text(GtkLabel *label, char_u *text)
     static void
 drawBalloon(BalloonEval *beval)
 {
-    if (beval->msg != NULL)
-    {
-	GtkRequisition	requisition;
-	int		screen_w;
-	int		screen_h;
-	int		screen_x;
-	int		screen_y;
-	int		x;
-	int		y;
-	int		x_offset = EVAL_OFFSET_X;
-	int		y_offset = EVAL_OFFSET_Y;
-	PangoLayout	*layout;
+    if (beval->msg == NULL)
+	return;
+
+    GtkRequisition	requisition;
+    int		screen_w;
+    int		screen_h;
+    int		screen_x;
+    int		screen_y;
+    int		x;
+    int		y;
+    int		x_offset = EVAL_OFFSET_X;
+    int		y_offset = EVAL_OFFSET_Y;
+    PangoLayout	*layout;
 
 # if !GTK_CHECK_VERSION(3,22,2)
-	GdkScreen	*screen;
+    GdkScreen	*screen;
 
-	screen = gtk_widget_get_screen(beval->target);
-	gtk_window_set_screen(GTK_WINDOW(beval->balloonShell), screen);
+    screen = gtk_widget_get_screen(beval->target);
+    gtk_window_set_screen(GTK_WINDOW(beval->balloonShell), screen);
 # endif
-	gui_gtk_get_screen_geom_of_win(beval->target, 0, 0,
-				    &screen_x, &screen_y, &screen_w, &screen_h);
+    gui_gtk_get_screen_geom_of_win(beval->target, 0, 0,
+	    &screen_x, &screen_y, &screen_w, &screen_h);
 # if !GTK_CHECK_VERSION(3,0,0)
-	gtk_widget_ensure_style(beval->balloonShell);
-	gtk_widget_ensure_style(beval->balloonLabel);
+    gtk_widget_ensure_style(beval->balloonShell);
+    gtk_widget_ensure_style(beval->balloonLabel);
 # endif
 
-	set_printable_label_text(GTK_LABEL(beval->balloonLabel), beval->msg);
-	/*
-	 * Dirty trick:  Enable wrapping mode on the label's layout behind its
-	 * back.  This way GtkLabel won't try to constrain the wrap width to a
-	 * builtin maximum value of about 65 Latin characters.
-	 */
-	layout = gtk_label_get_layout(GTK_LABEL(beval->balloonLabel));
+    set_printable_label_text(GTK_LABEL(beval->balloonLabel), beval->msg);
+    /*
+     * Dirty trick:  Enable wrapping mode on the label's layout behind its
+     * back.  This way GtkLabel won't try to constrain the wrap width to a
+     * builtin maximum value of about 65 Latin characters.
+     */
+    layout = gtk_label_get_layout(GTK_LABEL(beval->balloonLabel));
 # ifdef PANGO_WRAP_WORD_CHAR
-	pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+    pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
 # else
-	pango_layout_set_wrap(layout, PANGO_WRAP_WORD);
+    pango_layout_set_wrap(layout, PANGO_WRAP_WORD);
 # endif
-	pango_layout_set_width(layout,
-		// try to come up with some reasonable width
-		PANGO_SCALE * CLAMP(gui.num_cols * gui.char_width,
-				    screen_w / 2,
-				    MAX(20, screen_w - 20)));
+    pango_layout_set_width(layout,
+	    // try to come up with some reasonable width
+	    PANGO_SCALE * CLAMP(gui.num_cols * gui.char_width,
+		screen_w / 2,
+		MAX(20, screen_w - 20)));
 
-	// Calculate the balloon's width and height.
+    // Calculate the balloon's width and height.
 # if GTK_CHECK_VERSION(3,0,0)
-	gtk_widget_get_preferred_size(beval->balloonShell, &requisition, NULL);
+    gtk_widget_get_preferred_size(beval->balloonShell, &requisition, NULL);
 # else
-	gtk_widget_size_request(beval->balloonShell, &requisition);
+    gtk_widget_size_request(beval->balloonShell, &requisition);
 # endif
 
-	// Compute position of the balloon area
-	gdk_window_get_origin(gtk_widget_get_window(beval->target), &x, &y);
-	x += beval->x;
-	y += beval->y;
+    // Compute position of the balloon area
+    gdk_window_get_origin(gtk_widget_get_window(beval->target), &x, &y);
+    x += beval->x;
+    y += beval->y;
 
-	// Get out of the way of the mouse pointer
-	if (x + x_offset + requisition.width > screen_x + screen_w)
-	    y_offset += 15;
-	if (y + y_offset + requisition.height > screen_y + screen_h)
-	    y_offset = -requisition.height - EVAL_OFFSET_Y;
+    // Get out of the way of the mouse pointer
+    if (x + x_offset + requisition.width > screen_x + screen_w)
+	y_offset += 15;
+    if (y + y_offset + requisition.height > screen_y + screen_h)
+	y_offset = -requisition.height - EVAL_OFFSET_Y;
 
-	// Sanitize values
-	x = CLAMP(x + x_offset, 0,
-			    MAX(0, screen_x + screen_w - requisition.width));
-	y = CLAMP(y + y_offset, 0,
-			    MAX(0, screen_y + screen_h - requisition.height));
+    // Sanitize values
+    x = CLAMP(x + x_offset, 0,
+	    MAX(0, screen_x + screen_w - requisition.width));
+    y = CLAMP(y + y_offset, 0,
+	    MAX(0, screen_y + screen_h - requisition.height));
 
-	// Show the balloon
+    // Show the balloon
 # if GTK_CHECK_VERSION(3,0,0)
-	gtk_window_move(GTK_WINDOW(beval->balloonShell), x, y);
+    gtk_window_move(GTK_WINDOW(beval->balloonShell), x, y);
 # else
-	gtk_widget_set_uposition(beval->balloonShell, x, y);
+    gtk_widget_set_uposition(beval->balloonShell, x, y);
 # endif
-	gtk_widget_show(beval->balloonShell);
+    gtk_widget_show(beval->balloonShell);
 
-	beval->showState = ShS_SHOWING;
-	gui_mch_update();
-    }
+    beval->showState = ShS_SHOWING;
+    gui_mch_update();
 }
 
 /*
@@ -1021,6 +1011,7 @@ cancelBalloon(BalloonEval *beval)
 createBalloonEvalWindow(BalloonEval *beval)
 {
     beval->balloonShell = gtk_window_new(GTK_WINDOW_POPUP);
+    gtk_window_set_transient_for(GTK_WINDOW(beval->balloonShell), GTK_WINDOW(gui.mainwin));
 
     gtk_widget_set_app_paintable(beval->balloonShell, TRUE);
     gtk_window_set_resizable(GTK_WINDOW(beval->balloonShell), FALSE);
@@ -1070,96 +1061,65 @@ drawBalloon(BalloonEval *beval)
     Position tx;
     Position ty;
 
-    if (beval->msg != NULL)
+    if (beval->msg == NULL)
+	return;
+
+    XmString s;
+    // Show the Balloon
+
+    // Calculate the label's width and height
+
+    // For the callback function we parse NL characters to create a
+    // multi-line label.  This doesn't work for all languages, but
+    // XmStringCreateLocalized() doesn't do multi-line labels...
+    if (beval->msgCB != NULL)
+	s = XmStringCreateLtoR((char *)beval->msg, XmFONTLIST_DEFAULT_TAG);
+    else
+	s = XmStringCreateLocalized((char *)beval->msg);
     {
-	// Show the Balloon
+	XmFontList fl;
 
-	// Calculate the label's width and height
-#ifdef FEAT_GUI_MOTIF
-	XmString s;
-
-	// For the callback function we parse NL characters to create a
-	// multi-line label.  This doesn't work for all languages, but
-	// XmStringCreateLocalized() doesn't do multi-line labels...
-	if (beval->msgCB != NULL)
-	    s = XmStringCreateLtoR((char *)beval->msg, XmFONTLIST_DEFAULT_TAG);
-	else
-	    s = XmStringCreateLocalized((char *)beval->msg);
+	fl = gui_motif_fontset2fontlist(&gui.tooltip_fontset);
+	if (fl == NULL)
 	{
-	    XmFontList fl;
-
-	    fl = gui_motif_fontset2fontlist(&gui.tooltip_fontset);
-	    if (fl == NULL)
-	    {
-		XmStringFree(s);
-		return;
-	    }
-	    XmStringExtent(fl, s, &w, &h);
-	    XmFontListFree(fl);
+	    XmStringFree(s);
+	    return;
 	}
-	w += gui.border_offset << 1;
-	h += gui.border_offset << 1;
-	XtVaSetValues(beval->balloonLabel, XmNlabelString, s, NULL);
-	XmStringFree(s);
-#else // Athena
-	// Assume XtNinternational == True
-	XFontSet	fset;
-	XFontSetExtents *ext;
-
-	XtVaGetValues(beval->balloonLabel, XtNfontSet, &fset, NULL);
-	ext = XExtentsOfFontSet(fset);
-	h = ext->max_ink_extent.height;
-	w = XmbTextEscapement(fset,
-			      (char *)beval->msg,
-			      (int)STRLEN(beval->msg));
-	w += gui.border_offset << 1;
-	h += gui.border_offset << 1;
-	XtVaSetValues(beval->balloonLabel, XtNlabel, beval->msg, NULL);
-#endif
-
-	// Compute position of the balloon area
-	tx = beval->x_root + EVAL_OFFSET_X;
-	ty = beval->y_root + EVAL_OFFSET_Y;
-	if ((tx + w) > beval->screen_width)
-	    tx = beval->screen_width - w;
-	if ((ty + h) > beval->screen_height)
-	    ty = beval->screen_height - h;
-#ifdef FEAT_GUI_MOTIF
-	XtVaSetValues(beval->balloonShell,
-		XmNx, tx,
-		XmNy, ty,
-		NULL);
-#else
-	// Athena
-	XtVaSetValues(beval->balloonShell,
-		XtNx, tx,
-		XtNy, ty,
-		NULL);
-#endif
-	// Set tooltip colors
-	{
-	    Arg args[2];
-
-#ifdef FEAT_GUI_MOTIF
-	    args[0].name = XmNbackground;
-	    args[0].value = gui.tooltip_bg_pixel;
-	    args[1].name = XmNforeground;
-	    args[1].value = gui.tooltip_fg_pixel;
-#else // Athena
-	    args[0].name = XtNbackground;
-	    args[0].value = gui.tooltip_bg_pixel;
-	    args[1].name = XtNforeground;
-	    args[1].value = gui.tooltip_fg_pixel;
-#endif
-	    XtSetValues(beval->balloonLabel, &args[0], XtNumber(args));
-	}
-
-	XtPopup(beval->balloonShell, XtGrabNone);
-
-	beval->showState = ShS_SHOWING;
-
-	current_beval = beval;
+	XmStringExtent(fl, s, &w, &h);
+	XmFontListFree(fl);
     }
+    w += gui.border_offset << 1;
+    h += gui.border_offset << 1;
+    XtVaSetValues(beval->balloonLabel, XmNlabelString, s, NULL);
+    XmStringFree(s);
+
+    // Compute position of the balloon area
+    tx = beval->x_root + EVAL_OFFSET_X;
+    ty = beval->y_root + EVAL_OFFSET_Y;
+    if ((tx + w) > beval->screen_width)
+	tx = beval->screen_width - w;
+    if ((ty + h) > beval->screen_height)
+	ty = beval->screen_height - h;
+    XtVaSetValues(beval->balloonShell,
+	    XmNx, tx,
+	    XmNy, ty,
+	    NULL);
+    // Set tooltip colors
+    {
+	Arg args[2];
+
+	args[0].name = XmNbackground;
+	args[0].value = gui.tooltip_bg_pixel;
+	args[1].name = XmNforeground;
+	args[1].value = gui.tooltip_fg_pixel;
+	XtSetValues(beval->balloonLabel, &args[0], XtNumber(args));
+    }
+
+    XtPopup(beval->balloonShell, XtGrabNone);
+
+    beval->showState = ShS_SHOWING;
+
+    current_beval = beval;
 }
 
 /*
@@ -1198,38 +1158,20 @@ createBalloonEvalWindow(BalloonEval *beval)
     int		n;
 
     n = 0;
-#ifdef FEAT_GUI_MOTIF
     XtSetArg(args[n], XmNallowShellResize, True); n++;
     beval->balloonShell = XtAppCreateShell("balloonEval", "BalloonEval",
 		    overrideShellWidgetClass, gui.dpy, args, n);
-#else
-    // Athena
-    XtSetArg(args[n], XtNallowShellResize, True); n++;
-    beval->balloonShell = XtAppCreateShell("balloonEval", "BalloonEval",
-		    overrideShellWidgetClass, gui.dpy, args, n);
-#endif
+
+    XmFontList fl;
 
     n = 0;
-#ifdef FEAT_GUI_MOTIF
-    {
-	XmFontList fl;
-
-	fl = gui_motif_fontset2fontlist(&gui.tooltip_fontset);
-	XtSetArg(args[n], XmNforeground, gui.tooltip_fg_pixel); n++;
-	XtSetArg(args[n], XmNbackground, gui.tooltip_bg_pixel); n++;
-	XtSetArg(args[n], XmNfontList, fl); n++;
-	XtSetArg(args[n], XmNalignment, XmALIGNMENT_BEGINNING); n++;
-	beval->balloonLabel = XtCreateManagedWidget("balloonLabel",
-			xmLabelWidgetClass, beval->balloonShell, args, n);
-    }
-#else // FEAT_GUI_ATHENA
-    XtSetArg(args[n], XtNforeground, gui.tooltip_fg_pixel); n++;
-    XtSetArg(args[n], XtNbackground, gui.tooltip_bg_pixel); n++;
-    XtSetArg(args[n], XtNinternational, True); n++;
-    XtSetArg(args[n], XtNfontSet, gui.tooltip_fontset); n++;
+    fl = gui_motif_fontset2fontlist(&gui.tooltip_fontset);
+    XtSetArg(args[n], XmNforeground, gui.tooltip_fg_pixel); n++;
+    XtSetArg(args[n], XmNbackground, gui.tooltip_bg_pixel); n++;
+    XtSetArg(args[n], XmNfontList, fl); n++;
+    XtSetArg(args[n], XmNalignment, XmALIGNMENT_BEGINNING); n++;
     beval->balloonLabel = XtCreateManagedWidget("balloonLabel",
-		    labelWidgetClass, beval->balloonShell, args, n);
-#endif
+	    xmLabelWidgetClass, beval->balloonShell, args, n);
 }
 
 #endif // !FEAT_GUI_GTK

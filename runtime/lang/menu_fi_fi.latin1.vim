@@ -1,6 +1,7 @@
 " Menu Translations:	Finnish
 " Maintainer:		Flammie Pirinen <flammie@iki.fi>
-" Last Change:		2020 Apr 23
+" Last Change:		2024 Dec 23
+" Original translations
 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -21,7 +22,7 @@ menutrans &File				&Tiedosto
 " Accels: AJTUSNIDPOE
 menutrans &Open\.\.\.<Tab>:e			&Avaa\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp		Avaa\ &jaettuna\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew		Avaa\ &tabissa\.\.\.<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew		Avaa\ &tabissa\.\.\.<Tab>:tabnew
 menutrans &New<Tab>:enew			&Uusi<Tab>:enew
 menutrans &Close<Tab>:close			&Sulje<Tab>:close
 " -SEP1-
@@ -87,7 +88,7 @@ menutrans Toggle\ &Left\ Scrollbar			Vasen\ &pystyvierityspalkki
 menutrans Toggle\ &Right\ Scrollbar			Oikea\ pystyvie&rityspalkki
 
 let g:menutrans_path_dialog = "Anna tiedostojen hakupolku.\nErota hakemistot pilkuin."
-let g:menutrans_tags_dialog = "Anna tägitiedostojen nimet.\nErota tidostot pilkuin."
+let g:menutrans_tags_dialog = "Anna tägitiedostojen nimet.\nErota tiedostot pilkuin."
 
 menutrans F&ile\ Settings			Tiedostoasetu&kset
 " Submenu:
@@ -106,7 +107,7 @@ menutrans Te&xt\ Width\.\.\.				Tekstinl&eveys\.\.\.
 menutrans &File\ Format\.\.\.				Tiedosto&muoto\.\.\.
 
 let g:menutrans_textwidth_dialog = "Anna uusi tekstin leveys\n(0 poistaa käytöstä)"
-let g:menutrans_fileformat_dialog = "Anaa tiedoston kirjoitusmuoto."
+let g:menutrans_fileformat_dialog = "Anna tiedoston kirjoitusmuoto."
 let g:menutrans_fileformat_choices = " &Unix \n &Dos \n &Mac \n &Peru "
 
 menutrans C&olor\ Scheme			&Väriteema

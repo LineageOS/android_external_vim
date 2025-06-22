@@ -7,15 +7,13 @@
  */
 
 /*
- * Win32 (Windows NT and Windows 95) machine-dependent things.
+ * Win32 machine-dependent things.
  */
 
 #include "os_dos.h"		// common MS-DOS and Win32 stuff
-#ifndef __CYGWIN__
 // cproto fails on missing include files
-# ifndef PROTO
-#  include <direct.h>		// for _mkdir()
-# endif
+#ifndef PROTO
+# include <direct.h>		// for _mkdir()
 #endif
 
 #define BINARY_FILE_IO
@@ -87,11 +85,21 @@
 # define COBJMACROS	// For OLE: Enable "friendlier" access to objects
 #endif
 #ifndef PROTO
+// Must include winsock2.h before windows.h since it conflicts with winsock.h
+// (included in windows.h).
+# include <winsock2.h>
+# include <ws2tcpip.h>
 # include <windows.h>
+
+// Weird: rpcndr.h defines "small" to "char", which causes trouble
+#undef small
+
 # ifndef SM_CXPADDEDBORDER
 #  define SM_CXPADDEDBORDER     92
 # endif
 #endif
+
+typedef void (*sighandler_T)(int, int);
 
 /*
  * Win32 has plenty of memory, use large buffers
@@ -128,6 +136,45 @@
 #ifndef IO_REPARSE_TAG_SYMLINK
 # define IO_REPARSE_TAG_SYMLINK		0xA000000C
 #endif
+#ifndef IO_REPARSE_TAG_APPEXECLINK
+# define IO_REPARSE_TAG_APPEXECLINK	0x8000001B
+#endif
+
+/*
+ * Definition of the reparse point buffer.
+ * This is usually defined in the DDK, copy the definition here to avoid
+ * adding it as a dependence only for a single structure.
+ */
+typedef struct _REPARSE_DATA_BUFFER {
+    ULONG  ReparseTag;
+    USHORT ReparseDataLength;
+    USHORT Reserved;
+    union {
+	struct {
+	    USHORT SubstituteNameOffset;
+	    USHORT SubstituteNameLength;
+	    USHORT PrintNameOffset;
+	    USHORT PrintNameLength;
+	    ULONG  Flags;
+	    WCHAR  PathBuffer[1];
+	} SymbolicLinkReparseBuffer;
+	struct {
+	    USHORT SubstituteNameOffset;
+	    USHORT SubstituteNameLength;
+	    USHORT PrintNameOffset;
+	    USHORT PrintNameLength;
+	    WCHAR  PathBuffer[1];
+	} MountPointReparseBuffer;
+	struct {
+	    UCHAR DataBuffer[1];
+	} GenericReparseBuffer;
+	struct
+	{
+	    ULONG StringCount;
+	    WCHAR StringList[1];
+	} AppExecLinkReparseBuffer;
+    } DUMMYUNIONNAME;
+} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
 
 #ifdef _MSC_VER
     // Support for __try / __except.  All versions of MSVC are
@@ -161,7 +208,7 @@ Trace(char *pszFormat, ...);
 
   // These macros should all compile away to nothing
 # define ASSERT(f)		((void)0)
-# define TRACE			1 ? (void)0 : printf
+# define TRACE			1 ? (void)0 : (void)printf
 # define TRACE0(sz)
 # define TRACE1(sz, p1)
 # define TRACE2(sz, p1, p2)

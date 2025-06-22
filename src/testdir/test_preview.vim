@@ -15,14 +15,7 @@ func Test_Psearch()
   bwipe
 endfunc
 
-func Test_window_preview()
-  CheckFeature quickfix
-
-  " Open a preview window
-  pedit Xa
-  call assert_equal(2, winnr('$'))
-  call assert_equal(0, &previewwindow)
-
+func s:goto_preview_and_close()
   " Go to the preview window
   wincmd P
   call assert_equal(1, &previewwindow)
@@ -36,11 +29,62 @@ func Test_window_preview()
   call assert_fails('wincmd P', 'E441:')
 endfunc
 
+func Test_window_preview()
+  CheckFeature quickfix
+
+  " Open a preview window
+  pedit Xa
+  call assert_equal(2, winnr('$'))
+  call assert_equal(0, &previewwindow)
+
+  call s:goto_preview_and_close()
+endfunc
+
+func Test_window_preview_from_pbuffer()
+  CheckFeature quickfix
+
+  call writefile(['/* some C code */'], 'Xpreview.c', 'D')
+  edit Xpreview.c
+  const buf_num = bufnr('%')
+  enew
+
+  call feedkeys(":pbuffer Xpre\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal("\"pbuffer Xpreview.c", @:)
+
+  call assert_equal(1, winnr('$'))
+  exe 'pbuffer ' .  buf_num
+  call assert_equal(2, winnr('$'))
+  call assert_equal(0, &previewwindow)
+
+  call s:goto_preview_and_close()
+
+  call assert_equal(1, winnr('$'))
+  pbuffer Xpreview.c
+  call assert_equal(2, winnr('$'))
+  call assert_equal(0, &previewwindow)
+
+  call s:goto_preview_and_close()
+endfunc
+
+func Test_window_preview_terminal()
+  CheckFeature quickfix
+  CheckFeature terminal
+
+  term ++curwin
+  const buf_num = bufnr('$')
+  call assert_equal(1, winnr('$'))
+  exe 'pbuffer' . buf_num
+  call assert_equal(2, winnr('$'))
+  call assert_equal(0, &previewwindow)
+
+  call s:goto_preview_and_close()
+endfunc
+
 func Test_window_preview_from_help()
   CheckFeature quickfix
 
   filetype on
-  call writefile(['/* some C code */'], 'Xpreview.c')
+  call writefile(['/* some C code */'], 'Xpreview.c', 'D')
   help
   pedit Xpreview.c
   wincmd P
@@ -50,7 +94,6 @@ func Test_window_preview_from_help()
 
   filetype off
   close
-  call delete('Xpreview.c')
 endfunc
 
 func Test_multiple_preview_windows()

@@ -23,13 +23,13 @@
  * vs "ht") and goes down in the list.
  * Used when 'spellsuggest' is set to "best".
  */
-#define RESCORE(word_score, sound_score) ((3 * word_score + sound_score) / 4)
+#define RESCORE(word_score, sound_score) ((3 * (word_score) + (sound_score)) / 4)
 
 /*
  * Do the opposite: based on a maximum end score and a known sound score,
  * compute the maximum word score that can be used.
  */
-#define MAXSCORE(word_score, sound_score) ((4 * word_score - sound_score) / 3)
+#define MAXSCORE(word_score, sound_score) ((4 * (word_score) - (sound_score)) / 3)
 
 // only used for su_badflags
 #define WF_MIXCAP   0x20	// mix of upper and lower case: macaRONI
@@ -70,7 +70,7 @@ typedef struct suggest_S
 #define SUG(ga, i) (((suggest_T *)(ga).ga_data)[i])
 
 // TRUE if a word appears in the list of banned words.
-#define WAS_BANNED(su, word) (!HASHITEM_EMPTY(hash_find(&su->su_banned, word)))
+#define WAS_BANNED(su, word) (!HASHITEM_EMPTY(hash_find(&(su)->su_banned, word)))
 
 // Number of suggestions kept when cleaning up.  We need to keep more than
 // what is displayed, because when rescore_suggestions() is called the score
@@ -118,7 +118,7 @@ typedef struct suggest_S
 #define SCORE_SFMAX2	300	// maximum score for second try
 #define SCORE_SFMAX3	400	// maximum score for third try
 
-#define SCORE_BIG	SCORE_INS * 3	// big difference
+#define SCORE_BIG	(SCORE_INS * 3)	// big difference
 #define SCORE_MAXMAX	999999		// accept any score
 #define SCORE_LIMITMAX	350		// for spell_edit_score_limit()
 
@@ -282,24 +282,23 @@ score_wordcount_adj(
     int		newscore;
 
     hi = hash_find(&slang->sl_wordcount, word);
-    if (!HASHITEM_EMPTY(hi))
-    {
-	wc = HI2WC(hi);
-	if (wc->wc_count < SCORE_THRES2)
-	    bonus = SCORE_COMMON1;
-	else if (wc->wc_count < SCORE_THRES3)
-	    bonus = SCORE_COMMON2;
-	else
-	    bonus = SCORE_COMMON3;
-	if (split)
-	    newscore = score - bonus / 2;
-	else
-	    newscore = score - bonus;
-	if (newscore < 0)
-	    return 0;
-	return newscore;
-    }
-    return score;
+    if (HASHITEM_EMPTY(hi))
+	return score;
+
+    wc = HI2WC(hi);
+    if (wc->wc_count < SCORE_THRES2)
+	bonus = SCORE_COMMON1;
+    else if (wc->wc_count < SCORE_THRES3)
+	bonus = SCORE_COMMON2;
+    else
+	bonus = SCORE_COMMON3;
+    if (split)
+	newscore = score - bonus / 2;
+    else
+	newscore = score - bonus;
+    if (newscore < 0)
+	return 0;
+    return newscore;
 }
 
 /*
@@ -316,36 +315,37 @@ badword_captype(char_u *word, char_u *end)
     int		first;
     char_u	*p;
 
-    if (flags & WF_KEEPCAP)
+    if (!(flags & WF_KEEPCAP))
+	return flags;
+
+    // Count the number of UPPER and lower case letters.
+    l = u = 0;
+    first = FALSE;
+    for (p = word; p < end; MB_PTR_ADV(p))
     {
-	// Count the number of UPPER and lower case letters.
-	l = u = 0;
-	first = FALSE;
-	for (p = word; p < end; MB_PTR_ADV(p))
+	c = PTR2CHAR(p);
+	if (SPELL_ISUPPER(c))
 	{
-	    c = PTR2CHAR(p);
-	    if (SPELL_ISUPPER(c))
-	    {
-		++u;
-		if (p == word)
-		    first = TRUE;
-	    }
-	    else
-		++l;
+	    ++u;
+	    if (p == word)
+		first = TRUE;
 	}
-
-	// If there are more UPPER than lower case letters suggest an
-	// ALLCAP word.  Otherwise, if the first letter is UPPER then
-	// suggest ONECAP.  Exception: "ALl" most likely should be "All",
-	// require three upper case letters.
-	if (u > l && u > 2)
-	    flags |= WF_ALLCAP;
-	else if (first)
-	    flags |= WF_ONECAP;
-
-	if (u >= 2 && l >= 2)	// maCARONI maCAroni
-	    flags |= WF_MIXCAP;
+	else
+	    ++l;
     }
+
+    // If there are more UPPER than lower case letters suggest an
+    // ALLCAP word.  Otherwise, if the first letter is UPPER then
+    // suggest ONECAP.  Exception: "ALl" most likely should be "All",
+    // require three upper case letters.
+    if (u > l && u > 2)
+	flags |= WF_ALLCAP;
+    else if (first)
+	flags |= WF_ONECAP;
+
+    if (u >= 2 && l >= 2)	// maCARONI maCAroni
+	flags |= WF_MIXCAP;
+
     return flags;
 }
 
@@ -424,6 +424,7 @@ spell_check_sps(void)
 	    if (*s != NUL && !VIM_ISDIGIT(*s))
 		f = -1;
 	}
+	// Note: Keep this in sync with p_sps_values.
 	else if (STRCMP(buf, "best") == 0)
 	    f = SPS_BEST;
 	else if (STRCMP(buf, "fast") == 0)
@@ -480,7 +481,7 @@ spell_suggest(int count)
 
     if (!curwin->w_p_spell)
     {
-	did_set_spelllang(curwin);
+	parse_spelllang(curwin);
 	curwin->w_p_spell = TRUE;
     }
 
@@ -506,9 +507,12 @@ spell_suggest(int count)
 	    curwin->w_cursor.col = VIsual.col;
 	++badlen;
 	end_visual_mode();
+	// make sure we don't include the NUL at the end of the line
+	if (badlen > ml_get_curline_len() - (int)curwin->w_cursor.col)
+	    badlen = ml_get_curline_len() - (int)curwin->w_cursor.col;
     }
     // Find the start of the badly spelled word.
-    else if (spell_move_to(curwin, FORWARD, TRUE, TRUE, NULL) == 0
+    else if (spell_move_to(curwin, FORWARD, SMT_ALL, TRUE, NULL) == 0
 	    || curwin->w_cursor.col > prev_cursor.col)
     {
 	// No bad word or it starts after the cursor: use the word under the
@@ -534,10 +538,11 @@ spell_suggest(int count)
     // Get the word and its length.
 
     // Figure out if the word should be capitalised.
-    need_cap = check_need_cap(curwin->w_cursor.lnum, curwin->w_cursor.col);
+    need_cap = check_need_cap(curwin, curwin->w_cursor.lnum,
+							curwin->w_cursor.col);
 
     // Make a copy of current line since autocommands may free the line.
-    line = vim_strsave(ml_get_curline());
+    line = vim_strnsave(ml_get_curline(), ml_get_curline_len());
     if (line == NULL)
 	goto skip;
 
@@ -588,15 +593,17 @@ spell_suggest(int count)
 	msg_scroll = TRUE;
 	for (i = 0; i < sug.su_ga.ga_len; ++i)
 	{
+	    int el;
+
 	    stp = &SUG(sug.su_ga, i);
 
 	    // The suggested word may replace only part of the bad word, add
-	    // the not replaced part.
+	    // the not replaced part.  But only when it's not getting too long.
 	    vim_strncpy(wcopy, stp->st_word, MAXWLEN);
-	    if (sug.su_badlen > stp->st_orglen)
+	    el = sug.su_badlen - stp->st_orglen;
+	    if (el > 0 && stp->st_wordlen + el <= MAXWLEN)
 		vim_strncpy(wcopy + stp->st_wordlen,
-					       sug.su_badptr + stp->st_orglen,
-					      sug.su_badlen - stp->st_orglen);
+					   sug.su_badptr + stp->st_orglen, el);
 	    vim_snprintf((char *)IObuff, IOSIZE, "%2d", i + 1);
 #ifdef FEAT_RIGHTLEFT
 	    if (cmdmsg_rl)
@@ -677,6 +684,8 @@ spell_suggest(int count)
 	p = alloc(STRLEN(line) - stp->st_orglen + stp->st_wordlen + 1);
 	if (p != NULL)
 	{
+	    int len_diff = stp->st_wordlen - stp->st_orglen;
+
 	    c = (int)(sug.su_badptr - line);
 	    mch_memmove(p, line, c);
 	    STRCPY(p + c, stp->st_word);
@@ -694,6 +703,11 @@ spell_suggest(int count)
 	    curwin->w_cursor.col = c;
 
 	    changed_bytes(curwin->w_cursor.lnum, c);
+#if defined(FEAT_PROP_POPUP)
+	    if (curbuf->b_has_textprop && len_diff != 0)
+		adjust_prop_columns(curwin->w_cursor.lnum, c, len_diff,
+							       APC_SUBSTITUTE);
+#endif
 	}
     }
     else
@@ -1214,7 +1228,7 @@ suggest_try_change(suginfo_T *su)
 
 // Check the maximum score, if we go over it we won't try this change.
 #define TRY_DEEPER(su, stack, depth, add) \
-	   (depth < MAXWLEN && stack[depth].ts_score + (add) < su->su_maxscore)
+       ((depth) < MAXWLEN - 1 && (stack)[depth].ts_score + (add) < (su)->su_maxscore)
 
 /*
  * Try finding suggestions by adding/removing/swapping letters.
@@ -1373,7 +1387,7 @@ suggest_trie_walk(
 
 		// At end of a prefix or at start of prefixtree: check for
 		// following word.
-		if (depth < MAXWLEN
+		if (depth < MAXWLEN - 1
 			    && (byts[arridx] == 0 || n == (int)STATE_NOPREFIX))
 		{
 		    // Set su->su_badflags to the caps type at this position.
@@ -1944,7 +1958,8 @@ suggest_trie_walk(
 #endif
 		    ++depth;
 		    sp = &stack[depth];
-		    ++sp->ts_fidx;
+		    if (fword[sp->ts_fidx] != NUL)
+			++sp->ts_fidx;
 		    tword[sp->ts_twordlen++] = c;
 		    sp->ts_arridx = idxs[arridx];
 		    if (newscore == SCORE_SUBST)
@@ -1963,7 +1978,8 @@ suggest_trie_walk(
 			    sp->ts_isdiff = (newscore != 0)
 						       ? DIFF_YES : DIFF_NONE;
 			}
-			else if (sp->ts_isdiff == DIFF_INSERT)
+			else if (sp->ts_isdiff == DIFF_INSERT
+							    && sp->ts_fidx > 0)
 			    // When inserting trail bytes don't advance in the
 			    // bad word.
 			    --sp->ts_fidx;
@@ -2158,6 +2174,13 @@ suggest_trie_walk(
 	    // - Skip the byte if it's equal to the byte in the word,
 	    //   accepting that byte is always better.
 	    n += sp->ts_curi++;
+
+	    // break out, if we would be accessing byts buffer out of bounds
+	    if (byts == slang->sl_fbyts && n >= slang->sl_fbyts_len)
+	    {
+		got_int = TRUE;
+		break;
+	    }
 	    c = byts[n];
 	    if (soundfold && sp->ts_twordlen == 0 && c == '*')
 		// Inserting a vowel at the start of a word counts less,
@@ -3077,7 +3100,7 @@ typedef struct
 } sftword_T;
 
 static sftword_T dumsft;
-#define HIKEY2SFT(p)  ((sftword_T *)(p - (dumsft.sft_word - (char_u *)&dumsft)))
+#define HIKEY2SFT(p)  ((sftword_T *)((p) - (dumsft.sft_word - (char_u *)&dumsft)))
 #define HI2SFT(hi)     HIKEY2SFT((hi)->hi_key)
 
 /*
@@ -3129,11 +3152,11 @@ suggest_try_soundalike(suginfo_T *su)
 	    // TODO: also soundfold the next words, so that we can try joining
 	    // and splitting
 #ifdef SUGGEST_PROFILE
-	prof_init();
+	    prof_init();
 #endif
 	    suggest_trie_walk(su, lp, salword, TRUE);
 #ifdef SUGGEST_PROFILE
-	prof_report("soundalike");
+	    prof_report("soundalike");
 #endif
 	}
     }
@@ -3161,7 +3184,7 @@ suggest_try_soundalike_finish(void)
 	{
 	    // Free the info about handled words.
 	    todo = (int)slang->sl_sounddone.ht_used;
-	    for (hi = slang->sl_sounddone.ht_array; todo > 0; ++hi)
+	    FOR_ALL_HASHTAB_ITEMS(&slang->sl_sounddone, hi, todo)
 		if (!HASHITEM_EMPTY(hi))
 		{
 		    vim_free(HI2SFT(hi));
@@ -3213,7 +3236,7 @@ add_sound_suggest(
     hi = hash_lookup(&slang->sl_sounddone, goodword, hash);
     if (HASHITEM_EMPTY(hi))
     {
-	sft = alloc(sizeof(sftword_T) + STRLEN(goodword));
+	sft = alloc(offsetof(sftword_T, sft_word) + STRLEN(goodword) + 1);
 	if (sft != NULL)
 	{
 	    sft->sft_score = score;
@@ -3677,12 +3700,11 @@ add_banned(
 
     hash = hash_hash(word);
     hi = hash_lookup(&su->su_banned, word, hash);
-    if (HASHITEM_EMPTY(hi))
-    {
-	s = vim_strsave(word);
-	if (s != NULL)
-	    hash_add_item(&su->su_banned, hi, s, hash);
-    }
+    if (!HASHITEM_EMPTY(hi))		// already present
+	return;
+    s = vim_strsave(word);
+    if (s != NULL)
+	hash_add_item(&su->su_banned, hi, s, hash);
 }
 
 /*
@@ -3740,11 +3762,16 @@ sug_compare(const void *s1, const void *s2)
 {
     suggest_T	*p1 = (suggest_T *)s1;
     suggest_T	*p2 = (suggest_T *)s2;
-    int		n = p1->st_score - p2->st_score;
+    int		n;
+
+    n = p1->st_score == p2->st_score ? 0 :
+	p1->st_score > p2->st_score ? 1 : -1;
 
     if (n == 0)
     {
-	n = p1->st_altscore - p2->st_altscore;
+	n = p1->st_altscore == p2->st_altscore ? 0 :
+	    p1->st_altscore > p2->st_altscore ? 1 : -1;
+
 	if (n == 0)
 	    n = STRICMP(p1->st_word, p2->st_word);
     }
@@ -3763,25 +3790,25 @@ cleanup_suggestions(
     int		maxscore,
     int		keep)		// nr of suggestions to keep
 {
-    if (gap->ga_len > 0)
+    if (gap->ga_len <= 0)
+	return maxscore;
+
+    // Sort the list.
+    qsort(gap->ga_data, (size_t)gap->ga_len, sizeof(suggest_T),
+	    sug_compare);
+
+    // Truncate the list to the number of suggestions that will be
+    // displayed.
+    if (gap->ga_len > keep)
     {
-	// Sort the list.
-	qsort(gap->ga_data, (size_t)gap->ga_len, sizeof(suggest_T),
-								  sug_compare);
+	int		i;
+	suggest_T   *stp = &SUG(*gap, 0);
 
-	// Truncate the list to the number of suggestions that will be
-	// displayed.
-	if (gap->ga_len > keep)
-	{
-	    int		i;
-	    suggest_T   *stp = &SUG(*gap, 0);
-
-	    for (i = keep; i < gap->ga_len; ++i)
-		vim_free(stp[i].st_word);
-	    gap->ga_len = keep;
-	    if (keep >= 1)
-		return stp[keep - 1].st_score;
-	}
+	for (i = keep; i < gap->ga_len; ++i)
+	    vim_free(stp[i].st_word);
+	gap->ga_len = keep;
+	if (keep >= 1)
+	    return stp[keep - 1].st_score;
     }
     return maxscore;
 }

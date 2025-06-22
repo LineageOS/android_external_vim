@@ -1,6 +1,7 @@
 " Menu Translations:	Esperanto
 " Maintainer:		Dominique PELLE <dominique.pelle@free.fr>
 " Last Change:		2012 May 01
+" Original translations
 " 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -33,7 +34,7 @@ menutrans &File				&Dosiero
 
 menutrans &Open\.\.\.<Tab>:e			&Malfermi\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp		Malfermi\ &divide\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew		Malfermi\ &langeton\.\.\.<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew		Malfermi\ &langeton\.\.\.<Tab>:tabnew
 menutrans &New<Tab>:enew			&Nova<Tab>:enew
 menutrans &Close<Tab>:close			&Fermi<Tab>:close
 " -SEP1-

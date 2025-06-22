@@ -1,13 +1,15 @@
 " vi:set ts=8 sts=8 sw=8 tw=0:
 "
 " Menu Translations:	Japanese (CP932)
-" Last Translator:	MURAOKA Taro  <koron.kaoriya@gmail.com>
-" Last Change:		18-Jul-2018.
+" Last Translator:	MURAOKA Taro <koron.kaoriya@gmail.com>
+" Last Change:		18-Dec-2023.
 "
-" Copyright (C) 2001-2018 MURAOKA Taro <koron.kaoriya@gmail.com>,
+" Copyright (C) 2001-2023 MURAOKA Taro <koron.kaoriya@gmail.com>,
 "			  vim-jp <http://vim-jp.org/>
 "
 " THIS FILE IS DISTRIBUTED UNDER THE VIM LICENSE.
+"
+" Generated from menu_ja_jp.utf-8.vim, DO NOT EDIT
 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -23,7 +25,7 @@ scriptencoding cp932
 menutrans &Help			ƒwƒ‹ƒv(&H)
 menutrans &Overview<Tab><F1>	ŠT—ª(&O)<Tab><F1>
 menutrans &User\ Manual		ƒ†[ƒU[ƒ}ƒjƒ…ƒAƒ‹(&U)
-menutrans &How-to\ links	&How-toƒŠƒ“ƒN
+menutrans &How-To\ links	&How-toƒŠƒ“ƒN
 menutrans &Credits		ƒNƒŒƒWƒbƒg(&C)
 menutrans Co&pying		’˜ìŒ î•ñ(&P)
 menutrans &Sponsor/Register	ƒXƒ|ƒ“ƒT[/“o˜^(&S)
@@ -37,7 +39,7 @@ let g:menutrans_help_dialog = "ƒwƒ‹ƒv‚ğŒŸõ‚µ‚½‚¢ƒRƒ}ƒ“ƒh‚à‚µ‚­‚Í’PŒê‚ğ“ü—Í‚µ‚Ä‚
 menutrans &File				ƒtƒ@ƒCƒ‹(&F)
 menutrans &Open\.\.\.<Tab>:e		ŠJ‚­(&O)\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp	•ªŠ„‚µ‚ÄŠJ‚­(&L)\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew	ƒ^ƒuƒy[ƒW‚ÅŠJ‚­<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew	ƒ^ƒuƒy[ƒW‚ÅŠJ‚­(&T)<Tab>:tabnew
 menutrans &New<Tab>:enew		V‹Kì¬(&N)<Tab>:enew
 menutrans &Close<Tab>:close		•Â‚¶‚é(&C)<Tab>:close
 menutrans &Save<Tab>:w			•Û‘¶(&S)<Tab>:w
@@ -270,10 +272,9 @@ if has("toolbar")
     tmenu ToolBar.Cut		ƒNƒŠƒbƒvƒ{[ƒh‚ÖØ‚èæ‚è
     tmenu ToolBar.Copy		ƒNƒŠƒbƒvƒ{[ƒh‚ÖƒRƒs[
     tmenu ToolBar.Paste		ƒNƒŠƒbƒvƒ{[ƒh‚©‚ç“\‚è•t‚¯
-    tmenu ToolBar.Find		ŒŸõ...
+    tmenu ToolBar.Replace	ŒŸõ / ’uŠ·...
     tmenu ToolBar.FindNext	Ÿ‚ğŒŸõ
     tmenu ToolBar.FindPrev	‘O‚ğŒŸõ
-    tmenu ToolBar.Replace	’uŠ·...
     if 0	" disabled; These are in the Windows menu
       tmenu ToolBar.New		V‹KƒEƒBƒ“ƒhƒEì¬
       tmenu ToolBar.WinSplit	ƒEƒBƒ“ƒhƒE•ªŠ„

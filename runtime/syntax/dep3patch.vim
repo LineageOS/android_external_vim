@@ -1,8 +1,8 @@
 " Vim syntax file
 " Language:    Debian DEP3 Patch headers
 " Maintainer:  Gabriel Filion <gabster@lelutin.ca>
-" Last Change: 2021-01-09
-" URL: https://salsa.debian.org/vim-team/vim-debian/blob/master/syntax/dep3patch.vim
+" Last Change: 2023 Jan 16
+" URL: https://salsa.debian.org/vim-team/vim-debian/blob/main/syntax/dep3patch.vim
 "
 " Specification of the DEP3 patch header format is available at:
 "   https://dep-team.pages.debian.net/deps/dep3/
@@ -28,7 +28,7 @@ syn region dep3patchMultiField matchgroup=dep3patchKey start="^Bug\%(-[[:graph:]
 syn region dep3patchMultiField matchgroup=dep3patchKey start="^Forwarded\ze: *" end="$" contained contains=dep3patchHTTPUrl,dep3patchForwardedShort oneline keepend
 syn region dep3patchMultiField matchgroup=dep3patchKey start="^\%(Author\|From\)\ze: *" end="$" contained contains=dep3patchEmail oneline keepend
 syn region dep3patchMultiField matchgroup=dep3patchKey start="^\%(Reviewed-by\|Acked-by\)\ze: *" end="$" contained contains=dep3patchEmail oneline keepend
-syn region dep3patchMultiField matchgroup=dep3patchKey start="^Last-Updated\ze: *" end="$" contained contains=dep3patchISODate oneline keepend
+syn region dep3patchMultiField matchgroup=dep3patchKey start="^Last-Update\ze: *" end="$" contained contains=dep3patchISODate oneline keepend
 syn region dep3patchMultiField matchgroup=dep3patchKey start="^Applied-Upstream\ze: *" end="$" contained contains=dep3patchHTTPUrl,dep3patchCommitID oneline keepend
 
 syn match dep3patchHTTPUrl contained "\vhttps?://[[:alnum:]][-[:alnum:]]*[[:alnum:]]?(\.[[:alnum:]][-[:alnum:]]*[[:alnum:]]?)*\.[[:alpha:]][-[:alnum:]]*[[:alpha:]]?(:\d+)?(/[^[:space:]]*)?$"

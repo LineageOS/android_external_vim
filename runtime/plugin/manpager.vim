@@ -1,25 +1,36 @@
 " Vim plugin for using Vim as manpager.
 " Maintainer: Enno Nagel <ennonagel+vim@gmail.com>
-" Last Change: 2020 Aug 05
+" Last Change: 2024 Jul 03
 
-command! -nargs=0 MANPAGER call s:ManPager() | delcommand MANPAGER
+if exists('g:loaded_manpager_plugin')
+  finish
+endif
+let g:loaded_manpager_plugin = 1
 
-function! s:ManPager()
-  set nocompatible
+" Set up the current buffer (likely read from stdin) as a manpage
+command MANPAGER call s:ManPager()
+
+function s:ManPager()
+  " global options, keep these to a minimum to avoid side effects
+  if &compatible
+    set nocompatible
+  endif
   if exists('+viminfofile')
     set viminfofile=NONE
   endif
-  set noswapfile 
+  syntax on
 
-  setlocal ft=man
-  runtime ftplugin/man.vim
-  setlocal buftype=nofile bufhidden=hide iskeyword+=: modifiable
+  " Ensure text width matches window width
+  setlocal foldcolumn& nofoldenable nonumber norelativenumber
+
+  " In case Vim was invoked with -M
+  setlocal modifiable
 
   " Emulate 'col -b'
-  silent! keepj keepp %s/\v(.)\b\ze\1?//ge
+  exe 'silent! keepj keepp %s/\v(.)\b\ze\1?//e' .. (&gdefault ? '' : 'g')
 
   " Remove ansi sequences
-  silent! keepj keepp %s/\v\e\[%(%(\d;)?\d{1,2})?[mK]//ge
+  exe 'silent! keepj keepp %s/\v\e\[%(%(\d;)?\d{1,2})?[mK]//e' .. (&gdefault ? '' : 'g')
 
   " Remove empty lines above the header
   call cursor(1, 1)
@@ -27,7 +38,14 @@ function! s:ManPager()
   if n > 1
     exe "1," . n-1 . "d"
   endif
-  setlocal nomodified readonly
 
-  syntax on
+  " Finished preprocessing the buffer, prevent any further modifications
+  setlocal nomodified nomodifiable
+
+  " Make this an unlisted, readonly scratch buffer
+  setlocal buftype=nofile noswapfile bufhidden=hide nobuflisted readonly
+
+  " Set filetype to man even if ftplugin is disabled
+  setlocal filetype=man
+  runtime ftplugin/man.vim
 endfunction

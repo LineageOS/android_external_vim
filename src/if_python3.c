@@ -45,6 +45,9 @@
 # undef F_BLANK
 #endif
 
+#ifdef HAVE_DUP
+# undef HAVE_DUP
+#endif
 #ifdef HAVE_STRFTIME
 # undef HAVE_STRFTIME
 #endif
@@ -66,6 +69,10 @@
 
 #define PY_SSIZE_T_CLEAN
 
+#ifdef Py_LIMITED_API
+# define USE_LIMITED_API // Using Python 3 limited ABI
+#endif
+
 #include <Python.h>
 
 #undef main // Defined in python.h - aargh
@@ -76,6 +83,12 @@
 # define CODEC_ERROR_HANDLER "surrogateescape"
 #else
 # define CODEC_ERROR_HANDLER NULL
+#endif
+
+// Suppress Python 3.11 depreciations to see useful warnings
+#ifdef __GNUC__
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
 // Python 3 does not support CObjects, always use Capsules
@@ -91,6 +104,9 @@
 #define PyString_FromString(repr) \
     PyUnicode_Decode(repr, STRLEN(repr), ENC_OPT, ERRORS_DECODE_ARG)
 #define PyString_FromFormat PyUnicode_FromFormat
+#ifdef PyUnicode_FromFormat
+# define Py_UNICODE_USE_UCS_FUNCTIONS
+#endif
 #ifndef PyInt_Check
 # define PyInt_Check(obj) PyLong_Check(obj)
 #endif
@@ -112,12 +128,23 @@ typedef PyObject PySliceObject_T;
 typedef PySliceObject PySliceObject_T;
 #endif
 
+#ifndef MSWIN
+# define HINSTANCE void *
+#endif
+#if defined(DYNAMIC_PYTHON3) || defined(MSWIN)
+static HINSTANCE hinstPy3 = 0; // Instance of python.dll
+#endif
+
 #if defined(DYNAMIC_PYTHON3) || defined(PROTO)
 
-# ifndef MSWIN
+# ifdef MSWIN
+#  define load_dll vimLoadLib
+#  define close_dll FreeLibrary
+#  define symbol_from_dll GetProcAddress
+#  define load_dll_error GetWin32Error
+# else
 #  include <dlfcn.h>
 #  define FARPROC void*
-#  define HINSTANCE void*
 #  if defined(PY_NO_RTLD_GLOBAL) && defined(PY3_NO_RTLD_GLOBAL)
 #   define load_dll(n) dlopen((n), RTLD_LAZY)
 #  else
@@ -126,11 +153,6 @@ typedef PySliceObject PySliceObject_T;
 #  define close_dll dlclose
 #  define symbol_from_dll dlsym
 #  define load_dll_error dlerror
-# else
-#  define load_dll vimLoadLib
-#  define close_dll FreeLibrary
-#  define symbol_from_dll GetProcAddress
-#  define load_dll_error GetWin32Error
 # endif
 /*
  * Wrapper defines
@@ -165,12 +187,14 @@ typedef PySliceObject PySliceObject_T;
 # define PyList_New py3_PyList_New
 # define PyList_SetItem py3_PyList_SetItem
 # define PyList_Size py3_PyList_Size
+# define PyTuple_New py3_PyTuple_New
+# define PyTuple_GetItem py3_PyTuple_GetItem
+# define PyTuple_SetItem py3_PyTuple_SetItem
+# define PyTuple_Size py3_PyTuple_Size
 # define PySequence_Check py3_PySequence_Check
 # define PySequence_Size py3_PySequence_Size
 # define PySequence_GetItem py3_PySequence_GetItem
 # define PySequence_Fast py3_PySequence_Fast
-# define PyTuple_Size py3_PyTuple_Size
-# define PyTuple_GetItem py3_PyTuple_GetItem
 # if PY_VERSION_HEX >= 0x030601f0
 #  define PySlice_AdjustIndices py3_PySlice_AdjustIndices
 #  define PySlice_Unpack py3_PySlice_Unpack
@@ -186,7 +210,9 @@ typedef PySliceObject PySliceObject_T;
 # ifndef PyMapping_Keys
 #  define PyMapping_Keys py3_PyMapping_Keys
 # endif
-# if PY_VERSION_HEX >= 0x030a00b2
+# if (defined(USE_LIMITED_API) && Py_LIMITED_API >= 0x03080000) || \
+       (!defined(USE_LIMITED_API) && PY_VERSION_HEX >= 0x03080000)
+#  undef PyIter_Check
 #  define PyIter_Check py3_PyIter_Check
 # endif
 # define PyIter_Next py3_PyIter_Next
@@ -195,15 +221,28 @@ typedef PySliceObject PySliceObject_T;
 # define PyObject_GetItem py3_PyObject_GetItem
 # define PyObject_IsTrue py3_PyObject_IsTrue
 # define PyModule_GetDict py3_PyModule_GetDict
-#undef PyRun_SimpleString
-# define PyRun_SimpleString py3_PyRun_SimpleString
-#undef PyRun_String
-# define PyRun_String py3_PyRun_String
+# if defined(USE_LIMITED_API) || PY_VERSION_HEX >= 0x03080000
+#  define Py_IncRef py3_Py_IncRef
+#  define Py_DecRef py3_Py_DecRef
+# endif
+# ifdef USE_LIMITED_API
+#  define Py_CompileString py3_Py_CompileString
+#  define PyEval_EvalCode py3_PyEval_EvalCode
+# else
+#  undef PyRun_SimpleString
+#  define PyRun_SimpleString py3_PyRun_SimpleString
+#  undef PyRun_String
+#  define PyRun_String py3_PyRun_String
+# endif
 # define PyObject_GetAttrString py3_PyObject_GetAttrString
 # define PyObject_HasAttrString py3_PyObject_HasAttrString
 # define PyObject_SetAttrString py3_PyObject_SetAttrString
 # define PyObject_CallFunctionObjArgs py3_PyObject_CallFunctionObjArgs
-# define _PyObject_CallFunction_SizeT py3__PyObject_CallFunction_SizeT
+# if PY_VERSION_HEX >= 0x030d0000
+#  define PyObject_CallFunction py3_PyObject_CallFunction
+# else
+#  define _PyObject_CallFunction_SizeT py3__PyObject_CallFunction_SizeT
+# endif
 # define PyObject_Call py3_PyObject_Call
 # define PyEval_GetLocals py3_PyEval_GetLocals
 # define PyEval_GetGlobals py3_PyEval_GetGlobals
@@ -211,10 +250,10 @@ typedef PySliceObject PySliceObject_T;
 # define PySys_GetObject py3_PySys_GetObject
 # define PySys_SetArgv py3_PySys_SetArgv
 # define PyType_Ready py3_PyType_Ready
-# if PY_VERSION_HEX >= 0x030900b0
+# if PY_VERSION_HEX >= 0x03040000
 #  define PyType_GetFlags py3_PyType_GetFlags
 # endif
-#undef Py_BuildValue
+# undef Py_BuildValue
 # define Py_BuildValue py3_Py_BuildValue
 # define Py_SetPythonHome py3_Py_SetPythonHome
 # define Py_Initialize py3_Py_Initialize
@@ -223,18 +262,30 @@ typedef PySliceObject PySliceObject_T;
 # define _Py_NoneStruct (*py3__Py_NoneStruct)
 # define _Py_FalseStruct (*py3__Py_FalseStruct)
 # define _Py_TrueStruct (*py3__Py_TrueStruct)
-# define _PyObject_NextNotImplemented (*py3__PyObject_NextNotImplemented)
+# if !defined(USE_LIMITED_API) && PY_VERSION_HEX < 0x030D0000
+// Private symbol that used to be required as part of PyIter_Check.
+#  define _PyObject_NextNotImplemented (*py3__PyObject_NextNotImplemented)
+# endif
 # define PyModule_AddObject py3_PyModule_AddObject
 # define PyImport_AppendInittab py3_PyImport_AppendInittab
 # define PyImport_AddModule py3_PyImport_AddModule
-# if PY_VERSION_HEX >= 0x030300f0
-#  undef _PyUnicode_AsString
-#  define _PyUnicode_AsString py3_PyUnicode_AsUTF8
+# ifdef USE_LIMITED_API
+#  if Py_LIMITED_API >= 0x030a0000
+#   define PyUnicode_AsUTF8AndSize py3_PyUnicode_AsUTF8AndSize
+#  endif
 # else
-#  define _PyUnicode_AsString py3__PyUnicode_AsString
+#  if PY_VERSION_HEX >= 0x030300f0
+#   define PyUnicode_AsUTF8AndSize py3_PyUnicode_AsUTF8AndSize
+#  else
+#   define _PyUnicode_AsString py3__PyUnicode_AsString
+#  endif
 # endif
+# undef PyUnicode_CompareWithASCIIString
+# define PyUnicode_CompareWithASCIIString py3_PyUnicode_CompareWithASCIIString
 # undef PyUnicode_AsEncodedString
 # define PyUnicode_AsEncodedString py3_PyUnicode_AsEncodedString
+# undef PyUnicode_AsUTF8String
+# define PyUnicode_AsUTF8String py3_PyUnicode_AsUTF8String
 # undef PyBytes_AsString
 # define PyBytes_AsString py3_PyBytes_AsString
 # ifndef PyBytes_AsStringAndSize
@@ -244,14 +295,13 @@ typedef PySliceObject PySliceObject_T;
 # define PyBytes_FromString py3_PyBytes_FromString
 # undef PyBytes_FromStringAndSize
 # define PyBytes_FromStringAndSize py3_PyBytes_FromStringAndSize
-# if defined(Py_DEBUG) || PY_VERSION_HEX >= 0x030900b0
-#  define _Py_Dealloc py3__Py_Dealloc
-# endif
 # define PyFloat_FromDouble py3_PyFloat_FromDouble
 # define PyFloat_AsDouble py3_PyFloat_AsDouble
 # define PyObject_GenericGetAttr py3_PyObject_GenericGetAttr
 # define PyType_Type (*py3_PyType_Type)
-# define PyStdPrinter_Type (*py3_PyStdPrinter_Type)
+# ifndef USE_LIMITED_API
+#  define PyStdPrinter_Type (*py3_PyStdPrinter_Type)
+# endif
 # define PySlice_Type (*py3_PySlice_Type)
 # define PyFloat_Type (*py3_PyFloat_Type)
 # define PyNumber_Check (*py3_PyNumber_Check)
@@ -279,21 +329,24 @@ typedef PySliceObject PySliceObject_T;
 # define PyType_GenericNew py3_PyType_GenericNew
 # undef PyUnicode_FromString
 # define PyUnicode_FromString py3_PyUnicode_FromString
-# ifndef PyUnicode_FromFormat
-#  define PyUnicode_FromFormat py3_PyUnicode_FromFormat
-# else
-#  define Py_UNICODE_USE_UCS_FUNCTIONS
+# ifdef Py_UNICODE_USE_UCS_FUNCTIONS
 #  ifdef Py_UNICODE_WIDE
 #   define PyUnicodeUCS4_FromFormat py3_PyUnicodeUCS4_FromFormat
 #  else
 #   define PyUnicodeUCS2_FromFormat py3_PyUnicodeUCS2_FromFormat
 #  endif
+# else
+#  define PyUnicode_FromFormat py3_PyUnicode_FromFormat
 # endif
 # undef PyUnicode_Decode
 # define PyUnicode_Decode py3_PyUnicode_Decode
 # define PyType_IsSubtype py3_PyType_IsSubtype
 # define PyCapsule_New py3_PyCapsule_New
 # define PyCapsule_GetPointer py3_PyCapsule_GetPointer
+# ifdef USE_LIMITED_API
+#  define PyType_GetSlot py3_PyType_GetSlot
+#  define PyType_FromSpec py3_PyType_FromSpec
+# endif
 
 # if defined(Py_DEBUG) && !defined(Py_DEBUG_NO_PYMALLOC)
 #  undef PyObject_NEW
@@ -320,11 +373,13 @@ static PyObject* (*py3_PySys_GetObject)(char *);
 static int (*py3_PyList_Append)(PyObject *, PyObject *);
 static int (*py3_PyList_Insert)(PyObject *, int, PyObject *);
 static Py_ssize_t (*py3_PyList_Size)(PyObject *);
+static PyObject* (*py3_PyTuple_New)(Py_ssize_t size);
+static int (*py3_PyTuple_SetItem)(PyObject *, Py_ssize_t, PyObject *);
+static Py_ssize_t (*py3_PyTuple_Size)(PyObject *);
 static int (*py3_PySequence_Check)(PyObject *);
 static Py_ssize_t (*py3_PySequence_Size)(PyObject *);
 static PyObject* (*py3_PySequence_GetItem)(PyObject *, Py_ssize_t);
 static PyObject* (*py3_PySequence_Fast)(PyObject *, const char *);
-static Py_ssize_t (*py3_PyTuple_Size)(PyObject *);
 static PyObject* (*py3_PyTuple_GetItem)(PyObject *, Py_ssize_t);
 static int (*py3_PyMapping_Check)(PyObject *);
 static PyObject* (*py3_PyMapping_Keys)(PyObject *);
@@ -342,16 +397,29 @@ static void (*py3_Py_Finalize)(void);
 static void (*py3_PyErr_SetString)(PyObject *, const char *);
 static void (*py3_PyErr_SetObject)(PyObject *, PyObject *);
 static int (*py3_PyErr_ExceptionMatches)(PyObject *);
+# if defined(USE_LIMITED_API) || PY_VERSION_HEX >= 0x03080000
+static void (*py3_Py_IncRef)(PyObject *);
+static void (*py3_Py_DecRef)(PyObject *);
+# endif
+# ifdef USE_LIMITED_API
+static PyObject* (*py3_Py_CompileString)(const char *, const char *, int);
+static PyObject* (*py3_PyEval_EvalCode)(PyObject *co, PyObject *globals, PyObject *locals);
+# else
 static int (*py3_PyRun_SimpleString)(char *);
 static PyObject* (*py3_PyRun_String)(char *, int, PyObject *, PyObject *);
+# endif
 static PyObject* (*py3_PyObject_GetAttrString)(PyObject *, const char *);
 static int (*py3_PyObject_HasAttrString)(PyObject *, const char *);
 static int (*py3_PyObject_SetAttrString)(PyObject *, const char *, PyObject *);
 static PyObject* (*py3_PyObject_CallFunctionObjArgs)(PyObject *, ...);
+# if PY_VERSION_HEX >= 0x030d0000
+static PyObject* (*py3_PyObject_CallFunction)(PyObject *, char *, ...);
+# else
 static PyObject* (*py3__PyObject_CallFunction_SizeT)(PyObject *, char *, ...);
+# endif
 static PyObject* (*py3_PyObject_Call)(PyObject *, PyObject *, PyObject *);
-static PyObject* (*py3_PyEval_GetGlobals)();
-static PyObject* (*py3_PyEval_GetLocals)();
+static PyObject* (*py3_PyEval_GetGlobals)(void);
+static PyObject* (*py3_PyEval_GetLocals)(void);
 static PyObject* (*py3_PyList_GetItem)(PyObject *, Py_ssize_t);
 static PyObject* (*py3_PyImport_ImportModule)(const char *);
 static PyObject* (*py3_PyImport_AddModule)(const char *);
@@ -363,7 +431,8 @@ static PyObject* (*py3_PyDict_GetItemString)(PyObject *, const char *);
 static int (*py3_PyDict_Next)(PyObject *, Py_ssize_t *, PyObject **, PyObject **);
 static PyObject* (*py3_PyLong_FromLong)(long);
 static PyObject* (*py3_PyDict_New)(void);
-# if PY_VERSION_HEX >= 0x030a00b2
+# if (defined(USE_LIMITED_API) && Py_LIMITED_API >= 0x03080000) || \
+       (!defined(USE_LIMITED_API) && PY_VERSION_HEX >= 0x03080000)
 static int (*py3_PyIter_Check)(PyObject *o);
 # endif
 static PyObject* (*py3_PyIter_Next)(PyObject *);
@@ -372,20 +441,20 @@ static PyObject* (*py3_PyObject_Repr)(PyObject *);
 static PyObject* (*py3_PyObject_GetItem)(PyObject *, PyObject *);
 static int (*py3_PyObject_IsTrue)(PyObject *);
 static PyObject* (*py3_Py_BuildValue)(char *, ...);
-# if PY_VERSION_HEX >= 0x030900b0
+# if PY_VERSION_HEX >= 0x03040000
 static int (*py3_PyType_GetFlags)(PyTypeObject *o);
 # endif
 static int (*py3_PyType_Ready)(PyTypeObject *type);
 static int (*py3_PyDict_SetItemString)(PyObject *dp, char *key, PyObject *item);
 static PyObject* (*py3_PyUnicode_FromString)(const char *u);
-# ifndef Py_UNICODE_USE_UCS_FUNCTIONS
-static PyObject* (*py3_PyUnicode_FromFormat)(const char *u, ...);
-# else
+# ifdef Py_UNICODE_USE_UCS_FUNCTIONS
 #  ifdef Py_UNICODE_WIDE
 static PyObject* (*py3_PyUnicodeUCS4_FromFormat)(const char *u, ...);
 #  else
 static PyObject* (*py3_PyUnicodeUCS2_FromFormat)(const char *u, ...);
 #  endif
+# else
+static PyObject* (*py3_PyUnicode_FromFormat)(const char *u, ...);
 # endif
 static PyObject* (*py3_PyUnicode_Decode)(const char *u, Py_ssize_t size,
 	const char *encoding, const char *errors);
@@ -396,32 +465,39 @@ static void(*py3_PyEval_RestoreThread)(PyThreadState *);
 static PyThreadState*(*py3_PyEval_SaveThread)(void);
 static int (*py3_PyArg_Parse)(PyObject *, char *, ...);
 static int (*py3_PyArg_ParseTuple)(PyObject *, char *, ...);
-static int (*py3_PyMem_Free)(void *);
+static void (*py3_PyMem_Free)(void *);
 static void* (*py3_PyMem_Malloc)(size_t);
 static int (*py3_Py_IsInitialized)(void);
 static void (*py3_PyErr_Clear)(void);
 static PyObject* (*py3_PyErr_Format)(PyObject *, const char *, ...);
 static void (*py3_PyErr_PrintEx)(int);
 static PyObject*(*py3__PyObject_Init)(PyObject *, PyTypeObject *);
+# if !defined(USE_LIMITED_API) && PY_VERSION_HEX < 0x030D0000
 static iternextfunc py3__PyObject_NextNotImplemented;
+# endif
 static PyObject* py3__Py_NoneStruct;
 static PyObject* py3__Py_FalseStruct;
 static PyObject* py3__Py_TrueStruct;
 static int (*py3_PyModule_AddObject)(PyObject *m, const char *name, PyObject *o);
 static int (*py3_PyImport_AppendInittab)(const char *name, PyObject* (*initfunc)(void));
-# if PY_VERSION_HEX >= 0x030300f0
-static char* (*py3_PyUnicode_AsUTF8)(PyObject *unicode);
+# ifdef USE_LIMITED_API
+#  if Py_LIMITED_API >= 0x030a0000
+static char* (*py3_PyUnicode_AsUTF8AndSize)(PyObject *unicode, Py_ssize_t *size);
+#  endif
 # else
+#  if PY_VERSION_HEX >= 0x030300f0
+static char* (*py3_PyUnicode_AsUTF8AndSize)(PyObject *unicode, Py_ssize_t *size);
+#  else
 static char* (*py3__PyUnicode_AsString)(PyObject *unicode);
+#  endif
 # endif
+static int (*py3_PyUnicode_CompareWithASCIIString)(PyObject *unicode, const char* string);
 static PyObject* (*py3_PyUnicode_AsEncodedString)(PyObject *unicode, const char* encoding, const char* errors);
+static PyObject* (*py3_PyUnicode_AsUTF8String)(PyObject *unicode);
 static char* (*py3_PyBytes_AsString)(PyObject *bytes);
 static int (*py3_PyBytes_AsStringAndSize)(PyObject *bytes, char **buffer, Py_ssize_t *length);
 static PyObject* (*py3_PyBytes_FromString)(char *str);
 static PyObject* (*py3_PyBytes_FromStringAndSize)(char *str, Py_ssize_t length);
-# if defined(Py_DEBUG) || PY_VERSION_HEX >= 0x030900b0
-static void (*py3__Py_Dealloc)(PyObject *obj);
-# endif
 # if PY_VERSION_HEX >= 0x030900b0
 static PyObject* (*py3__PyObject_New)(PyTypeObject *);
 # endif
@@ -431,7 +507,9 @@ static PyObject* (*py3_PyObject_GenericGetAttr)(PyObject *obj, PyObject *name);
 static PyObject* (*py3_PyType_GenericAlloc)(PyTypeObject *type, Py_ssize_t nitems);
 static PyObject* (*py3_PyType_GenericNew)(PyTypeObject *type, PyObject *args, PyObject *kwds);
 static PyTypeObject* py3_PyType_Type;
+# ifndef USE_LIMITED_API
 static PyTypeObject* py3_PyStdPrinter_Type;
+# endif
 static PyTypeObject* py3_PySlice_Type;
 static PyTypeObject* py3_PyFloat_Type;
 static PyTypeObject* py3_PyBool_Type;
@@ -458,8 +536,10 @@ static PyObject*(*py3__PyObject_GC_New)(PyTypeObject *);
 static void(*py3_PyObject_GC_Del)(void *);
 static void(*py3_PyObject_GC_UnTrack)(void *);
 static int (*py3_PyType_IsSubtype)(PyTypeObject *, PyTypeObject *);
-
-static HINSTANCE hinstPy3 = 0; // Instance of python.dll
+# ifdef USE_LIMITED_API
+static void* (*py3_PyType_GetSlot)(PyTypeObject *, int);
+static PyObject* (*py3_PyType_FromSpec)(PyType_Spec *);
+# endif
 
 // Imported exception objects
 static PyObject *p3imp_PyExc_AttributeError;
@@ -509,12 +589,14 @@ static struct
     {"PyList_Append", (PYTHON_PROC*)&py3_PyList_Append},
     {"PyList_Insert", (PYTHON_PROC*)&py3_PyList_Insert},
     {"PyList_Size", (PYTHON_PROC*)&py3_PyList_Size},
+    {"PyTuple_New", (PYTHON_PROC*)&py3_PyTuple_New},
+    {"PyTuple_GetItem", (PYTHON_PROC*)&py3_PyTuple_GetItem},
+    {"PyTuple_SetItem", (PYTHON_PROC*)&py3_PyTuple_SetItem},
+    {"PyTuple_Size", (PYTHON_PROC*)&py3_PyTuple_Size},
     {"PySequence_Check", (PYTHON_PROC*)&py3_PySequence_Check},
     {"PySequence_Size", (PYTHON_PROC*)&py3_PySequence_Size},
     {"PySequence_GetItem", (PYTHON_PROC*)&py3_PySequence_GetItem},
     {"PySequence_Fast", (PYTHON_PROC*)&py3_PySequence_Fast},
-    {"PyTuple_Size", (PYTHON_PROC*)&py3_PyTuple_Size},
-    {"PyTuple_GetItem", (PYTHON_PROC*)&py3_PyTuple_GetItem},
 # if PY_VERSION_HEX >= 0x030601f0
     {"PySlice_AdjustIndices", (PYTHON_PROC*)&py3_PySlice_AdjustIndices},
     {"PySlice_Unpack", (PYTHON_PROC*)&py3_PySlice_Unpack},
@@ -525,13 +607,26 @@ static struct
     {"PyErr_SetString", (PYTHON_PROC*)&py3_PyErr_SetString},
     {"PyErr_SetObject", (PYTHON_PROC*)&py3_PyErr_SetObject},
     {"PyErr_ExceptionMatches", (PYTHON_PROC*)&py3_PyErr_ExceptionMatches},
+# if defined(USE_LIMITED_API) || PY_VERSION_HEX >= 0x03080000
+    {"Py_IncRef", (PYTHON_PROC*)&py3_Py_IncRef},
+    {"Py_DecRef", (PYTHON_PROC*)&py3_Py_DecRef},
+# endif
+# ifdef USE_LIMITED_API
+    {"Py_CompileString", (PYTHON_PROC*)&py3_Py_CompileString},
+    {"PyEval_EvalCode", (PYTHON_PROC*)&PyEval_EvalCode},
+# else
     {"PyRun_SimpleString", (PYTHON_PROC*)&py3_PyRun_SimpleString},
     {"PyRun_String", (PYTHON_PROC*)&py3_PyRun_String},
+# endif
     {"PyObject_GetAttrString", (PYTHON_PROC*)&py3_PyObject_GetAttrString},
     {"PyObject_HasAttrString", (PYTHON_PROC*)&py3_PyObject_HasAttrString},
     {"PyObject_SetAttrString", (PYTHON_PROC*)&py3_PyObject_SetAttrString},
     {"PyObject_CallFunctionObjArgs", (PYTHON_PROC*)&py3_PyObject_CallFunctionObjArgs},
+# if PY_VERSION_HEX >= 0x030d0000
+    {"PyObject_CallFunction", (PYTHON_PROC*)&py3_PyObject_CallFunction},
+# else
     {"_PyObject_CallFunction_SizeT", (PYTHON_PROC*)&py3__PyObject_CallFunction_SizeT},
+# endif
     {"PyObject_Call", (PYTHON_PROC*)&py3_PyObject_Call},
     {"PyEval_GetGlobals", (PYTHON_PROC*)&py3_PyEval_GetGlobals},
     {"PyEval_GetLocals", (PYTHON_PROC*)&py3_PyEval_GetLocals},
@@ -546,7 +641,8 @@ static struct
     {"PyDict_Next", (PYTHON_PROC*)&py3_PyDict_Next},
     {"PyMapping_Check", (PYTHON_PROC*)&py3_PyMapping_Check},
     {"PyMapping_Keys", (PYTHON_PROC*)&py3_PyMapping_Keys},
-# if PY_VERSION_HEX >= 0x030a00b2
+# if (defined(USE_LIMITED_API) && Py_LIMITED_API >= 0x03080000) || \
+       (!defined(USE_LIMITED_API) && PY_VERSION_HEX >= 0x03080000)
     {"PyIter_Check", (PYTHON_PROC*)&py3_PyIter_Check},
 # endif
     {"PyIter_Next", (PYTHON_PROC*)&py3_PyIter_Next},
@@ -556,7 +652,7 @@ static struct
     {"PyObject_IsTrue", (PYTHON_PROC*)&py3_PyObject_IsTrue},
     {"PyLong_FromLong", (PYTHON_PROC*)&py3_PyLong_FromLong},
     {"PyDict_New", (PYTHON_PROC*)&py3_PyDict_New},
-# if PY_VERSION_HEX >= 0x030900b0
+# if PY_VERSION_HEX >= 0x03040000
     {"PyType_GetFlags", (PYTHON_PROC*)&py3_PyType_GetFlags},
 # endif
     {"PyType_Ready", (PYTHON_PROC*)&py3_PyType_Ready},
@@ -568,7 +664,9 @@ static struct
     {"PyEval_SaveThread", (PYTHON_PROC*)&py3_PyEval_SaveThread},
     {"_PyArg_Parse_SizeT", (PYTHON_PROC*)&py3_PyArg_Parse},
     {"Py_IsInitialized", (PYTHON_PROC*)&py3_Py_IsInitialized},
+# if !defined(USE_LIMITED_API) && PY_VERSION_HEX < 0x030D0000
     {"_PyObject_NextNotImplemented", (PYTHON_PROC*)&py3__PyObject_NextNotImplemented},
+# endif
     {"_Py_NoneStruct", (PYTHON_PROC*)&py3__Py_NoneStruct},
     {"_Py_FalseStruct", (PYTHON_PROC*)&py3__Py_FalseStruct},
     {"_Py_TrueStruct", (PYTHON_PROC*)&py3__Py_TrueStruct},
@@ -578,27 +676,32 @@ static struct
     {"PyObject_Init", (PYTHON_PROC*)&py3__PyObject_Init},
     {"PyModule_AddObject", (PYTHON_PROC*)&py3_PyModule_AddObject},
     {"PyImport_AppendInittab", (PYTHON_PROC*)&py3_PyImport_AppendInittab},
-# if PY_VERSION_HEX >= 0x030300f0
-    {"PyUnicode_AsUTF8", (PYTHON_PROC*)&py3_PyUnicode_AsUTF8},
+# ifdef USE_LIMITED_API
+#  if Py_LIMITED_API >= 0x030a0000
+    {"PyUnicode_AsUTF8AndSize", (PYTHON_PROC*)&py3_PyUnicode_AsUTF8AndSize},
+#  endif
 # else
+#  if PY_VERSION_HEX >= 0x030300f0
+    {"PyUnicode_AsUTF8AndSize", (PYTHON_PROC*)&py3_PyUnicode_AsUTF8AndSize},
+#  else
     {"_PyUnicode_AsString", (PYTHON_PROC*)&py3__PyUnicode_AsString},
+#  endif
 # endif
-# ifndef Py_UNICODE_USE_UCS_FUNCTIONS
-    {"PyUnicode_FromFormat", (PYTHON_PROC*)&py3_PyUnicode_FromFormat},
-# else
+    {"PyUnicode_CompareWithASCIIString", (PYTHON_PROC*)&py3_PyUnicode_CompareWithASCIIString},
+    {"PyUnicode_AsUTF8String", (PYTHON_PROC*)&py3_PyUnicode_AsUTF8String},
+# ifdef Py_UNICODE_USE_UCS_FUNCTIONS
 #  ifdef Py_UNICODE_WIDE
     {"PyUnicodeUCS4_FromFormat", (PYTHON_PROC*)&py3_PyUnicodeUCS4_FromFormat},
 #  else
     {"PyUnicodeUCS2_FromFormat", (PYTHON_PROC*)&py3_PyUnicodeUCS2_FromFormat},
 #  endif
+# else
+    {"PyUnicode_FromFormat", (PYTHON_PROC*)&py3_PyUnicode_FromFormat},
 # endif
     {"PyBytes_AsString", (PYTHON_PROC*)&py3_PyBytes_AsString},
     {"PyBytes_AsStringAndSize", (PYTHON_PROC*)&py3_PyBytes_AsStringAndSize},
     {"PyBytes_FromString", (PYTHON_PROC*)&py3_PyBytes_FromString},
     {"PyBytes_FromStringAndSize", (PYTHON_PROC*)&py3_PyBytes_FromStringAndSize},
-# if defined(Py_DEBUG) || PY_VERSION_HEX >= 0x030900b0
-    {"_Py_Dealloc", (PYTHON_PROC*)&py3__Py_Dealloc},
-# endif
 # if PY_VERSION_HEX >= 0x030900b0
     {"_PyObject_New", (PYTHON_PROC*)&py3__PyObject_New},
 # endif
@@ -608,7 +711,9 @@ static struct
     {"PyType_GenericAlloc", (PYTHON_PROC*)&py3_PyType_GenericAlloc},
     {"PyType_GenericNew", (PYTHON_PROC*)&py3_PyType_GenericNew},
     {"PyType_Type", (PYTHON_PROC*)&py3_PyType_Type},
+# ifndef USE_LIMITED_API
     {"PyStdPrinter_Type", (PYTHON_PROC*)&py3_PyStdPrinter_Type},
+# endif
     {"PySlice_Type", (PYTHON_PROC*)&py3_PySlice_Type},
     {"PyFloat_Type", (PYTHON_PROC*)&py3_PyFloat_Type},
     {"PyBool_Type", (PYTHON_PROC*)&py3_PyBool_Type},
@@ -635,42 +740,33 @@ static struct
     {"PyType_IsSubtype", (PYTHON_PROC*)&py3_PyType_IsSubtype},
     {"PyCapsule_New", (PYTHON_PROC*)&py3_PyCapsule_New},
     {"PyCapsule_GetPointer", (PYTHON_PROC*)&py3_PyCapsule_GetPointer},
+# ifdef USE_LIMITED_API
+#  if PY_VERSION_HEX >= 0x03040000
+    {"PyType_GetSlot", (PYTHON_PROC*)&py3_PyType_GetSlot},
+#  endif
+    {"PyType_FromSpec", (PYTHON_PROC*)&py3_PyType_FromSpec},
+# endif
     {"", NULL},
 };
 
-# if PY_VERSION_HEX >= 0x030800f0
-    static inline void
-py3__Py_DECREF(const char *filename UNUSED, int lineno UNUSED, PyObject *op)
-{
-    if (--op->ob_refcnt != 0)
-    {
-#  ifdef Py_REF_DEBUG
-	if (op->ob_refcnt < 0)
-	{
-	    _Py_NegativeRefcount(filename, lineno, op);
-	}
-#  endif
-    }
-    else
-    {
-	_Py_Dealloc(op);
-    }
-}
+# if defined(USE_LIMITED_API) || PY_VERSION_HEX >= 0x03080000
+// Use stable versions of inc/dec ref. Note that these always null-check and
+// therefore there's no difference between XINCREF and INCREF.
+//
+// For 3.8 or above, we also use this version even if not using limited API.
+// The Py_DECREF macros in 3.8+ include references to internal functions which
+// cause link errors when building Vim. The stable versions are exposed as API
+// functions and don't have these problems (albeit slightly slower as they
+// require function calls rather than an inlined macro).
+#  undef Py_INCREF
+#  define Py_INCREF(obj) Py_IncRef((PyObject *)obj)
+#  undef Py_XINCREF
+#  define Py_XINCREF(obj) Py_IncRef((PyObject *)obj)
 
 #  undef Py_DECREF
-#  define Py_DECREF(op) py3__Py_DECREF(__FILE__, __LINE__, _PyObject_CAST(op))
-
-    static inline void
-py3__Py_XDECREF(PyObject *op)
-{
-    if (op != NULL)
-    {
-	Py_DECREF(op);
-    }
-}
-
+#  define Py_DECREF(obj) Py_DecRef((PyObject *)obj)
 #  undef Py_XDECREF
-#  define Py_XDECREF(op) py3__Py_XDECREF(_PyObject_CAST(op))
+#  define Py_XDECREF(obj) Py_DecRef((PyObject *)obj)
 # endif
 
 # if PY_VERSION_HEX >= 0x030900b0
@@ -688,7 +784,23 @@ py3__PyObject_TypeCheck(PyObject *ob, PyTypeObject *type)
 {
     return Py_IS_TYPE(ob, type) || PyType_IsSubtype(Py_TYPE(ob), type);
 }
-#  define _PyObject_TypeCheck(o,t) py3__PyObject_TypeCheck(o,t)
+#  if PY_VERSION_HEX >= 0x030b00b3
+#   undef PyObject_TypeCheck
+#   define PyObject_TypeCheck(o,t) py3__PyObject_TypeCheck(o,t)
+#  else
+#   define _PyObject_TypeCheck(o,t) py3__PyObject_TypeCheck(o,t)
+#  endif
+# endif
+
+# if !defined(USE_LIMITED_API) && PY_VERSION_HEX >= 0x030c00b0
+// PyTuple_GET_SIZE/PyList_GET_SIZE are inlined functions that use Py_SIZE(),
+// which started to introduce linkage dependency from Python 3.12. When we
+// build Python in dynamic mode, we don't link against it in build time, and
+// this would fail to build. Just use the non-inlined version instead.
+#  undef PyTuple_GET_SIZE
+#  define PyTuple_GET_SIZE(o) PyTuple_Size(o)
+#  undef PyList_GET_SIZE
+#  define PyList_GET_SIZE(o) PyList_Size(o)
 # endif
 
 # ifdef MSWIN
@@ -696,17 +808,16 @@ py3__PyObject_TypeCheck(PyObject *ob, PyTypeObject *type)
  * Look up the library "libname" using the InstallPath registry key.
  * Return NULL when failed.  Return an allocated string when successful.
  */
-    static char *
+    static WCHAR *
 py3_get_system_libname(const char *libname)
 {
+    const WCHAR	*pythoncore = L"Software\\Python\\PythonCore";
     const char	*cp = libname;
-    char	subkey[128];
+    WCHAR	subkey[128];
     HKEY	hKey;
-    char	installpath[MAXPATHL];
-    LONG	len = sizeof(installpath);
-    LSTATUS	rc;
-    size_t	sysliblen;
-    char	*syslibname;
+    int		i;
+    DWORD	j, len;
+    LSTATUS	ret;
 
     while (*cp != '\0')
     {
@@ -718,35 +829,96 @@ py3_get_system_libname(const char *libname)
 	}
 	++cp;
     }
-    vim_snprintf(subkey, sizeof(subkey),
-#  ifdef _WIN64
-		 "Software\\Python\\PythonCore\\%d.%d\\InstallPath",
-#  else
-		 "Software\\Python\\PythonCore\\%d.%d-32\\InstallPath",
+
+    WCHAR   keyfound[32];
+    HKEY    hKeyTop[] = {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    HKEY    hKeyFound = NULL;
+#  ifdef USE_LIMITED_API
+    long    maxminor = -1;
 #  endif
-		 PY_MAJOR_VERSION, PY_MINOR_VERSION);
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subkey, 0, KEY_QUERY_VALUE, &hKey)
-							      != ERROR_SUCCESS)
+    for (i = 0; i < ARRAY_LENGTH(hKeyTop); i++)
+    {
+	long	major, minor;
+
+	ret = RegOpenKeyExW(hKeyTop[i], pythoncore, 0, KEY_READ, &hKey);
+	if (ret != ERROR_SUCCESS)
+	    continue;
+	for (j = 0;; j++)
+	{
+	    WCHAR   keyname[32];
+	    WCHAR   *wp;
+
+	    len = ARRAY_LENGTH(keyname);
+	    ret = RegEnumKeyExW(hKey, j, keyname, &len,
+						    NULL, NULL, NULL, NULL);
+	    if (ret == ERROR_NO_MORE_ITEMS)
+		break;
+
+	    major = wcstol(keyname, &wp, 10);
+	    if (*wp != L'.')
+		continue;
+	    minor = wcstol(wp + 1, &wp, 10);
+#  ifdef _WIN64
+	    if (*wp != L'\0')
+		continue;
+#  else
+	    if (wcscmp(wp, L"-32") != 0)
+		continue;
+#  endif
+
+	    if (major != PY_MAJOR_VERSION)
+		continue;
+#  ifdef USE_LIMITED_API
+	    // Search the latest version.
+	    if ((minor > maxminor)
+		    && (minor >= ((Py_LIMITED_API >> 16) & 0xff)))
+	    {
+		maxminor = minor;
+		wcscpy(keyfound, keyname);
+		hKeyFound = hKeyTop[i];
+	    }
+#  else
+	    // Check if it matches with the compiled version.
+	    if (minor == PY_MINOR_VERSION)
+	    {
+		wcscpy(keyfound, keyname);
+		hKeyFound = hKeyTop[i];
+		break;
+	    }
+#  endif
+	}
+	RegCloseKey(hKey);
+#  ifdef USE_LIMITED_API
+	if (hKeyFound != NULL)
+	    break;
+#  endif
+    }
+    if (hKeyFound == NULL)
 	return NULL;
-    rc = RegQueryValueA(hKey, NULL, installpath, &len);
-    RegCloseKey(hKey);
-    if (ERROR_SUCCESS != rc)
+
+    swprintf(subkey, ARRAY_LENGTH(subkey), L"%ls\\%ls\\InstallPath",
+							pythoncore, keyfound);
+    ret = RegGetValueW(hKeyFound, subkey, NULL, RRF_RT_REG_SZ,
+							    NULL, NULL, &len);
+    if (ret != ERROR_MORE_DATA && ret != ERROR_SUCCESS)
 	return NULL;
-    cp = installpath + len;
-    // Just in case registry value contains null terminators.
-    while (cp > installpath && *(cp-1) == '\0')
-	--cp;
+    size_t len2 = len / sizeof(WCHAR) + 1 + strlen(libname);
+    WCHAR *path = alloc(len2 * sizeof(WCHAR));
+    if (path == NULL)
+	return NULL;
+    ret = RegGetValueW(hKeyFound, subkey, NULL, RRF_RT_REG_SZ,
+							    NULL, path, &len);
+    if (ret != ERROR_SUCCESS)
+    {
+	vim_free(path);
+	return NULL;
+    }
     // Remove trailing path separators.
-    while (cp > installpath && (*(cp-1) == '\\' || *(cp-1) == '/'))
-	--cp;
-    // Ignore if InstallPath is effectively empty.
-    if (cp <= installpath)
-	return NULL;
-    sysliblen = (cp - installpath) + 1 + STRLEN(libname) + 1;
-    syslibname = alloc(sysliblen);
-    vim_snprintf(syslibname, sysliblen, "%.*s\\%s",
-				(int)(cp - installpath), installpath, libname);
-    return syslibname;
+    size_t len3 = wcslen(path);
+    if ((len3 > 0) && (path[len3 - 1] == L'/' || path[len3 - 1] == L'\\'))
+	--len3;
+    swprintf(path + len3, len2 - len3, L"\\%hs", libname);
+    return path;
 }
 # endif
 
@@ -784,11 +956,13 @@ py3_runtime_link_init(char *libname, int verbose)
     if (!hinstPy3)
     {
 	// Attempt to use the path from InstallPath as stored in the registry.
-	char *syslibname = py3_get_system_libname(libname);
+	WCHAR *syslibname = py3_get_system_libname(libname);
 
 	if (syslibname != NULL)
 	{
-	    hinstPy3 = load_dll(syslibname);
+	    hinstPy3 = LoadLibraryExW(syslibname, NULL,
+		    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+		    LOAD_LIBRARY_SEARCH_SYSTEM32);
 	    vim_free(syslibname);
 	}
     }
@@ -898,7 +1072,12 @@ static int py3initialised = 0;
 #define PYINITIALISED py3initialised
 static int python_end_called = FALSE;
 
-#define DESTRUCTOR_FINISH(self) Py_TYPE(self)->tp_free((PyObject*)self)
+#ifdef USE_LIMITED_API
+# define DESTRUCTOR_FINISH(self) \
+    ((freefunc)PyType_GetSlot(Py_TYPE((PyObject*)self), Py_tp_free))((PyObject*)self)
+#else
+# define DESTRUCTOR_FINISH(self) Py_TYPE(self)->tp_free((PyObject*)self)
+#endif
 
 #define WIN_PYTHON_REF(win) win->w_python3_ref
 #define BUF_PYTHON_REF(buf) buf->b_python3_ref
@@ -940,6 +1119,8 @@ static PyObject *DictionaryGetattro(PyObject *, PyObject *);
 static int DictionarySetattro(PyObject *, PyObject *, PyObject *);
 static PyObject *ListGetattro(PyObject *, PyObject *);
 static int ListSetattro(PyObject *, PyObject *, PyObject *);
+static PyObject *TupleGetattro(PyObject *, PyObject *);
+static int TupleSetattro(PyObject *, PyObject *, PyObject *);
 static PyObject *FunctionGetattro(PyObject *, PyObject *);
 
 static struct PyModuleDef vimmodule;
@@ -951,11 +1132,51 @@ static struct PyModuleDef vimmodule;
  */
 #include "if_py_both.h"
 
+#ifdef USE_LIMITED_API
+# if Py_LIMITED_API >= 0x030A0000
+#  define PY_UNICODE_GET_UTF8_CHARS(obj) PyUnicode_AsUTF8AndSize(obj, NULL)
+# else
+// Python limited API before 3.10 lack easy ways to query the raw UTF-8 chars.
+// We need to first convert the string to bytes, and then extract the chars.
+// This function is only used for attribute string comparisons, which have
+// known short length. As such, just allocate a short static buffer to hold
+// the characters instead of having to allocate/deallcoate it.
+//
+// An alternative would be to convert all attribute string comparisons to use
+// PyUnicode_CompareWithASCIIString to skip having to extract the chars.
+static char py3_unicode_utf8_chars[20];
+static char* PY_UNICODE_GET_UTF8_CHARS(PyObject* str)
+{
+    py3_unicode_utf8_chars[0] = '\0';
+    PyObject* bytes = PyUnicode_AsUTF8String(str);
+    if (bytes)
+    {
+	char *chars;
+	Py_ssize_t len;
+	if (PyBytes_AsStringAndSize(bytes, &chars, &len) != -1)
+	{
+	    if (len < (Py_ssize_t)sizeof(py3_unicode_utf8_chars))
+		// PyBytes_AsStringAndSize guarantees null-termination
+		memcpy(py3_unicode_utf8_chars, chars, len + 1);
+	}
+	Py_DECREF(bytes);
+    }
+    return py3_unicode_utf8_chars;
+}
+# endif
+#else	// !USE_LIMITED_API
+# if PY_VERSION_HEX >= 0x030300f0
+#  define PY_UNICODE_GET_UTF8_CHARS(obj) PyUnicode_AsUTF8AndSize(obj, NULL)
+# else
+#  define PY_UNICODE_GET_UTF8_CHARS _PyUnicode_AsString
+# endif
+#endif
+
 // NOTE: Must always be used at the start of a block, since it declares "name".
 #define GET_ATTR_STRING(name, nameobj) \
     char	*name = ""; \
     if (PyUnicode_Check(nameobj)) \
-	name = (char *)_PyUnicode_AsString(nameobj)
+	name = (char *)PY_UNICODE_GET_UTF8_CHARS(nameobj)
 
 #define PY3OBJ_DELETED(obj) (obj->ob_base.ob_refcnt<=0)
 
@@ -984,6 +1205,10 @@ python3_end(void)
 #endif
     if (Py_IsInitialized())
     {
+#ifdef USE_LIMITED_API
+	shutdown_types();
+#endif
+
 	// acquire lock before finalizing
 	PyGILState_Ensure();
 
@@ -1032,13 +1257,8 @@ reset_stdin(void)
 {
     FILE *(*py__acrt_iob_func)(unsigned) = NULL;
     FILE *(*pyfreopen)(const char *, const char *, FILE *) = NULL;
-    HINSTANCE hinst;
+    HINSTANCE hinst = get_forwarded_dll(hinstPy3);
 
-# ifdef DYNAMIC_PYTHON3
-    hinst = hinstPy3;
-# else
-    hinst = GetModuleHandle(PYTHON3_DLL);
-# endif
     if (hinst == NULL || is_stdin_readable())
 	return;
 
@@ -1063,6 +1283,57 @@ reset_stdin(void)
 # define reset_stdin()
 #endif
 
+// Python 3.2 or later will abort inside Py_Initialize() when mandatory
+// modules cannot be loaded (e.g. 'pythonthreehome' is wrongly set.).
+// Install a hook to python dll's exit() and recover from it.
+#if defined(MSWIN) && (PY_VERSION_HEX >= 0x030200f0)
+# define HOOK_EXIT
+# include <setjmp.h>
+
+static jmp_buf exit_hook_jump_buf;
+static void *orig_exit = NULL;
+
+/*
+ * Function that replaces exit() while calling Py_Initialize().
+ */
+    static void
+hooked_exit(int ret)
+{
+    // Recover from exit.
+    longjmp(exit_hook_jump_buf, 1);
+}
+
+/*
+ * Install a hook to python dll's exit().
+ */
+    static void
+hook_py_exit(void)
+{
+    HINSTANCE hinst = get_forwarded_dll(hinstPy3);
+
+    if (hinst == NULL || orig_exit != NULL)
+	return;
+
+    orig_exit = hook_dll_import_func(hinst, "exit", (void *)hooked_exit);
+}
+
+/*
+ * Remove the hook installed by hook_py_exit().
+ */
+    static void
+restore_py_exit(void)
+{
+    HINSTANCE hinst = hinstPy3;
+
+    if (hinst == NULL)
+	return;
+
+    if (orig_exit != NULL)
+	hook_dll_import_func(hinst, "exit", orig_exit);
+    orig_exit = NULL;
+}
+#endif
+
     static int
 Python3_Init(void)
 {
@@ -1075,6 +1346,11 @@ Python3_Init(void)
 	    goto fail;
 	}
 #endif
+	// Python 3.13 introduced a really useful feature: colorized exceptions.
+	// This is great if you're reading them from the terminal, but useless
+	// and broken everywhere else (such as in log files, or text editors).
+	// Opt out, forcefully.
+	vim_setenv((char_u*)"PYTHON_COLORS", (char_u*)"0");
 
 	init_structs();
 
@@ -1095,8 +1371,29 @@ Python3_Init(void)
 
 	PyImport_AppendInittab("vim", Py3Init_vim);
 
+#if !defined(DYNAMIC_PYTHON3) && defined(MSWIN)
+	hinstPy3 = GetModuleHandle(PYTHON3_DLL);
+#endif
 	reset_stdin();
+
+#ifdef HOOK_EXIT
+	// Catch exit() called in Py_Initialize().
+	hook_py_exit();
+	if (setjmp(exit_hook_jump_buf) == 0)
+	{
+	    Py_Initialize();
+	    restore_py_exit();
+	}
+	else
+	{
+	    // exit() was called in Py_Initialize().
+	    restore_py_exit();
+	    emsg(_(e_critical_error_in_python3_initialization_check_your_installation));
+	    goto fail;
+	}
+#else
 	Py_Initialize();
+#endif
 
 #if PY_VERSION_HEX < 0x03090000
 	// Initialise threads.  This is deprecated since Python 3.9.
@@ -1147,7 +1444,11 @@ fail:
  * External interface
  */
     static void
-DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
+DoPyCommand(const char *cmd,
+	    dict_T* locals,
+	    rangeinitializer init_range,
+	    runner run,
+	    void *arg)
 {
 #if defined(HAVE_LOCALE_H) || defined(X_LOCALE)
     char		*saved_locale;
@@ -1188,7 +1489,7 @@ DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
     cmdbytes = PyUnicode_AsEncodedString(cmdstr, "utf-8", ERRORS_ENCODE_ARG);
     Py_XDECREF(cmdstr);
 
-    run(PyBytes_AsString(cmdbytes), arg, &pygilstate);
+    run(PyBytes_AsString(cmdbytes), locals, arg, &pygilstate);
     Py_XDECREF(cmdbytes);
 
     PyGILState_Release(pygilstate);
@@ -1223,7 +1524,8 @@ ex_py3(exarg_T *eap)
 	    p_pyx = 3;
 
 	DoPyCommand(script == NULL ? (char *) eap->arg : (char *) script,
-		(rangeinitializer) init_range_cmd,
+		NULL,
+		init_range_cmd,
 		(runner) run_cmd,
 		(void *) eap);
     }
@@ -1289,7 +1591,8 @@ ex_py3file(exarg_T *eap)
 
     // Execute the file
     DoPyCommand(buffer,
-	    (rangeinitializer) init_range_cmd,
+	    NULL,
+	    init_range_cmd,
 	    (runner) run_cmd,
 	    (void *) eap);
 }
@@ -1301,7 +1604,8 @@ ex_py3do(exarg_T *eap)
 	p_pyx = 3;
 
     DoPyCommand((char *)eap->arg,
-	    (rangeinitializer)init_range_cmd,
+	    NULL,
+	    init_range_cmd,
 	    (runner)run_do,
 	    (void *)eap);
 }
@@ -1331,7 +1635,7 @@ OutputSetattro(PyObject *self, PyObject *nameobj, PyObject *val)
 {
     GET_ATTR_STRING(name, nameobj);
 
-    return OutputSetattr((OutputObject *)(self), name, val);
+    return OutputSetattr(self, name, val);
 }
 
 ///////////////////////////////////////////////////////
@@ -1409,7 +1713,7 @@ BufferSetattro(PyObject *self, PyObject *nameobj, PyObject *val)
 {
     GET_ATTR_STRING(name, nameobj);
 
-    return BufferSetattr((BufferObject *)(self), name, val);
+    return BufferSetattr(self, name, val);
 }
 
 //////////////////
@@ -1421,7 +1725,8 @@ BufferSubscript(PyObject *self, PyObject* idx)
     {
 	long _idx = PyLong_AsLong(idx);
 	return BufferItem((BufferObject *)(self), _idx);
-    } else if (PySlice_Check(idx))
+    }
+    else if (PySlice_Check(idx))
     {
 	Py_ssize_t start, stop, step, slicelen;
 
@@ -1455,7 +1760,8 @@ BufferAsSubscript(PyObject *self, PyObject* idx, PyObject* val)
 	return RBAsItem((BufferObject *)(self), n, val, 1,
 		    (Py_ssize_t)((BufferObject *)(self))->buf->b_ml.ml_line_count,
 		    NULL);
-    } else if (PySlice_Check(idx))
+    }
+    else if (PySlice_Check(idx))
     {
 	Py_ssize_t start, stop, step, slicelen;
 
@@ -1539,7 +1845,8 @@ RangeSubscript(PyObject *self, PyObject* idx)
     {
 	long _idx = PyLong_AsLong(idx);
 	return RangeItem((RangeObject *)(self), _idx);
-    } else if (PySlice_Check(idx))
+    }
+    else if (PySlice_Check(idx))
     {
 	Py_ssize_t start, stop, step, slicelen;
 
@@ -1632,7 +1939,7 @@ WindowSetattro(PyObject *self, PyObject *nameobj, PyObject *val)
 {
     GET_ATTR_STRING(name, nameobj);
 
-    return WindowSetattr((WindowObject *)(self), name, val);
+    return WindowSetattr(self, name, val);
 }
 
 // Tab page list object - Definitions
@@ -1706,7 +2013,7 @@ DictionaryGetattro(PyObject *self, PyObject *nameobj)
 DictionarySetattro(PyObject *self, PyObject *nameobj, PyObject *val)
 {
     GET_ATTR_STRING(name, nameobj);
-    return DictionarySetattr((DictionaryObject *)(self), name, val);
+    return DictionarySetattr(self, name, val);
 }
 
 // List object - Definitions
@@ -1726,7 +2033,27 @@ ListGetattro(PyObject *self, PyObject *nameobj)
 ListSetattro(PyObject *self, PyObject *nameobj, PyObject *val)
 {
     GET_ATTR_STRING(name, nameobj);
-    return ListSetattr((ListObject *)(self), name, val);
+    return ListSetattr(self, name, val);
+}
+
+// Tuple object - Definitions
+
+    static PyObject *
+TupleGetattro(PyObject *self, PyObject *nameobj)
+{
+    GET_ATTR_STRING(name, nameobj);
+
+    if (strcmp(name, "locked") == 0)
+	return PyLong_FromLong(((TupleObject *) (self))->tuple->tv_lock);
+
+    return PyObject_GenericGetAttr(self, nameobj);
+}
+
+    static int
+TupleSetattro(PyObject *self, PyObject *nameobj, PyObject *val)
+{
+    GET_ATTR_STRING(name, nameobj);
+    return TupleSetattr(self, name, val);
 }
 
 // Function object - Definitions
@@ -1751,34 +2078,31 @@ FunctionGetattro(PyObject *self, PyObject *nameobj)
     void
 python3_buffer_free(buf_T *buf)
 {
-    if (BUF_PYTHON_REF(buf) != NULL)
-    {
-	BufferObject *bp = BUF_PYTHON_REF(buf);
-	bp->buf = INVALID_BUFFER_VALUE;
-	BUF_PYTHON_REF(buf) = NULL;
-    }
+    BufferObject *bp = BUF_PYTHON_REF(buf);
+    if (bp == NULL)
+	return;
+    bp->buf = INVALID_BUFFER_VALUE;
+    BUF_PYTHON_REF(buf) = NULL;
 }
 
     void
 python3_window_free(win_T *win)
 {
-    if (WIN_PYTHON_REF(win) != NULL)
-    {
-	WindowObject *wp = WIN_PYTHON_REF(win);
-	wp->win = INVALID_WINDOW_VALUE;
-	WIN_PYTHON_REF(win) = NULL;
-    }
+    WindowObject *wp = WIN_PYTHON_REF(win);
+    if (wp == NULL)
+	return;
+    wp->win = INVALID_WINDOW_VALUE;
+    WIN_PYTHON_REF(win) = NULL;
 }
 
     void
 python3_tabpage_free(tabpage_T *tab)
 {
-    if (TAB_PYTHON_REF(tab) != NULL)
-    {
-	TabPageObject *tp = TAB_PYTHON_REF(tab);
-	tp->tab = INVALID_TABPAGE_VALUE;
-	TAB_PYTHON_REF(tab) = NULL;
-    }
+    TabPageObject *tp = TAB_PYTHON_REF(tab);
+    if (tp == NULL)
+	return;
+    tp->tab = INVALID_TABPAGE_VALUE;
+    TAB_PYTHON_REF(tab) = NULL;
 }
 
     static PyObject *
@@ -1848,10 +2172,11 @@ LineToString(const char *str)
 }
 
     void
-do_py3eval(char_u *str, typval_T *rettv)
+do_py3eval(char_u *str, dict_T *locals, typval_T *rettv)
 {
     DoPyCommand((char *) str,
-	    (rangeinitializer) init_range_eval,
+	    locals,
+	    init_range_eval,
 	    (runner) run_eval,
 	    (void *) rettv);
     if (rettv->v_type == VAR_UNKNOWN)
@@ -1865,4 +2190,14 @@ do_py3eval(char_u *str, typval_T *rettv)
 set_ref_in_python3(int copyID)
 {
     return set_ref_in_py(copyID);
+}
+
+    int
+python3_version(void)
+{
+#ifdef USE_LIMITED_API
+    return Py_LIMITED_API;
+#else
+    return PY_VERSION_HEX;
+#endif
 }

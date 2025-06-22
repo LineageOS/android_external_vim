@@ -10,7 +10,6 @@ func Test_skip_lua()
 endfunc
 
 CheckFeature lua
-CheckFeature float
 
 " Depending on the lua version, the error messages are different.
 let [s:major, s:minor, s:patch] = luaeval('vim.lua_version')->split('\.')->map({-> str2nr(v:val)})
@@ -29,21 +28,37 @@ func TearDown()
 endfunc
 
 " Check that switching to another buffer does not trigger ml_get error.
-func Test_lua_command_new_no_ml_get_error()
+func Test_lua_luado_change_buffer()
   new
+
   let wincount = winnr('$')
   call setline(1, ['one', 'two', 'three'])
   luado vim.command("new")
   call assert_equal(wincount + 1, winnr('$'))
+
   %bwipe!
 endfunc
 
-" Test vim.command()
-func Test_lua_command()
+" Check that :luado deleting lines does not trigger ml_get error.
+func Test_lua_luado_delete_lines()
   new
+
+  call setline(1, ['one', 'two', 'three'])
+  luado vim.command("%d_")
+  call assert_equal([''], getline(1, '$'))
+
   call setline(1, ['one', 'two', 'three'])
   luado vim.command("1,2d_")
   call assert_equal(['three'], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  luado vim.command("2,3d_"); return "REPLACED"
+  call assert_equal(['REPLACED'], getline(1, '$'))
+
+  call setline(1, ['one', 'two', 'three'])
+  2,3luado vim.command("1,2d_"); return "REPLACED"
+  call assert_equal(['three'], getline(1, '$'))
+
   bwipe!
 endfunc
 
@@ -102,11 +117,11 @@ func Test_lua_eval()
 
   " lua.eval with a bool
   lua v = vim.eval('v:true')
-  call assert_equal('number', luaeval('vim.type(v)'))
-  call assert_equal(1, luaeval('v'))
+  call assert_equal('boolean', luaeval('vim.type(v)'))
+  call assert_equal(v:true, luaeval('v'))
   lua v = vim.eval('v:false')
-  call assert_equal('number', luaeval('vim.type(v)'))
-  call assert_equal(0, luaeval('v'))
+  call assert_equal('boolean', luaeval('vim.type(v)'))
+  call assert_equal(v:false, luaeval('v'))
 
   " lua.eval with a null
   lua v = vim.eval('v:null')
@@ -617,10 +632,10 @@ endfunc
 func Test_lua_blob()
   call assert_equal(0z, luaeval('vim.blob("")'))
   call assert_equal(0z31326162, luaeval('vim.blob("12ab")'))
-  call assert_equal(0z00010203, luaeval('vim.blob("\x00\x01\x02\x03")'))
-  call assert_equal(0z8081FEFF, luaeval('vim.blob("\x80\x81\xfe\xff")'))
+  call assert_equal(0z00010203, luaeval('vim.blob("\000\001\002\003")'))
+  call assert_equal(0z8081FEFF, luaeval('vim.blob("\128\129\254\255")'))
 
-  lua b = vim.blob("\x00\x00\x00\x00")
+  lua b = vim.blob("\000\000\000\000")
   call assert_equal(0z00000000, luaeval('b'))
   call assert_equal(4, luaeval('#b'))
   lua b[0], b[1], b[2], b[3] = 1, 32, 256, 0xff
@@ -662,6 +677,17 @@ func Test_lua_blob()
   lua t = {}
   call assert_fails('lua b = vim.blob(t)',
         \ '[string "vim chunk"]:1: string expected, got table')
+endfunc
+
+def Vim9Test(Callback: func())
+  Callback()
+enddef
+
+func Test_call_lua_func_from_vim9_func()
+  " this only tests that Vim doesn't crash
+  lua << EOF
+vim.fn.Vim9Test(function () print('Hello') end)
+EOF
 endfunc
 
 func Test_lua_funcref()
@@ -807,8 +833,7 @@ endfunc
 
 " Test :luafile foo.lua
 func Test_luafile()
-  call delete('Xlua_file')
-  call writefile(["str = 'hello'", "num = 123" ], 'Xlua_file')
+  call writefile(["str = 'hello'", "num = 123" ], 'Xlua_file', 'D')
   call setfperm('Xlua_file', 'r-xr-xr-x')
 
   luafile Xlua_file
@@ -816,7 +841,6 @@ func Test_luafile()
   call assert_equal(123, luaeval('num'))
 
   lua str, num = nil
-  call delete('Xlua_file')
 endfunc
 
 " Test :luafile %
@@ -839,12 +863,11 @@ endfunc
 " Test :luafile with syntax error
 func Test_luafile_error()
   new Xlua_file
-  call writefile(['nil = 0' ], 'Xlua_file')
+  call writefile(['nil = 0' ], 'Xlua_file', 'D')
   call setfperm('Xlua_file', 'r-xr-xr-x')
 
   call assert_fails('luafile Xlua_file', "Xlua_file:1: unexpected symbol near 'nil'")
 
-  call delete('Xlua_file')
   bwipe!
 endfunc
 
@@ -911,7 +934,10 @@ vim.command('let s ..= "B"')
   lua << trim eof
     vim.command('let s ..= "E"')
   eof
-  call assert_equal('ABCDE', s)
+  lua << trimm
+vim.command('let s ..= "F"')
+trimm
+  call assert_equal('ABCDEF', s)
 endfunc
 
 " Test for adding, accessing and removing global variables using the vim.g
@@ -963,9 +989,9 @@ func Test_lua_global_var_table()
   let g:Var1 = [10, 20]
   let g:Var2 = #{one: 'mercury', two: 'mars'}
   lua << trim END
-    vim.g.Var1[2] = Nil
+    vim.g.Var1[2] = nil
     vim.g.Var1[3] = 15
-    vim.g.Var2['two'] = Nil
+    vim.g.Var2['two'] = nil
     vim.g.Var2['three'] = 'earth'
   END
   call assert_equal([10, 15], g:Var1)
@@ -978,11 +1004,11 @@ func Test_lua_global_var_table()
   let g:Var4 = #{x: 'edit', y: 'run'}
   let g:Var5 = function('min')
   lua << trim END
-    vim.g.Var1 = Nil
-    vim.g.Var2 = Nil
-    vim.g.Var3 = Nil
-    vim.g.Var4 = Nil
-    vim.g.Var5 = Nil
+    vim.g.Var1 = nil
+    vim.g.Var2 = nil
+    vim.g.Var3 = nil
+    vim.g.Var4 = nil
+    vim.g.Var5 = nil
   END
   call assert_false(exists('g:Var1'))
   call assert_false(exists('g:Var2'))
@@ -994,16 +1020,16 @@ func Test_lua_global_var_table()
   let g:Var1 = 10
   lockvar g:Var1
   call assert_fails('lua vim.g.Var1 = 20', 'variable is locked')
-  call assert_fails('lua vim.g.Var1 = Nil', 'variable is locked')
+  call assert_fails('lua vim.g.Var1 = nil', 'variable is locked')
   unlockvar g:Var1
   let g:Var2 = [7, 14]
   lockvar 0 g:Var2
-  lua vim.g.Var2[2] = Nil
+  lua vim.g.Var2[2] = nil
   lua vim.g.Var2[3] = 21
-  call assert_fails('lua vim.g.Var2 = Nil', 'variable is locked')
+  call assert_fails('lua vim.g.Var2 = nil', 'variable is locked')
   call assert_equal([7, 21], g:Var2)
   lockvar 1 g:Var2
-  call assert_fails('lua vim.g.Var2[2] = Nil', 'list is locked')
+  call assert_fails('lua vim.g.Var2[2] = nil', 'list is locked')
   call assert_fails('lua vim.g.Var2[3] = 21', 'list is locked')
   unlockvar g:Var2
 
@@ -1013,7 +1039,7 @@ func Test_lua_global_var_table()
 
   " Attempt to access a non-existing global variable
   call assert_equal(v:null, luaeval('vim.g.NonExistingVar'))
-  lua vim.g.NonExisting = Nil
+  lua vim.g.NonExisting = nil
 
   unlet! g:Var1 g:Var2 g:Var3 g:Var4 g:Var5
 endfunc
@@ -1026,14 +1052,36 @@ func Test_lua_predefined_var_table()
   call assert_equal('SomeError', luaeval('vim.v.errmsg'))
   lua vim.v.errmsg = 'OtherError'
   call assert_equal('OtherError', v:errmsg)
-  call assert_fails('lua vim.v.errmsg = Nil', 'variable is fixed')
+  lua vim.v.errmsg = 42
+  call assert_equal('42', v:errmsg)
+  call assert_fails('lua vim.v.errmsg = nil', 'variable is fixed')
   let v:oldfiles = ['one', 'two']
   call assert_equal(['one', 'two'], luaeval('vim.v.oldfiles'))
   lua vim.v.oldfiles = vim.list({})
   call assert_equal([], v:oldfiles)
+  call assert_fails('lua vim.v.oldfiles = "a"',
+        \ 'Setting v:oldfiles to value with wrong type')
+  call assert_equal([], v:oldfiles)
   call assert_equal(v:null, luaeval('vim.v.null'))
-  call assert_fails('lua vim.v.argv[1] = Nil', 'list is locked')
+  call assert_fails('lua vim.v.argv[1] = nil', 'list is locked')
   call assert_fails('lua vim.v.newvar = 1', 'Dictionary is locked')
+
+  new
+  call setline(1, ' foo foo foo')
+  /foo
+  call assert_equal([0, 1, 2, 0, 2], getcurpos())
+  call assert_equal(1, v:searchforward)
+  normal! n
+  call assert_equal([0, 1, 6, 0, 6], getcurpos())
+  lua vim.v.searchforward = 0
+  call assert_equal(0, v:searchforward)
+  normal! n
+  call assert_equal([0, 1, 2, 0, 2], getcurpos())
+  lua vim.v.searchforward = 1
+  call assert_equal(1, v:searchforward)
+  normal! n
+  call assert_equal([0, 1, 6, 0, 6], getcurpos())
+  bwipe!
 endfunc
 
 " Test for adding, accessing and modifying window-local variables using the
@@ -1069,7 +1117,7 @@ func Test_lua_window_var_table()
   call assert_equal(#{a: [1, 2], b: 20}, w:wvar7)
 
   " delete a window variable
-  lua vim.w.wvar2 = Nil
+  lua vim.w.wvar2 = nil
   call assert_false(exists('w:wvar2'))
 
   new
@@ -1110,7 +1158,7 @@ func Test_lua_buffer_var_table()
   call assert_equal(#{a: [1, 2], b: 20}, b:bvar7)
 
   " delete a buffer variable
-  lua vim.b.bvar2 = Nil
+  lua vim.b.bvar2 = nil
   call assert_false(exists('b:bvar2'))
 
   new
@@ -1151,7 +1199,7 @@ func Test_lua_tabpage_var_table()
   call assert_equal(#{a: [1, 2], b: 20}, t:tvar7)
 
   " delete a tabpage variable
-  lua vim.t.tvar2 = Nil
+  lua vim.t.tvar2 = nil
   call assert_false(exists('t:tvar2'))
 
   tabnew
@@ -1190,6 +1238,46 @@ func Test_lua_multiple_commands()
     autocmd!
   augroup END
   augroup! Luagroup
+endfunc
+
+func Test_lua_debug()
+  CheckRunVimInTerminal
+
+  let buf = RunVimInTerminal('', {'rows': 10})
+  call term_sendkeys(buf, ":lua debug.debug()\n")
+  call WaitForAssert({-> assert_equal('lua_debug> ', term_getline(buf, 10))})
+
+  call term_sendkeys(buf, "foo = 42\n")
+  call WaitForAssert({-> assert_equal('lua_debug> foo = 42', term_getline(buf, 9))})
+  call WaitForAssert({-> assert_equal('lua_debug> ',         term_getline(buf, 10))})
+
+  call term_sendkeys(buf, "print(foo)\n")
+  call WaitForAssert({-> assert_equal('lua_debug> print(foo)', term_getline(buf, 8))})
+  call WaitForAssert({-> assert_equal('42',                    term_getline(buf, 9))})
+  call WaitForAssert({-> assert_equal('lua_debug> ',           term_getline(buf, 10))})
+
+  call term_sendkeys(buf, "-\n")
+  call WaitForAssert({-> assert_equal("(debug command):1: unexpected symbol near '-'",
+  \                                                  term_getline(buf, 9))})
+  call WaitForAssert({-> assert_equal('lua_debug> ', term_getline(buf, 10))})
+
+  call term_sendkeys(buf, "cont\n")
+  call WaitForAssert({-> assert_match(' All$', term_getline(buf, 10))})
+
+  " Entering an empty line also exits the debugger.
+  call term_sendkeys(buf, ":lua debug.debug()\n")
+  call WaitForAssert({-> assert_equal('lua_debug> ', term_getline(buf, 10))})
+  call term_sendkeys(buf, "\n")
+  call WaitForAssert({-> assert_match(' All$', term_getline(buf, 10))})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+" Test for a crash when a Lua funcref is invoked with parameters from Vim
+func Test_lua_funcref_with_params()
+  let Lua_funcref = luaeval('function(d) local s = "in Lua callback" end')
+  call Lua_funcref({'a' : 'b'})
+  call assert_true(v:true)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

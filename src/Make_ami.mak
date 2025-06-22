@@ -29,14 +29,6 @@ CFLAGS += \
 	-DFEAT_HUGE
 else
 
-# Vim 'big' build
-ifeq ($(BUILD),big)
-CFLAGS += \
-	-DFEAT_BROWSE \
-	-DFEAT_MOUSE \
-	-DFEAT_BIG
-else
-
 # Vim 'normal' build
 ifeq ($(BUILD),normal)
 CFLAGS +=\
@@ -45,9 +37,9 @@ CFLAGS +=\
 	-DFEAT_NORMAL
 else
 
-# Vim 'small' build
+# Vim 'small' build - now an alias for 'tiny'
 ifeq ($(BUILD),small)
-CFLAGS += -DFEAT_SMALL
+CFLAGS += -DFEAT_TINY
 else
 
 # Vim 'tiny' build
@@ -61,14 +53,15 @@ endif
 
 # OS specific compiler flags
 ifeq ($(UNM),AmigaOS)
-LDFLAGS = -mcrt=clib2 -lauto -lm -lnet
-CFLAGS += -DHAVE_FSYNC -D__USE_INLINE__ -mcrt=clib2
+LDFLAGS = -lauto
+CFLAGS += -DHAVE_FSYNC -D__USE_INLINE__
 else
 ifeq ($(UNM),AROS)
 LDFLAGS = -DHAVE_FSYNC -ldebug
 else
 ifeq ($(UNM),MorphOS)
-LDFLAGS = -ldebug -noixemul
+CFLAGS += -noixemul
+LDFLAGS = -ldebug -lm -noixemul
 endif
 endif
 endif
@@ -121,6 +114,7 @@ SRC += \
 	float.c \
 	fold.c \
 	getchar.c \
+	gc.c \
 	hardcopy.c \
 	hashtab.c \
 	help.c \
@@ -129,8 +123,10 @@ SRC += \
 	indent.c \
 	insexpand.c \
 	json.c \
+	linematch.c\
 	list.c \
 	locale.c \
+	logfile.c \
 	main.c \
 	mark.c \
 	map.c \
@@ -166,6 +162,7 @@ SRC += \
 	strings.c \
 	syntax.c \
 	tag.c \
+	tabpanel.c \
 	term.c \
 	termlib.c \
 	testing.c \
@@ -173,6 +170,7 @@ SRC += \
 	textobject.c \
 	textprop.c \
 	time.c \
+	tuple.c \
 	typval.c \
 	ui.c \
 	undo.c \
@@ -180,6 +178,7 @@ SRC += \
 	userfunc.c \
 	version.c \
 	viminfo.c \
+	vim9class.c \
 	vim9cmds.c \
 	vim9compile.c \
 	vim9execute.c \

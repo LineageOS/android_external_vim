@@ -1,6 +1,7 @@
 " Vim syntax support file
-" Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2001 Sep 04
+" Maintainer:	The Vim Project <https://github.com/vim/vim>
+" Last Change:	2023 Aug 10
+" Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " This file is used for ":syntax on".
 " It installs the autocommands and starts highlighting for all buffers.
@@ -28,8 +29,9 @@ endif
 
 " Set up the connection between FileType and Syntax autocommands.
 " This makes the syntax automatically set when the file type is detected.
+" Avoid an error when 'verbose' is set and <amatch> expansion fails.
 augroup syntaxset
-  au! FileType *	exe "set syntax=" . expand("<amatch>")
+  au! FileType *	0verbose exe "set syntax=" . expand("<amatch>")
 augroup END
 
 

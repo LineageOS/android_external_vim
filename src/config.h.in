@@ -132,16 +132,10 @@
 #undef PTYRANGE0
 #undef PTYRANGE1
 
-/* Define as the return type of signal handlers (int or void).  */
-#undef RETSIGTYPE
-
-/* Define as the command at the end of signal handlers ("" or "return 0;").  */
-#undef SIGRETURN
-
 /* Define if struct sigcontext is present */
 #undef HAVE_SIGCONTEXT
 
-/* Define if touuper/tolower only work on lower/upercase characters */
+/* Define if toupper/tolower only work on lower/uppercase characters */
 #undef BROKEN_TOUPPER
 
 /* Define if stat() ignores a trailing slash */
@@ -163,7 +157,6 @@
 #undef HAVE_FCHDIR
 #undef HAVE_FCHOWN
 #undef HAVE_FCHMOD
-#undef HAVE_FLOAT_FUNCS
 #undef HAVE_FSEEKO
 #undef HAVE_FSYNC
 #undef HAVE_FTRUNCATE
@@ -216,6 +209,7 @@
 #undef HAVE_CANBERRA
 #undef HAVE_SODIUM
 #undef HAVE_ST_BLKSIZE
+#undef HAVE_SYNC
 #undef HAVE_SYSCONF
 #undef HAVE_SYSCTL
 #undef HAVE_SYSINFO
@@ -229,8 +223,10 @@
 #undef HAVE_UNSETENV
 #undef HAVE_USLEEP
 #undef HAVE_UTIME
-#undef HAVE_BIND_TEXTDOMAIN_CODESET
 #undef HAVE_MBLEN
+#undef HAVE_TIMER_CREATE
+#undef HAVE_CLOCK_GETTIME
+#undef HAVE_XATTR
 
 /* Define, if needed, for accessing large files. */
 #undef _LARGE_FILES
@@ -242,6 +238,7 @@
 
 /* Define if you have the header file: */
 #undef HAVE_DIRENT_H
+#undef HAVE_DISPATCH_DISPATCH_H
 #undef HAVE_ERRNO_H
 #undef HAVE_FCNTL_H
 #undef HAVE_FRAME_H
@@ -325,14 +322,8 @@
 /* Define if you want tiny features. */
 #undef FEAT_TINY
 
-/* Define if you want small features. */
-#undef FEAT_SMALL
-
 /* Define if you want normal features. */
 #undef FEAT_NORMAL
-
-/* Define if you want big features. */
-#undef FEAT_BIG
 
 /* Define if you want huge features. */
 #undef FEAT_HUGE
@@ -363,6 +354,9 @@
 
 /* Define for linking via dlopen() or LoadLibrary() */
 #undef DYNAMIC_PYTHON3
+
+/* Define if compiled against Python 3 stable ABI / limited API */
+#undef DYNAMIC_PYTHON3_STABLE_ABI
 
 /* Define if dynamic python does not require RTLD_GLOBAL */
 #undef PY_NO_RTLD_GLOBAL
@@ -429,6 +423,15 @@
 
 /* Define if there is a working gettext(). */
 #undef HAVE_GETTEXT
+
+/* Define if there is a working bind_textdomain_codeset(). */
+#undef HAVE_BIND_TEXTDOMAIN_CODESET
+
+/* Define if there is a working dgettext(). */
+#undef HAVE_DGETTEXT
+
+/* Define if there is a working dngettext(). */
+#undef HAVE_DNGETTEXT
 
 /* Define if _nl_msg_cat_cntr is present. */
 #undef HAVE_NL_MSG_CAT_CNTR
@@ -507,3 +510,6 @@
 
 /* Define if _SC_SIGSTKSZ is available via sysconf() */
 #undef HAVE_SYSCONF_SIGSTKSZ
+
+/* Define if you want to load libgpm dynamically */
+#undef DYNAMIC_GPM

@@ -88,26 +88,17 @@
 // have an argument???
 #define SIGHASARG
 
-// List 3 arg systems here. I guess __sgi, please test and correct me. jw.
-#if defined(__sgi) && defined(HAVE_SIGCONTEXT)
-# define SIGHAS3ARGS
-#endif
-
 #ifdef SIGHASARG
-# ifdef SIGHAS3ARGS
-#  define SIGPROTOARG	(int, int, struct sigcontext *)
-#  define SIGDEFARG(s)	(int s, int sig2, struct sigcontext *scont)
-#  define SIGDUMMYARG	0, 0, (struct sigcontext *)0
-# else
-#  define SIGPROTOARG	(int)
-#  define SIGDEFARG(s)	(int s UNUSED)
-#  define SIGDUMMYARG	0
-# endif
+# define SIGPROTOARG	(int)
+# define SIGDEFARG(s)	(int s UNUSED)
+# define SIGDUMMYARG	0
 #else
 # define SIGPROTOARG   (void)
 # define SIGDEFARG(s)  ()
 # define SIGDUMMYARG
 #endif
+
+typedef void (*sighandler_T) SIGPROTOARG;
 
 #ifdef HAVE_DIRENT_H
 # include <dirent.h>
@@ -128,10 +119,7 @@
 # endif
 #endif
 
-// on some systems time.h should not be included together with sys/time.h
-#if !defined(HAVE_SYS_TIME_H) || defined(TIME_WITH_SYS_TIME)
-# include <time.h>
-#endif
+#include <time.h>
 #ifdef HAVE_SYS_TIME_H
 # include <sys/time.h>
 #endif
@@ -228,24 +216,6 @@ typedef struct dsc$descriptor   DESC;
 #ifndef DFLT_HELPFILE
 # define DFLT_HELPFILE	"$VIMRUNTIME/doc/help.txt"
 #endif
-#ifndef FILETYPE_FILE
-# define FILETYPE_FILE	"filetype.vim"
-#endif
-#ifndef FTPLUGIN_FILE
-# define FTPLUGIN_FILE	"ftplugin.vim"
-#endif
-#ifndef INDENT_FILE
-# define INDENT_FILE	"indent.vim"
-#endif
-#ifndef FTOFF_FILE
-# define FTOFF_FILE	"ftoff.vim"
-#endif
-#ifndef FTPLUGOF_FILE
-# define FTPLUGOF_FILE	"ftplugof.vim"
-#endif
-#ifndef INDOFF_FILE
-# define INDOFF_FILE	"indoff.vim"
-#endif
 #ifndef SYS_MENU_FILE
 # define SYS_MENU_FILE	"$VIMRUNTIME/menu.vim"
 #endif
@@ -279,6 +249,12 @@ typedef struct dsc$descriptor   DESC;
 # endif
 #endif
 
+#ifndef XDG_VIMRC_FILE
+# define XDG_VIMRC_FILE (mch_getenv((char_u *)"XDG_CONFIG_HOME") \
+	? "$XDG_CONFIG_HOME/vim/vimrc" \
+	: "~/.config/vim/vimrc")
+#endif
+
 #if !defined(USR_VIMRC_FILE3) && defined(VMS)
 # define USR_VIMRC_FILE3 "sys$login:_vimrc"
 #endif
@@ -302,6 +278,12 @@ typedef struct dsc$descriptor   DESC;
 #ifdef VMS
 # ifndef USR_GVIMRC_FILE3
 #  define USR_GVIMRC_FILE3  "sys$login:_gvimrc"
+# endif
+#else
+# ifndef USR_GVIMRC_FILE3
+#  define USR_GVIMRC_FILE3 (mch_getenv("XDG_CONFIG_HOME") \
+	? "$XDG_CONFIG_HOME/vim/gvimrc" \
+	: "~/.config/vim/gvimrc")
 # endif
 #endif
 
@@ -365,6 +347,8 @@ typedef struct dsc$descriptor   DESC;
 #  define DFLT_VDIR    "sys$login:vimfiles/view"
 # else
 #  define DFLT_VDIR    "$HOME/.vim/view"       // default for 'viewdir'
+#  define XDG_VDIR     (mch_getenv("XDG_CONFIG_HOME") ? \
+	"$XDG_CONFIG_HOME/vim/view" : "~/.config/vim/view")
 # endif
 #endif
 
@@ -379,13 +363,19 @@ typedef struct dsc$descriptor   DESC;
 #  ifdef RUNTIME_GLOBAL
 #   ifdef RUNTIME_GLOBAL_AFTER
 #    define DFLT_RUNTIMEPATH	"~/.vim," RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL_AFTER ",~/.vim/after"
+#    define XDG_RUNTIMEPATH	"$XDG_CONFIG_HOME/vim," RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL_AFTER "/after,$XDG_CONFIG_HOME/vim/after"
+#    define XDG_RUNTIMEPATH_FB	"~/.config/vim," RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL_AFTER "/after,~/.config/vim/after"
 #    define CLEAN_RUNTIMEPATH	RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL_AFTER
 #   else
 #    define DFLT_RUNTIMEPATH	"~/.vim," RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL "/after,~/.vim/after"
+#    define XDG_RUNTIMEPATH	"$XDG_CONFIG_HOME/vim," RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL "/after,$XDG_CONFIG_HOME/vim/after"
+#    define XDG_RUNTIMEPATH_FB	"~/.config/vim," RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL "/after,~/.config/vim/after"
 #    define CLEAN_RUNTIMEPATH	RUNTIME_GLOBAL ",$VIMRUNTIME," RUNTIME_GLOBAL "/after"
 #   endif
 #  else
 #   define DFLT_RUNTIMEPATH	"~/.vim,$VIM/vimfiles,$VIMRUNTIME,$VIM/vimfiles/after,~/.vim/after"
+#   define XDG_RUNTIMEPATH	"$XDG_CONFIG_HOME/vim,$VIM/vimfiles,$VIMRUNTIME,$VIM/vimfiles/after,$XDG_CONFIG_HOME/vim/after"
+#   define XDG_RUNTIMEPATH_FB	"~/.config/vim,$VIM/vimfiles,$VIMRUNTIME,$VIM/vimfiles/after,~/.config/vim/after"
 #   define CLEAN_RUNTIMEPATH	"$VIM/vimfiles,$VIMRUNTIME,$VIM/vimfiles/after"
 #  endif
 # endif
@@ -498,3 +488,4 @@ int mch_rename(const char *src, const char *dest);
 
 // We have three kinds of ACL support.
 #define HAVE_ACL (HAVE_POSIX_ACL || HAVE_SOLARIS_ACL || HAVE_AIX_ACL)
+

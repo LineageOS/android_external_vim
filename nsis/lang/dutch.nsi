@@ -18,6 +18,20 @@ LangString ^UninstallCaption ${LANG_DUTCH} \
         "$(^Name) Uninstall"
 
 ##############################################################################
+# Translated license file for the license page                            {{{1
+##############################################################################
+
+LicenseLangString page_lic_file 0 "..\lang\LICENSE.nsis.txt"
+#LicenseLangString page_lic_file ${LANG_DUTCH} "..\lang\LICENSE.nl.nsis.txt"
+
+##############################################################################
+# Translated README.txt file, which is opened after installation          {{{1
+##############################################################################
+
+LangString vim_readme_file 0 "README.txt"
+#LangString vim_readme_file ${LANG_DUTCH} "README.nl.txt"
+
+##############################################################################
 # MUI Configuration Strings                                               {{{1
 ##############################################################################
 
@@ -122,11 +136,6 @@ LangString str_section_plugin_vim   ${LANG_DUTCH} \
 LangString str_desc_plugin_vim      ${LANG_DUTCH} \
     "Creëer plugin mappen in Vim installatie map, deze worden gebruikt \
      voor iedereen op het systeem."
-
-LangString str_section_vis_vim      ${LANG_DUTCH} \
-    "VisVim extensie"
-LangString str_desc_vis_vim         ${LANG_DUTCH} \
-    "VisVim extensie voor Microsoft Visual Studio integratie."
 
 LangString str_section_nls          ${LANG_DUTCH} \
     "Ondersteuning voor andere talen"

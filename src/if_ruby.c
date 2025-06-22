@@ -20,10 +20,8 @@
 #include <string.h>
 
 #ifdef _WIN32
-# if !defined(DYNAMIC_RUBY) || (RUBY_VERSION < 18)
-#  define NT
-# endif
 # ifndef DYNAMIC_RUBY
+#  define NT
 #  define IMPORT // For static dll usage __declspec(dllimport)
 #  define RUBYEXTERN __declspec(dllimport)
 # endif
@@ -55,28 +53,24 @@
 # define rb_cSymbol		(*dll_rb_cSymbol)
 # define rb_cTrueClass		(*dll_rb_cTrueClass)
 
-# if RUBY_VERSION >= 18
 /*
- * On ver 1.8, all Ruby functions are exported with "__declspec(dllimport)"
- * in ruby.h.  But it causes trouble for these variables, because it is
- * defined in this file.  When defined this RUBY_EXPORT it modified to
- * "extern" and be able to avoid this problem.
+ * All Ruby functions are exported with "__declspec(dllimport)" in ruby.h.
+ * But it causes trouble for these variables, because it is defined in this
+ * file.  When defined this RUBY_EXPORT it modified to "extern" and be able
+ * to avoid this problem.
  */
-#  define RUBY_EXPORT
-# endif
+# define RUBY_EXPORT
 
-# if RUBY_VERSION >= 19
 // Ruby 1.9 defines a number of static functions which use rb_num2long and
 // rb_int2big
-#  define rb_num2long	rb_num2long_stub
-#  define rb_int2big	rb_int2big_stub
+# define rb_num2long	rb_num2long_stub
+# define rb_int2big	rb_int2big_stub
 
-#  if RUBY_VERSION >= 30 || VIM_SIZEOF_INT < VIM_SIZEOF_LONG
+# if RUBY_VERSION >= 30 || VIM_SIZEOF_INT < VIM_SIZEOF_LONG
 // Ruby 1.9 defines a number of static functions which use rb_fix2int and
 // rb_num2int if VIM_SIZEOF_INT < VIM_SIZEOF_LONG (64bit)
-#   define rb_fix2int	rb_fix2int_stub
-#   define rb_num2int	rb_num2int_stub
-#  endif
+#  define rb_fix2int	rb_fix2int_stub
+#  define rb_num2int	rb_num2int_stub
 # endif
 
 # if RUBY_VERSION == 21
@@ -89,7 +83,7 @@
 #  define rb_gc_writebarrier_unprotect	rb_gc_writebarrier_unprotect_stub
 # endif
 
-# if RUBY_VERSION >= 26
+# if RUBY_VERSION >= 26 && RUBY_VERSION <= 32
 #  define rb_ary_detransient	rb_ary_detransient_stub
 # endif
 
@@ -113,13 +107,11 @@
 # undef SIZEOF_TIME_T
 #endif
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <ruby.h>
-#if RUBY_VERSION >= 19
-# include <ruby/encoding.h>
-#endif
-#if RUBY_VERSION <= 18
-# include <st.h>  // for ST_STOP and ST_CONTINUE
-#endif
+#pragma GCC diagnostic pop
+#include <ruby/encoding.h>
 
 // See above.
 #ifdef SIZEOF_TIME_T
@@ -185,7 +177,13 @@
 #include "version.h"
 
 #ifdef DYNAMIC_RUBY
-# if !defined(MSWIN)  // must come after including vim.h, where it is defined
+# ifdef MSWIN	// must come after including vim.h, where it is defined
+#  define RUBY_PROC FARPROC
+#  define load_dll vimLoadLib
+#  define symbol_from_dll GetProcAddress
+#  define close_dll FreeLibrary
+#  define load_dll_error GetWin32Error
+# else
 #  include <dlfcn.h>
 #  define HINSTANCE void*
 #  define RUBY_PROC void*
@@ -193,12 +191,6 @@
 #  define symbol_from_dll dlsym
 #  define close_dll dlclose
 #  define load_dll_error dlerror
-# else
-#  define RUBY_PROC FARPROC
-#  define load_dll vimLoadLib
-#  define symbol_from_dll GetProcAddress
-#  define close_dll FreeLibrary
-#  define load_dll_error GetWin32Error
 # endif
 #endif
 
@@ -224,10 +216,8 @@ static void ruby_io_init(void);
 static void ruby_vim_init(void);
 static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 
-#if (RUBY_VERSION >= 19) || defined(RUBY_INIT_STACK)
-# if defined(__ia64) && !defined(ruby_init_stack)
-#  define ruby_init_stack(addr) ruby_init_stack((addr), rb_ia64_bsp())
-# endif
+#if defined(__ia64) && !defined(ruby_init_stack)
+# define ruby_init_stack(addr) ruby_init_stack((addr), rb_ia64_bsp())
 #endif
 
 #if defined(DYNAMIC_RUBY) || defined(PROTO)
@@ -298,10 +288,6 @@ static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 # define rb_intern			dll_rb_intern
 
 # if VIM_SIZEOF_INT < VIM_SIZEOF_LONG // 64 bits only
-#  if RUBY_VERSION <= 18
-#   define rb_fix2int			dll_rb_fix2int
-#   define rb_num2int			dll_rb_num2int
-#  endif
 #  if RUBY_VERSION < 30
 #   define rb_num2uint			dll_rb_num2uint
 #  endif
@@ -311,10 +297,7 @@ static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 # define rb_lastline_set			dll_rb_lastline_set
 # define rb_protect			dll_rb_protect
 # define rb_load			dll_rb_load
-# if RUBY_VERSION <= 18
-#  define rb_num2long			dll_rb_num2long
-# endif
-# if RUBY_VERSION <= 19
+# if RUBY_VERSION < 20
 #  define rb_num2ulong			dll_rb_num2ulong
 # endif
 # define rb_obj_alloc			dll_rb_obj_alloc
@@ -335,57 +318,39 @@ static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 # else
 #  define rb_str_new2			dll_rb_str_new2
 # endif
-# if RUBY_VERSION >= 18
-#  define rb_string_value		dll_rb_string_value
-#  define rb_string_value_ptr		dll_rb_string_value_ptr
-#  define rb_float_new			dll_rb_float_new
-#  define rb_ary_new			dll_rb_ary_new
-#  ifdef rb_ary_new4
-#   define RB_ARY_NEW4_MACRO 1
-#   undef rb_ary_new4
-#  endif
-#  define rb_ary_new4			dll_rb_ary_new4
-#  define rb_ary_push			dll_rb_ary_push
-#  if (RUBY_VERSION >= 19) || defined(RUBY_INIT_STACK)
-#   ifdef __ia64
-#    define rb_ia64_bsp			dll_rb_ia64_bsp
-#    undef ruby_init_stack
-#    define ruby_init_stack(addr)	dll_ruby_init_stack((addr), rb_ia64_bsp())
-#   else
-#    define ruby_init_stack		dll_ruby_init_stack
-#   endif
-#  endif
-# else
-#  define rb_str2cstr			dll_rb_str2cstr
+# define rb_string_value		dll_rb_string_value
+# define rb_string_value_ptr		dll_rb_string_value_ptr
+# define rb_float_new			dll_rb_float_new
+# define rb_ary_new			dll_rb_ary_new
+# ifdef rb_ary_new4
+#  define RB_ARY_NEW4_MACRO 1
+#  undef rb_ary_new4
 # endif
-# if RUBY_VERSION >= 19
-#  define rb_errinfo			dll_rb_errinfo
+# define rb_ary_new4			dll_rb_ary_new4
+# define rb_ary_push			dll_rb_ary_push
+# ifdef __ia64
+#  define rb_ia64_bsp			dll_rb_ia64_bsp
+#  undef ruby_init_stack
+#  define ruby_init_stack(addr)	dll_ruby_init_stack((addr), rb_ia64_bsp())
 # else
-#  define ruby_errinfo			(*dll_ruby_errinfo)
+#  define ruby_init_stack		dll_ruby_init_stack
 # endif
+# define rb_errinfo			dll_rb_errinfo
 # define ruby_init			dll_ruby_init
 # define ruby_init_loadpath		dll_ruby_init_loadpath
 # ifdef MSWIN
-#  if RUBY_VERSION >= 19
-#   define ruby_sysinit			dll_ruby_sysinit
-#  else
-#   define NtInitialize			dll_NtInitialize
-#  endif
-#  if RUBY_VERSION >= 18
-#   define rb_w32_snprintf		dll_rb_w32_snprintf
-#  endif
+#  define ruby_sysinit			dll_ruby_sysinit
+#  define rb_w32_snprintf		dll_rb_w32_snprintf
 # endif
 
-# if RUBY_VERSION >= 19
-#  define ruby_script			dll_ruby_script
-#  define rb_enc_find_index		dll_rb_enc_find_index
-#  define rb_enc_find			dll_rb_enc_find
-#  undef rb_enc_str_new
-#  define rb_enc_str_new		dll_rb_enc_str_new
-#  define rb_sprintf			dll_rb_sprintf
-#  define rb_require			dll_rb_require
-#  define ruby_options			dll_ruby_options
-# endif
+# define ruby_script			dll_ruby_script
+# define rb_enc_find_index		dll_rb_enc_find_index
+# define rb_enc_find			dll_rb_enc_find
+# undef rb_enc_str_new
+# define rb_enc_str_new			dll_rb_enc_str_new
+# define rb_sprintf			dll_rb_sprintf
+# define rb_require			dll_rb_require
+# define ruby_options			dll_ruby_options
 
 /*
  * Pointers for dynamic link
@@ -424,12 +389,12 @@ static void (*dll_rb_debug_rstring_null_ptr) (const char*);
 # endif
 static VALUE (*dll_rb_define_class_under) (VALUE, const char*, VALUE);
 static void (*dll_rb_define_const) (VALUE,const char*,VALUE);
-static void (*dll_rb_define_global_function) (const char*,VALUE(*)(),int);
-static void (*dll_rb_define_method) (VALUE,const char*,VALUE(*)(),int);
+static void (*dll_rb_define_global_function) (const char*,VALUE(*)(int,VALUE*,VALUE),int);
+static void (*dll_rb_define_method) (VALUE,const char*,VALUE(*)(ANYARGS),int);
 static VALUE (*dll_rb_define_module) (const char*);
-static void (*dll_rb_define_module_function) (VALUE,const char*,VALUE(*)(),int);
-static void (*dll_rb_define_singleton_method) (VALUE,const char*,VALUE(*)(),int);
-static void (*dll_rb_define_virtual_variable) (const char*,VALUE(*)(),void(*)());
+static void (*dll_rb_define_module_function) (VALUE,const char*,VALUE(*)(VALUE,VALUE),int);
+static void (*dll_rb_define_singleton_method) (VALUE,const char*,VALUE(*)(ANYARGS),int);
+static void (*dll_rb_define_virtual_variable) (const char*,VALUE(*)(ID,VALUE*),void(*)());
 static VALUE *dll_rb_stdout;
 static VALUE *dll_rb_stderr;
 static VALUE *dll_rb_eArgError;
@@ -465,11 +430,7 @@ static VALUE (*dll_rb_obj_alloc) (VALUE);
 static VALUE (*dll_rb_obj_as_string) (VALUE);
 static VALUE (*dll_rb_obj_id) (VALUE);
 static void (*dll_rb_raise) (VALUE, const char*, ...);
-# if RUBY_VERSION >= 18
 static VALUE (*dll_rb_string_value) (volatile VALUE*);
-# else
-static char *(*dll_rb_str2cstr) (VALUE,int*);
-# endif
 static VALUE (*dll_rb_str_cat) (VALUE, const char*, long);
 static VALUE (*dll_rb_str_concat) (VALUE, VALUE);
 static VALUE (*dll_rb_str_new) (const char*, long);
@@ -479,22 +440,12 @@ static VALUE (*dll_rb_str_new_cstr) (const char*);
 # else
 static VALUE (*dll_rb_str_new2) (const char*);
 # endif
-# if RUBY_VERSION >= 19
 static VALUE (*dll_rb_errinfo) (void);
-# else
-static VALUE *dll_ruby_errinfo;
-# endif
 static void (*dll_ruby_init) (void);
 static void (*dll_ruby_init_loadpath) (void);
 # ifdef MSWIN
-#  if RUBY_VERSION >= 19
 static void (*dll_ruby_sysinit) (int*, char***);
-#  else
-static void (*dll_NtInitialize) (int*, char***);
-#  endif
-#  if RUBY_VERSION >= 18
 static int (*dll_rb_w32_snprintf)(char*, size_t, const char*, ...);
-#  endif
 # endif
 # if RUBY_VERSION >= 31
 #  ifdef _MSC_VER
@@ -503,29 +454,22 @@ static void (*dll_rb_unexpected_type) (VALUE, int);
 NORETURN(static void (*dll_rb_unexpected_type) (VALUE, int));
 #  endif
 # endif
-# if RUBY_VERSION >= 18
 static char * (*dll_rb_string_value_ptr) (volatile VALUE*);
 static VALUE (*dll_rb_float_new) (double);
 static VALUE (*dll_rb_ary_new) (void);
 static VALUE (*dll_rb_ary_new4) (long n, const VALUE *elts);
 static VALUE (*dll_rb_ary_push) (VALUE, VALUE);
-#  if RUBY_VERSION >= 26
+# if RUBY_VERSION >= 26 && RUBY_VERSION <= 32
 static void (*dll_rb_ary_detransient) (VALUE);
-#  endif
-#  if (RUBY_VERSION >= 19) || defined(RUBY_INIT_STACK)
-#   ifdef __ia64
+# endif
+# ifdef __ia64
 static void * (*dll_rb_ia64_bsp) (void);
 static void (*dll_ruby_init_stack)(VALUE*, void*);
-#   else
+# else
 static void (*dll_ruby_init_stack)(VALUE*);
-#   endif
-#  endif
 # endif
-# if RUBY_VERSION >= 19
 static VALUE (*dll_rb_int2big)(SIGNED_VALUE);
-# endif
 
-# if RUBY_VERSION >= 19
 static void (*dll_ruby_script) (const char*);
 static int (*dll_rb_enc_find_index) (const char*);
 static rb_encoding* (*dll_rb_enc_find) (const char*);
@@ -533,7 +477,6 @@ static VALUE (*dll_rb_enc_str_new) (const char*, long, rb_encoding*);
 static VALUE (*dll_rb_sprintf) (const char*, ...);
 static VALUE (*dll_rb_require) (const char*);
 static void* (*dll_ruby_options)(int, char**);
-# endif
 
 # if defined(USE_RGENGC) && USE_RGENGC
 #  if RUBY_VERSION == 21
@@ -551,34 +494,33 @@ NORETURN(static void (*dll_ruby_malloc_size_overflow)(size_t, size_t));
 #  endif
 # endif
 
-# if RUBY_VERSION >= 26
+# if RUBY_VERSION >= 26 && RUBY_VERSION <= 32
 void rb_ary_detransient_stub(VALUE x);
 # endif
 
 // Do not generate a prototype here, VALUE isn't always defined.
 # ifndef PROTO
-#  if RUBY_VERSION >= 19
-#   if RUBY_VERSION >= 22
+#  if RUBY_VERSION >= 22
     long
 rb_num2long_stub(VALUE x)
-#   else
+#  else
     SIGNED_VALUE
 rb_num2long_stub(VALUE x)
-#   endif
+#  endif
 {
     return dll_rb_num2long(x);
 }
-#   if RUBY_VERSION >= 26
+#  if RUBY_VERSION >= 26
     VALUE
 rb_int2big_stub(intptr_t x)
-#   else
+#  else
     VALUE
 rb_int2big_stub(SIGNED_VALUE x)
-#   endif
+#  endif
 {
     return dll_rb_int2big(x);
 }
-#   if RUBY_VERSION >= 30 || VIM_SIZEOF_INT < VIM_SIZEOF_LONG
+#  if RUBY_VERSION >= 30 || VIM_SIZEOF_INT < VIM_SIZEOF_LONG
     long
 rb_fix2int_stub(VALUE x)
 {
@@ -589,24 +531,23 @@ rb_num2int_stub(VALUE x)
 {
     return dll_rb_num2int(x);
 }
-#   endif
-#   if RUBY_VERSION >= 20
+#  endif
+#  if RUBY_VERSION >= 20
     VALUE
 rb_float_new_in_heap(double d)
 {
     return dll_rb_float_new(d);
 }
-#    if RUBY_VERSION >= 22
+#   if RUBY_VERSION >= 22
     unsigned long
 rb_num2ulong(VALUE x)
-#    else
+#   else
     VALUE
 rb_num2ulong(VALUE x)
-#    endif
+#   endif
 {
     return (long)RSHIFT((SIGNED_VALUE)(x),1);
 }
-#   endif
 #  endif
 #  if defined(USE_RGENGC) && USE_RGENGC
 #   if RUBY_VERSION == 21
@@ -623,7 +564,7 @@ rb_gc_writebarrier_unprotect_stub(VALUE obj)
 }
 #   endif
 #  endif
-#  if RUBY_VERSION >= 26
+#  if RUBY_VERSION >= 26 && RUBY_VERSION <= 32
     void
 rb_ary_detransient_stub(VALUE x)
 {
@@ -748,11 +689,7 @@ static struct
     {"rb_obj_as_string", (RUBY_PROC*)&dll_rb_obj_as_string},
     {"rb_obj_id", (RUBY_PROC*)&dll_rb_obj_id},
     {"rb_raise", (RUBY_PROC*)&dll_rb_raise},
-# if RUBY_VERSION >= 18
     {"rb_string_value", (RUBY_PROC*)&dll_rb_string_value},
-# else
-    {"rb_str2cstr", (RUBY_PROC*)&dll_rb_str2cstr},
-# endif
     {"rb_str_cat", (RUBY_PROC*)&dll_rb_str_cat},
     {"rb_str_concat", (RUBY_PROC*)&dll_rb_str_concat},
     {"rb_str_new", (RUBY_PROC*)&dll_rb_str_new},
@@ -761,45 +698,32 @@ static struct
 # else
     {"rb_str_new2", (RUBY_PROC*)&dll_rb_str_new2},
 # endif
-# if RUBY_VERSION >= 19
     {"rb_errinfo", (RUBY_PROC*)&dll_rb_errinfo},
-# else
-    {"ruby_errinfo", (RUBY_PROC*)&dll_ruby_errinfo},
-# endif
     {"ruby_init", (RUBY_PROC*)&dll_ruby_init},
     {"ruby_init_loadpath", (RUBY_PROC*)&dll_ruby_init_loadpath},
 # ifdef MSWIN
-#  if RUBY_VERSION >= 19
     {"ruby_sysinit", (RUBY_PROC*)&dll_ruby_sysinit},
-#  else
-    {"NtInitialize", (RUBY_PROC*)&dll_NtInitialize},
-#  endif
-#  if RUBY_VERSION >= 18
     {"rb_w32_snprintf", (RUBY_PROC*)&dll_rb_w32_snprintf},
-#  endif
 # endif
 # if RUBY_VERSION >= 31
     {"rb_unexpected_type", (RUBY_PROC*)&dll_rb_unexpected_type},
 # endif
-# if RUBY_VERSION >= 18
     {"rb_string_value_ptr", (RUBY_PROC*)&dll_rb_string_value_ptr},
-#  if RUBY_VERSION <= 19
-    {"rb_float_new", (RUBY_PROC*)&dll_rb_float_new},
-#  else
+# if RUBY_VERSION >= 20
     {"rb_float_new_in_heap", (RUBY_PROC*)&dll_rb_float_new},
-#  endif
-    {"rb_ary_new", (RUBY_PROC*)&dll_rb_ary_new},
-#  ifdef RB_ARY_NEW4_MACRO
-    {"rb_ary_new_from_values", (RUBY_PROC*)&dll_rb_ary_new4},
-#  else
-    {"rb_ary_new4", (RUBY_PROC*)&dll_rb_ary_new4},
-#  endif
-    {"rb_ary_push", (RUBY_PROC*)&dll_rb_ary_push},
-#  if RUBY_VERSION >= 26
-    {"rb_ary_detransient", (RUBY_PROC*)&dll_rb_ary_detransient},
-#  endif
+# else
+    {"rb_float_new", (RUBY_PROC*)&dll_rb_float_new},
 # endif
-# if RUBY_VERSION >= 19
+    {"rb_ary_new", (RUBY_PROC*)&dll_rb_ary_new},
+# ifdef RB_ARY_NEW4_MACRO
+    {"rb_ary_new_from_values", (RUBY_PROC*)&dll_rb_ary_new4},
+# else
+    {"rb_ary_new4", (RUBY_PROC*)&dll_rb_ary_new4},
+# endif
+    {"rb_ary_push", (RUBY_PROC*)&dll_rb_ary_push},
+# if RUBY_VERSION >= 26 && RUBY_VERSION <= 32
+    {"rb_ary_detransient", (RUBY_PROC*)&dll_rb_ary_detransient},
+# endif
     {"rb_int2big", (RUBY_PROC*)&dll_rb_int2big},
     {"ruby_script", (RUBY_PROC*)&dll_ruby_script},
     {"rb_enc_find_index", (RUBY_PROC*)&dll_rb_enc_find_index},
@@ -808,13 +732,10 @@ static struct
     {"rb_sprintf", (RUBY_PROC*)&dll_rb_sprintf},
     {"rb_require", (RUBY_PROC*)&dll_rb_require},
     {"ruby_options", (RUBY_PROC*)&dll_ruby_options},
-# endif
-# if (RUBY_VERSION >= 19) || defined(RUBY_INIT_STACK)
-#  ifdef __ia64
+# ifdef __ia64
     {"rb_ia64_bsp", (RUBY_PROC*)&dll_rb_ia64_bsp},
-#  endif
-    {"ruby_init_stack", (RUBY_PROC*)&dll_ruby_init_stack},
 # endif
+    {"ruby_init_stack", (RUBY_PROC*)&dll_ruby_init_stack},
 # if defined(USE_RGENGC) && USE_RGENGC
 #  if RUBY_VERSION == 21
     {"rb_gc_writebarrier_unprotect_promoted", (RUBY_PROC*)&dll_rb_gc_writebarrier_unprotect_promoted},
@@ -906,7 +827,6 @@ ex_ruby(exarg_T *eap)
     static VALUE
 vim_str2rb_enc_str(const char *s)
 {
-#if RUBY_VERSION >= 19
     long lval;
     char_u *sval;
     rb_encoding *enc;
@@ -918,14 +838,12 @@ vim_str2rb_enc_str(const char *s)
 	if (enc)
 	    return rb_enc_str_new(s, (long)strlen(s), enc);
     }
-#endif
     return rb_str_new2(s);
 }
 
     static VALUE
 eval_enc_string_protect(const char *str, int *state)
 {
-#if RUBY_VERSION >= 19
     long lval;
     char_u *sval;
     rb_encoding *enc;
@@ -941,7 +859,6 @@ eval_enc_string_protect(const char *str, int *state)
 	    return rb_eval_string_protect(StringValuePtr(v), state);
 	}
     }
-#endif
     return rb_eval_string_protect(str, state);
 }
 
@@ -952,44 +869,44 @@ ex_rubydo(exarg_T *eap)
     linenr_T i;
     buf_T   *was_curbuf = curbuf;
 
-    if (ensure_ruby_initialized())
-    {
-	if (u_save(eap->line1 - 1, eap->line2 + 1) != OK)
-	    return;
-	for (i = eap->line1; i <= eap->line2; i++)
-	{
-	    VALUE line;
+    if (!ensure_ruby_initialized())
+	return;
 
-	    if (i > curbuf->b_ml.ml_line_count)
-		break;
-	    line = vim_str2rb_enc_str((char *)ml_get(i));
-	    rb_lastline_set(line);
-	    eval_enc_string_protect((char *) eap->arg, &state);
-	    if (state)
-	    {
-		error_print(state);
-		break;
-	    }
-	    if (was_curbuf != curbuf)
-		break;
-	    line = rb_lastline_get();
-	    if (!NIL_P(line))
-	    {
-		if (TYPE(line) != T_STRING)
-		{
-		    emsg(_(e_dollar_must_be_an_instance_of_string));
-		    return;
-		}
-		ml_replace(i, (char_u *) StringValuePtr(line), 1);
-		changed();
-#ifdef SYNTAX_HL
-		syn_changed(i); // recompute syntax hl. for this line
-#endif
-	    }
+    if (u_save(eap->line1 - 1, eap->line2 + 1) != OK)
+	return;
+    for (i = eap->line1; i <= eap->line2; i++)
+    {
+	VALUE line;
+
+	if (i > curbuf->b_ml.ml_line_count)
+	    break;
+	line = vim_str2rb_enc_str((char *)ml_get(i));
+	rb_lastline_set(line);
+	eval_enc_string_protect((char *) eap->arg, &state);
+	if (state)
+	{
+	    error_print(state);
+	    break;
 	}
-	check_cursor();
-	update_curbuf(NOT_VALID);
+	if (was_curbuf != curbuf || i > curbuf->b_ml.ml_line_count)
+	    break;
+	line = rb_lastline_get();
+	if (!NIL_P(line))
+	{
+	    if (TYPE(line) != T_STRING)
+	    {
+		emsg(_(e_dollar_must_be_an_instance_of_string));
+		return;
+	    }
+	    ml_replace(i, (char_u *) StringValuePtr(line), 1);
+	    changed();
+#ifdef SYNTAX_HL
+	    syn_changed(i); // recompute syntax hl. for this line
+#endif
+	}
     }
+    check_cursor();
+    update_curbuf(UPD_NOT_VALID);
 }
 
     static VALUE
@@ -1004,92 +921,80 @@ ex_rubyfile(exarg_T *eap)
 {
     int state;
 
-    if (ensure_ruby_initialized())
-    {
-	VALUE file_to_load = rb_str_new2((const char *)eap->arg);
-	rb_protect(rb_load_wrap, file_to_load, &state);
-	if (state)
-	    error_print(state);
-    }
+    if (!ensure_ruby_initialized())
+	return;
+
+    VALUE file_to_load = rb_str_new2((const char *)eap->arg);
+    rb_protect(rb_load_wrap, file_to_load, &state);
+    if (state)
+	error_print(state);
 }
 
     void
 ruby_buffer_free(buf_T *buf)
 {
-    if (buf->b_ruby_ref)
-    {
-	rb_hash_aset(objtbl, rb_obj_id((VALUE) buf->b_ruby_ref), Qnil);
-	RDATA(buf->b_ruby_ref)->data = NULL;
-    }
+    if (buf->b_ruby_ref == NULL)
+	return;
+
+    rb_hash_aset(objtbl, rb_obj_id((VALUE) buf->b_ruby_ref), Qnil);
+    RDATA(buf->b_ruby_ref)->data = NULL;
 }
 
     void
 ruby_window_free(win_T *win)
 {
-    if (win->w_ruby_ref)
-    {
-	rb_hash_aset(objtbl, rb_obj_id((VALUE) win->w_ruby_ref), Qnil);
-	RDATA(win->w_ruby_ref)->data = NULL;
-    }
+    if (win->w_ruby_ref == NULL)
+	return;
+
+    rb_hash_aset(objtbl, rb_obj_id((VALUE) win->w_ruby_ref), Qnil);
+    RDATA(win->w_ruby_ref)->data = NULL;
 }
 
     static int
 ensure_ruby_initialized(void)
 {
-    if (!ruby_initialized)
+    if (ruby_initialized)
+	return ruby_initialized;
+
+#ifdef DYNAMIC_RUBY
+    if (ruby_enabled(TRUE))
+#endif
     {
-#ifdef DYNAMIC_RUBY
-	if (ruby_enabled(TRUE))
-	{
-#endif
 #ifdef MSWIN
-	    // suggested by Ariya Mizutani
-	    int argc = 1;
-	    char *argv[] = {"gvim.exe"};
-	    char **argvp = argv;
-# if RUBY_VERSION >= 19
-	    ruby_sysinit(&argc, &argvp);
-# else
-	    NtInitialize(&argc, &argvp);
-# endif
+	// suggested by Ariya Mizutani
+	int argc = 1;
+	char *argv[] = {"gvim.exe"};
+	char **argvp = argv;
+	ruby_sysinit(&argc, &argvp);
 #endif
-	    {
-#if (RUBY_VERSION >= 19) || defined(RUBY_INIT_STACK)
-		ruby_init_stack(ruby_stack_start);
-#endif
-		ruby_init();
-	    }
-#if RUBY_VERSION >= 19
-	    {
-		int dummy_argc = 2;
-		char *dummy_argv[] = {"vim-ruby", "-e_=0"};
-		ruby_options(dummy_argc, dummy_argv);
-	    }
-	    ruby_script("vim-ruby");
-#else
-	    ruby_init_loadpath();
-#endif
-	    ruby_io_init();
-	    ruby_vim_init();
-	    ruby_initialized = 1;
-#ifdef DYNAMIC_RUBY
-	}
-	else
 	{
-	    emsg(_(e_sorry_this_command_is_disabled_the_ruby_library_could_not_be_loaded));
-	    return 0;
+	    ruby_init_stack(ruby_stack_start);
+	    ruby_init();
 	}
-#endif
+	{
+	    int dummy_argc = 2;
+	    char *dummy_argv[] = {"vim-ruby", "-e_=0"};
+	    ruby_options(dummy_argc, dummy_argv);
+	}
+	ruby_script("vim-ruby");
+	ruby_io_init();
+	ruby_vim_init();
+	ruby_initialized = 1;
     }
+#ifdef DYNAMIC_RUBY
+    else
+    {
+	emsg(_(e_sorry_this_command_is_disabled_the_ruby_library_could_not_be_loaded));
+	return 0;
+    }
+#endif
+
     return ruby_initialized;
 }
 
     static void
 error_print(int state)
 {
-#if !defined(DYNAMIC_RUBY) && (RUBY_VERSION <= 18)
-    RUBYEXTERN VALUE ruby_errinfo;
-#endif
     VALUE error;
     VALUE eclass;
     VALUE einfo;
@@ -1127,11 +1032,7 @@ error_print(int state)
 	    break;
 	case TAG_RAISE:
 	case TAG_FATAL:
-#if RUBY_VERSION >= 19
 	    error = rb_errinfo();
-#else
-	    error = ruby_errinfo;
-#endif
 	    eclass = CLASS_OF(error);
 	    einfo = rb_obj_as_string(error);
 	    if (eclass == rb_eRuntimeError && RSTRING_LEN(einfo) == 0)
@@ -1195,7 +1096,7 @@ vim_message(VALUE self UNUSED, VALUE str)
 vim_set_option(VALUE self UNUSED, VALUE str)
 {
     do_set((char_u *)StringValuePtr(str), 0);
-    update_screen(NOT_VALID);
+    update_screen(UPD_NOT_VALID);
     return Qnil;
 }
 
@@ -1221,12 +1122,10 @@ vim_to_ruby(typval_T *tv)
     {
 	result = INT2NUM(tv->vval.v_number);
     }
-# ifdef FEAT_FLOAT
     else if (tv->v_type == VAR_FLOAT)
     {
 	result = rb_float_new(tv->vval.v_float);
     }
-# endif
     else if (tv->v_type == VAR_LIST)
     {
 	list_T      *list = tv->vval.v_list;
@@ -1251,7 +1150,7 @@ vim_to_ruby(typval_T *tv)
 	    hashitem_T  *hi;
 	    dictitem_T  *di;
 
-	    for (hi = ht->ht_array; todo > 0; ++hi)
+	    FOR_ALL_HASHTAB_ITEMS(ht, hi, todo)
 	    {
 		if (!HASHITEM_EMPTY(hi))
 		{
@@ -1476,23 +1375,26 @@ set_buffer_line(buf_T *buf, linenr_T n, VALUE str)
 
     if (n > 0 && n <= buf->b_ml.ml_line_count && line != NULL)
     {
-	// set curwin/curbuf for "buf" and save some things
+	// Set curwin/curbuf for "buf" and save some things.
 	aucmd_prepbuf(&aco, buf);
-
-	if (u_savesub(n) == OK)
+	if (curbuf == buf)
 	{
-	    ml_replace(n, (char_u *)line, TRUE);
-	    changed();
+	    // Only when it worked to set "curbuf".
+	    if (u_savesub(n) == OK)
+	    {
+		ml_replace(n, (char_u *)line, TRUE);
+		changed();
 #ifdef SYNTAX_HL
-	    syn_changed(n); // recompute syntax hl. for this line
+		syn_changed(n); // recompute syntax hl. for this line
 #endif
+	    }
+
+	    // restore curwin/curbuf and a few other things
+	    aucmd_restbuf(&aco);
+	    // Careful: autocommands may have made "buf" invalid!
 	}
 
-	// restore curwin/curbuf and a few other things
-	aucmd_restbuf(&aco);
-	// Careful: autocommands may have made "buf" invalid!
-
-	update_curbuf(NOT_VALID);
+	update_curbuf(UPD_NOT_VALID);
     }
     else
     {
@@ -1520,25 +1422,28 @@ buffer_delete(VALUE self, VALUE num)
 
     if (n > 0 && n <= buf->b_ml.ml_line_count)
     {
-	// set curwin/curbuf for "buf" and save some things
+	// Set curwin/curbuf for "buf" and save some things.
 	aucmd_prepbuf(&aco, buf);
-
-	if (u_savedel(n, 1) == OK)
+	if (curbuf == buf)
 	{
-	    ml_delete(n);
+	    // Only when it worked to set "curbuf".
+	    if (u_savedel(n, 1) == OK)
+	    {
+		ml_delete(n);
 
-	    // Changes to non-active buffers should properly refresh
-	    //   SegPhault - 01/09/05
-	    deleted_lines_mark(n, 1L);
+		// Changes to non-active buffers should properly refresh
+		//   SegPhault - 01/09/05
+		deleted_lines_mark(n, 1L);
 
-	    changed();
+		changed();
+	    }
+
+	    // restore curwin/curbuf and a few other things
+	    aucmd_restbuf(&aco);
+	    // Careful: autocommands may have made "buf" invalid!
 	}
 
-	// restore curwin/curbuf and a few other things
-	aucmd_restbuf(&aco);
-	// Careful: autocommands may have made "buf" invalid!
-
-	update_curbuf(NOT_VALID);
+	update_curbuf(UPD_NOT_VALID);
     }
     else
     {
@@ -1563,23 +1468,26 @@ buffer_append(VALUE self, VALUE num, VALUE str)
     {
 	// set curwin/curbuf for "buf" and save some things
 	aucmd_prepbuf(&aco, buf);
-
-	if (u_inssub(n + 1) == OK)
+	if (curbuf == buf)
 	{
-	    ml_append(n, (char_u *) line, (colnr_T) 0, FALSE);
+	    // Only when it worked to set "curbuf".
+	    if (u_inssub(n + 1) == OK)
+	    {
+		ml_append(n, (char_u *) line, (colnr_T) 0, FALSE);
 
-	    //  Changes to non-active buffers should properly refresh screen
-	    //    SegPhault - 12/20/04
-	    appended_lines_mark(n, 1L);
+		//  Changes to non-active buffers should properly refresh screen
+		//    SegPhault - 12/20/04
+		appended_lines_mark(n, 1L);
 
-	    changed();
+		changed();
+	    }
+
+	    // restore curwin/curbuf and a few other things
+	    aucmd_restbuf(&aco);
+	    // Careful: autocommands may have made "buf" invalid!
 	}
 
-	// restore curwin/curbuf and a few other things
-	aucmd_restbuf(&aco);
-	// Careful: autocommands may have made "buf" invalid!
-
-	update_curbuf(NOT_VALID);
+	update_curbuf(UPD_NOT_VALID);
     }
     else
     {
@@ -1774,7 +1682,7 @@ window_set_cursor(VALUE self, VALUE pos)
     win->w_cursor.col = NUM2UINT(col);
     win->w_set_curswant = TRUE;
     check_cursor();		    // put cursor on an existing line
-    update_screen(NOT_VALID);
+    update_screen(UPD_NOT_VALID);
     return Qnil;
 }
 
@@ -1815,10 +1723,10 @@ ruby_io_init(void)
 
     rb_stdout = rb_obj_alloc(rb_cObject);
     rb_stderr = rb_obj_alloc(rb_cObject);
-    rb_define_singleton_method(rb_stdout, "write", vim_message, 1);
-    rb_define_singleton_method(rb_stdout, "flush", f_nop, 0);
-    rb_define_singleton_method(rb_stderr, "write", vim_message, 1);
-    rb_define_singleton_method(rb_stderr, "flush", f_nop, 0);
+    rb_define_singleton_method(rb_stdout, "write", (void*)vim_message, 1);
+    rb_define_singleton_method(rb_stdout, "flush", (void*)f_nop, 0);
+    rb_define_singleton_method(rb_stderr, "write", (void*)vim_message, 1);
+    rb_define_singleton_method(rb_stderr, "flush", (void*)f_nop, 0);
     rb_define_global_function("p", f_p, -1);
 }
 
@@ -1852,36 +1760,36 @@ ruby_vim_init(void)
 						rb_eStandardError);
 
     cBuffer = rb_define_class_under(mVIM, "Buffer", rb_cObject);
-    rb_define_singleton_method(cBuffer, "current", buffer_s_current, 0);
-    rb_define_singleton_method(cBuffer, "count", buffer_s_count, 0);
-    rb_define_singleton_method(cBuffer, "[]", buffer_s_aref, 1);
-    rb_define_method(cBuffer, "name", buffer_name, 0);
-    rb_define_method(cBuffer, "number", buffer_number, 0);
-    rb_define_method(cBuffer, "count", buffer_count, 0);
-    rb_define_method(cBuffer, "length", buffer_count, 0);
-    rb_define_method(cBuffer, "[]", buffer_aref, 1);
-    rb_define_method(cBuffer, "[]=", buffer_aset, 2);
-    rb_define_method(cBuffer, "delete", buffer_delete, 1);
-    rb_define_method(cBuffer, "append", buffer_append, 2);
+    rb_define_singleton_method(cBuffer, "current", (void*)buffer_s_current, 0);
+    rb_define_singleton_method(cBuffer, "count", (void*)buffer_s_count, 0);
+    rb_define_singleton_method(cBuffer, "[]", (void*)buffer_s_aref, 1);
+    rb_define_method(cBuffer, "name", (void*)buffer_name, 0);
+    rb_define_method(cBuffer, "number", (void*)buffer_number, 0);
+    rb_define_method(cBuffer, "count", (void*)buffer_count, 0);
+    rb_define_method(cBuffer, "length", (void*)buffer_count, 0);
+    rb_define_method(cBuffer, "[]", (void*)buffer_aref, 1);
+    rb_define_method(cBuffer, "[]=", (void*)buffer_aset, 2);
+    rb_define_method(cBuffer, "delete", (void*)buffer_delete, 1);
+    rb_define_method(cBuffer, "append", (void*)buffer_append, 2);
 
     // Added line manipulation functions
     //   SegPhault - 03/07/05
-    rb_define_method(cBuffer, "line_number", current_line_number, 0);
-    rb_define_method(cBuffer, "line", line_s_current, 0);
-    rb_define_method(cBuffer, "line=", set_current_line, 1);
+    rb_define_method(cBuffer, "line_number", (void*)current_line_number, 0);
+    rb_define_method(cBuffer, "line", (void*)line_s_current, 0);
+    rb_define_method(cBuffer, "line=", (void*)set_current_line, 1);
 
 
     cVimWindow = rb_define_class_under(mVIM, "Window", rb_cObject);
-    rb_define_singleton_method(cVimWindow, "current", window_s_current, 0);
-    rb_define_singleton_method(cVimWindow, "count", window_s_count, 0);
-    rb_define_singleton_method(cVimWindow, "[]", window_s_aref, 1);
-    rb_define_method(cVimWindow, "buffer", window_buffer, 0);
-    rb_define_method(cVimWindow, "height", window_height, 0);
-    rb_define_method(cVimWindow, "height=", window_set_height, 1);
-    rb_define_method(cVimWindow, "width", window_width, 0);
-    rb_define_method(cVimWindow, "width=", window_set_width, 1);
-    rb_define_method(cVimWindow, "cursor", window_cursor, 0);
-    rb_define_method(cVimWindow, "cursor=", window_set_cursor, 1);
+    rb_define_singleton_method(cVimWindow, "current", (void*)window_s_current, 0);
+    rb_define_singleton_method(cVimWindow, "count", (void*)window_s_count, 0);
+    rb_define_singleton_method(cVimWindow, "[]", (void*)window_s_aref, 1);
+    rb_define_method(cVimWindow, "buffer", (void*)window_buffer, 0);
+    rb_define_method(cVimWindow, "height", (void*)window_height, 0);
+    rb_define_method(cVimWindow, "height=", (void*)window_set_height, 1);
+    rb_define_method(cVimWindow, "width", (void*)window_width, 0);
+    rb_define_method(cVimWindow, "width=", (void*)window_set_width, 1);
+    rb_define_method(cVimWindow, "cursor", (void*)window_cursor, 0);
+    rb_define_method(cVimWindow, "cursor=", (void*)window_set_cursor, 1);
 
     rb_define_virtual_variable("$curbuf", buffer_s_current_getter, 0);
     rb_define_virtual_variable("$curwin", window_s_current_getter, 0);
@@ -1904,7 +1812,7 @@ convert_hash2dict(VALUE key, VALUE val, VALUE arg)
     if (di == NULL || ruby_convert_to_vim_value(val, &di->di_tv) != OK
 						     || dict_add(d, di) != OK)
     {
-	d->dv_hashtab.ht_error = TRUE;
+	d->dv_hashtab.ht_flags |= HTFLAGS_ERROR;
 	return ST_STOP;
     }
     return ST_CONTINUE;
@@ -1932,12 +1840,10 @@ ruby_convert_to_vim_value(VALUE val, typval_T *rettv)
 	    rettv->v_type = VAR_NUMBER;
 	    rettv->vval.v_number = (varnumber_T)NUM2LONG(val);
 	    break;
-#ifdef FEAT_FLOAT
 	case T_FLOAT:
 	    rettv->v_type = VAR_FLOAT;
 	    rettv->vval.v_float = (float_T)NUM2DBL(val);
 	    break;
-#endif
 	default:
 	    val = rb_obj_as_string(val);
 	    // FALLTHROUGH
@@ -1986,7 +1892,7 @@ ruby_convert_to_vim_value(VALUE val, typval_T *rettv)
 		    return FAIL;
 
 		rb_hash_foreach(val, convert_hash2dict, (VALUE)d);
-		if (d->dv_hashtab.ht_error)
+		if (d->dv_hashtab.ht_flags & HTFLAGS_ERROR)
 		{
 		    dict_unref(d);
 		    return FAIL;

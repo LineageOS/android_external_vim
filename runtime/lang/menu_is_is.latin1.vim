@@ -1,7 +1,8 @@
 " Menu Translations:	Icelandic / Íslenska
 " Maintainer:		Jón Arnar Briem <jonbriem@gmail.com>
 " Originally By:	Jón Arnar Briem <jonbriem@gmail.com>
-" Last Change:	Sun, 24 Mar 2019 22:40:00 CEST
+" Last Change:		2024 May 2
+" Original translations
 " vim:set foldmethod=marker tabstop=8:
 
 " Quit when menu translations have already been done.
@@ -22,7 +23,7 @@ endif
 menutrans &File				                        Skrá
 menutrans &Open\.\.\.<Tab>:e		                Opna\.\.\.<Tab>:e
 menutrans Sp&lit-Open\.\.\.<Tab>:sp	                Splitt\ opna\.\.\.<Tab>:sp
-menutrans Open\ Tab\.\.\.<Tab>:tabnew	            Opna\ flipa\.\.\.<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew	            Opna\ flipa\.\.\.<Tab>:tabnew
 menutrans &New<Tab>:enew		                    Ný\ Skrá<Tab>:enew
 menutrans &Close<Tab>:close		                    Loka<Tab>:close
 menutrans &Save<Tab>:w			                    Vista<Tab>:w
@@ -300,6 +301,7 @@ let g:menutrans_tags_dialog =                       "Sláið inn nafn Merkjaskráa.
 let g:menutrans_textwidth_dialog =                  "Sláið inn nýja textabreidd (0 til að óvirkja sniðmátun): "
 let g:menutrans_fileformat_dialog =                 "Veljið Skráarsnið"
 " }}}
+menutrans &Show\ File\ Types\ in\ menu		Sýna\ skráargerðir\ í\ valmyndinni
 
 let &cpo = s:keepcpo
 unlet s:keepcpo

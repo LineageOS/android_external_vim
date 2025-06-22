@@ -1,4 +1,4 @@
-*mlang.txt*     For Vim version 8.2.  Last change: 2020 Aug 15
+*mlang.txt*     For Vim version 9.1.  Last change: 2024 Jul 11
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -59,7 +59,9 @@ use of "-" and "_".
 :lan[guage] tim[e] {name}
 :lan[guage] col[late] {name}
 			Set the current language (aka locale) to {name}.
-			The locale {name} must be a valid locale on your
+			The POSIX format of {name} is: >
+				language[_territory][.encoding]
+<			The locale {name} must be a valid locale on your
 			system.  Some systems accept aliases like "en" or
 			"en_US", but some only accept the full specification
 			like "en_US.ISO_8859-1".  On Unix systems you can use
@@ -82,9 +84,9 @@ use of "-" and "_".
 			characters. This sets $LC_COLLATE.
 			Without an argument all are set, and additionally
 			$LANG is set.
-			When compiled with the |+float| feature the LC_NUMERIC
-			value will always be set to "C", so that floating
-			point numbers use '.' as the decimal point.
+			If available the LC_NUMERIC value will always be set
+			to "C", so that floating point numbers use '.' as the
+			decimal point.
 			This will make a difference for items that depend on
 			the language (some messages, time and date format).
 			Not fully supported on all systems

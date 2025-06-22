@@ -1,7 +1,9 @@
 " Vim filetype plugin file
 " Language:	C
-" Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2021 Sep 21
+" Maintainer:	The Vim Project <https://github.com/vim/vim>
+" Last Change:	2023 Aug 22
+"		2024 Jun 02 by Riley Bruins <ribru17@gmail.com> ('commentstring')
+" Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " Only do this when not done yet for this buffer
 if exists("b:did_ftplugin")
@@ -23,7 +25,7 @@ setlocal fo-=t fo+=croql
 
 " These options have the right value as default, but the user may have
 " overruled that.
-setlocal commentstring& define& include&
+setlocal commentstring=/*\ %s\ */ define& include&
 
 " Set completion with CTRL-X CTRL-O to autoloaded function.
 if exists('&ofu')
@@ -31,7 +33,8 @@ if exists('&ofu')
 endif
 
 " Set 'comments' to format dashed lists in comments.
-setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,://
+" Also include ///, used for Doxygen.
+setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,://
 
 " In VMS C keywords contain '$' characters.
 if has("vms")
@@ -41,29 +44,31 @@ endif
 " When the matchit plugin is loaded, this makes the % command skip parens and
 " braces in comments properly.
 if !exists("b:match_words")
-  let b:match_words = '^\s*#\s*if\(\|def\|ndef\)\>:^\s*#\s*elif\>:^\s*#\s*else\>:^\s*#\s*endif\>'
+  let b:match_words = '^\s*#\s*if\%(\|def\|ndef\)\>:^\s*#\s*elif\%(\|def\|ndef\)\>:^\s*#\s*else\>:^\s*#\s*endif\>'
   let b:match_skip = 's:comment\|string\|character\|special'
   let b:undo_ftplugin ..= " | unlet! b:match_skip b:match_words"
 endif
 
-" Win32 can filter files in the browse dialog
+" Win32 and GTK can filter files in the browse dialog
 if (has("gui_win32") || has("gui_gtk")) && !exists("b:browsefilter")
   if &ft == "cpp"
-    let b:browsefilter = "C++ Source Files (*.cpp *.c++)\t*.cpp;*.c++\n" .
-	  \ "C Header Files (*.h)\t*.h\n" .
-	  \ "C Source Files (*.c)\t*.c\n" .
-	  \ "All Files (*.*)\t*.*\n"
+    let b:browsefilter = "C++ Source Files (*.cpp, *.c++)\t*.cpp;*.c++\n" ..
+	  \ "C Header Files (*.h)\t*.h\n" ..
+	  \ "C Source Files (*.c)\t*.c\n"
   elseif &ft == "ch"
-    let b:browsefilter = "Ch Source Files (*.ch *.chf)\t*.ch;*.chf\n" .
-	  \ "C Header Files (*.h)\t*.h\n" .
-	  \ "C Source Files (*.c)\t*.c\n" .
-	  \ "All Files (*.*)\t*.*\n"
+    let b:browsefilter = "Ch Source Files (*.ch, *.chf)\t*.ch;*.chf\n" ..
+	  \ "C Header Files (*.h)\t*.h\n" ..
+	  \ "C Source Files (*.c)\t*.c\n"
   else
-    let b:browsefilter = "C Source Files (*.c)\t*.c\n" .
-	  \ "C Header Files (*.h)\t*.h\n" .
-	  \ "Ch Source Files (*.ch *.chf)\t*.ch;*.chf\n" .
-	  \ "C++ Source Files (*.cpp *.c++)\t*.cpp;*.c++\n" .
-	  \ "All Files (*.*)\t*.*\n"
+    let b:browsefilter = "C Source Files (*.c)\t*.c\n" ..
+	  \ "C Header Files (*.h)\t*.h\n" ..
+	  \ "Ch Source Files (*.ch, *.chf)\t*.ch;*.chf\n" ..
+	  \ "C++ Source Files (*.cpp, *.c++)\t*.cpp;*.c++\n"
+  endif
+  if has("win32")
+    let b:browsefilter ..= "All Files (*.*)\t*\n"
+  else
+    let b:browsefilter ..= "All Files (*)\t*\n"
   endif
   let b:undo_ftplugin ..= " | unlet! b:browsefilter"
 endif

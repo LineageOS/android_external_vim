@@ -5,64 +5,60 @@ source check.vim
 " Test for the :bunload command with an offset
 func Test_bunload_with_offset()
   %bwipe!
-  call writefile(['B1'], 'b1')
-  call writefile(['B2'], 'b2')
-  call writefile(['B3'], 'b3')
-  call writefile(['B4'], 'b4')
+  call writefile(['B1'], 'Xb1', 'D')
+  call writefile(['B2'], 'Xb2', 'D')
+  call writefile(['B3'], 'Xb3', 'D')
+  call writefile(['B4'], 'Xb4', 'D')
 
   " Load four buffers. Unload the second and third buffers and then
   " execute .+3bunload to unload the last buffer.
-  edit b1
-  new b2
-  new b3
-  new b4
+  edit Xb1
+  new Xb2
+  new Xb3
+  new Xb4
 
-  bunload b2
-  bunload b3
-  exe bufwinnr('b1') . 'wincmd w'
+  bunload Xb2
+  bunload Xb3
+  exe bufwinnr('Xb1') . 'wincmd w'
   .+3bunload
-  call assert_equal(0, getbufinfo('b4')[0].loaded)
-  call assert_equal('b1',
+  call assert_equal(0, getbufinfo('Xb4')[0].loaded)
+  call assert_equal('Xb1',
         \ fnamemodify(getbufinfo({'bufloaded' : 1})[0].name, ':t'))
 
   " Load four buffers. Unload the third and fourth buffers. Execute .+3bunload
   " and check whether the second buffer is unloaded.
   ball
-  bunload b3
-  bunload b4
-  exe bufwinnr('b1') . 'wincmd w'
+  bunload Xb3
+  bunload Xb4
+  exe bufwinnr('Xb1') . 'wincmd w'
   .+3bunload
-  call assert_equal(0, getbufinfo('b2')[0].loaded)
-  call assert_equal('b1',
+  call assert_equal(0, getbufinfo('Xb2')[0].loaded)
+  call assert_equal('Xb1',
         \ fnamemodify(getbufinfo({'bufloaded' : 1})[0].name, ':t'))
 
   " Load four buffers. Unload the second and third buffers and from the last
   " buffer execute .-3bunload to unload the first buffer.
   ball
-  bunload b2
-  bunload b3
-  exe bufwinnr('b4') . 'wincmd w'
+  bunload Xb2
+  bunload Xb3
+  exe bufwinnr('Xb4') . 'wincmd w'
   .-3bunload
-  call assert_equal(0, getbufinfo('b1')[0].loaded)
-  call assert_equal('b4',
+  call assert_equal(0, getbufinfo('Xb1')[0].loaded)
+  call assert_equal('Xb4',
         \ fnamemodify(getbufinfo({'bufloaded' : 1})[0].name, ':t'))
 
   " Load four buffers. Unload the first and second buffers. Execute .-3bunload
   " from the last buffer and check whether the third buffer is unloaded.
   ball
-  bunload b1
-  bunload b2
-  exe bufwinnr('b4') . 'wincmd w'
+  bunload Xb1
+  bunload Xb2
+  exe bufwinnr('Xb4') . 'wincmd w'
   .-3bunload
-  call assert_equal(0, getbufinfo('b3')[0].loaded)
-  call assert_equal('b4',
+  call assert_equal(0, getbufinfo('Xb3')[0].loaded)
+  call assert_equal('Xb4',
         \ fnamemodify(getbufinfo({'bufloaded' : 1})[0].name, ':t'))
 
   %bwipe!
-  call delete('b1')
-  call delete('b2')
-  call delete('b3')
-  call delete('b4')
 
   call assert_fails('1,4bunload', 'E16:')
   call assert_fails(',100bunload', 'E16:')
@@ -76,14 +72,14 @@ func Test_buflist_browse()
   %bwipe!
   call assert_fails('buffer 1000', 'E86:')
 
-  call writefile(['foo1', 'foo2', 'foo3', 'foo4'], 'Xfile1')
-  call writefile(['bar1', 'bar2', 'bar3', 'bar4'], 'Xfile2')
-  call writefile(['baz1', 'baz2', 'baz3', 'baz4'], 'Xfile3')
-  edit Xfile1
+  call writefile(['foo1', 'foo2', 'foo3', 'foo4'], 'Xbrowse1', 'D')
+  call writefile(['bar1', 'bar2', 'bar3', 'bar4'], 'Xbrowse2', 'D')
+  call writefile(['baz1', 'baz2', 'baz3', 'baz4'], 'Xbrowse3', 'D')
+  edit Xbrowse1
   let b1 = bufnr()
-  edit Xfile2
+  edit Xbrowse2
   let b2 = bufnr()
-  edit +/baz4 Xfile3
+  edit +/baz4 Xbrowse3
   let b3 = bufnr()
 
   call assert_fails('buffer ' .. b1 .. ' abc', 'E488:')
@@ -127,9 +123,52 @@ func Test_buflist_browse()
 
   call assert_fails('sandbox bnext', 'E48:')
 
-  call delete('Xfile1')
-  call delete('Xfile2')
-  call delete('Xfile3')
+  %bwipe!
+endfunc
+
+" Test for :bnext and :bprev when called from help and non-help buffers.
+func Test_bnext_bprev_help()
+  %bwipe!
+
+  e XHelp1 | set bt=help
+  let b1 = bufnr()
+  e Xbuf1
+  let b2 = bufnr()
+
+  " There's only one buffer of each type.
+  b XHelp1
+  bnext | call assert_equal(b1, bufnr())
+  bprev | call assert_equal(b1, bufnr())
+  b Xbuf1
+  bnext | call assert_equal(b2, bufnr())
+  bprev | call assert_equal(b2, bufnr())
+
+  " Add one more buffer of each type.
+  e XHelp2 | set bt=help
+  let b3 = bufnr()
+  e Xbuf2
+  let b4 = bufnr()
+
+  " Help buffer jumps to help buffer.
+  b XHelp1
+  bnext | call assert_equal(b3, bufnr())
+  bnext | call assert_equal(b1, bufnr())
+  bprev | call assert_equal(b3, bufnr())
+  bprev | call assert_equal(b1, bufnr())
+
+  " Regular buffer jumps to regular buffer.
+  b Xbuf1
+  bnext | call assert_equal(b4, bufnr())
+  bnext | call assert_equal(b2, bufnr())
+  bprev | call assert_equal(b4, bufnr())
+  bprev | call assert_equal(b2, bufnr())
+
+  " :brewind and :blast are not affected by the buffer type.
+  b Xbuf2
+  brewind | call assert_equal(b1, bufnr())
+  b XHelp1
+  blast   | call assert_equal(b4, bufnr())
+
   %bwipe!
 endfunc
 
@@ -140,8 +179,8 @@ func Test_bdelete_cmd()
   call assert_fails('1,1bdelete 1 2', 'E488:')
   call assert_fails('bdelete \)', 'E55:')
 
-  " Deleting a unlisted and unloaded buffer
-  edit Xfile1
+  " Deleting an unlisted and unloaded buffer
+  edit Xbdelfile1
   let bnr = bufnr()
   set nobuflisted
   enew
@@ -200,39 +239,37 @@ endfunc
 " Test for quitting the 'swapfile exists' dialog with the split buffer
 " command.
 func Test_buffer_sbuf_cleanup()
-  call writefile([], 'Xfile')
+  call writefile([], 'XsplitCleanup', 'D')
   " first open the file in a buffer
-  new Xfile
+  new XsplitCleanup
   let bnr = bufnr()
   close
   " create the swap file
-  call writefile([], '.Xfile.swp')
+  call writefile([], '.XsplitCleanup.swp', 'D')
   " Remove the catch-all that runtest.vim adds
   au! SwapExists
   augroup BufTest
     au!
-    autocmd SwapExists Xfile let v:swapchoice='q'
+    autocmd SwapExists XsplitCleanup let v:swapchoice='q'
   augroup END
   exe 'sbuf ' . bnr
   call assert_equal(1, winnr('$'))
-  call assert_equal(0, getbufinfo('Xfile')[0].loaded)
+  call assert_equal(0, getbufinfo('XsplitCleanup')[0].loaded)
 
   " test for :sball
   sball
   call assert_equal(1, winnr('$'))
-  call assert_equal(0, getbufinfo('Xfile')[0].loaded)
+  call assert_equal(0, getbufinfo('XsplitCleanup')[0].loaded)
 
   %bw!
   set shortmess+=F
   let v:statusmsg = ''
-  edit Xfile
+  edit XsplitCleanup
   call assert_equal('', v:statusmsg)
   call assert_equal(1, winnr('$'))
-  call assert_equal(0, getbufinfo('Xfile')[0].loaded)
+  call assert_equal(0, getbufinfo('XsplitCleanup')[0].loaded)
   set shortmess&
 
-  call delete('Xfile')
-  call delete('.Xfile.swp')
   augroup BufTest
     au!
   augroup END
@@ -261,35 +298,44 @@ func Test_goto_buf_with_confirm()
   CheckUnix
   CheckNotGui
   CheckFeature dialog_con
-  new Xfile
+  " When dialog_con_gui is defined, Vim is compiled with GUI support
+  " and FEAT_BROWSE will be defined, which causes :confirm :b to
+  " call do_browse(), which will try to use a GUI file browser,
+  " which aborts if a GUI is not available.
+  CheckNotFeature dialog_con_gui
+  new XgotoConf
   enew
   call setline(1, 'test')
-  call assert_fails('b Xfile', 'E37:')
+  call assert_fails('b XgotoConf', 'E37:')
   call feedkeys('c', 'L')
-  call assert_fails('confirm b Xfile', 'E37:')
-  call assert_equal(1, &modified)
-  call assert_equal('', @%)
+  call assert_fails('confirm b XgotoConf', 'E37:')
+  call assert_true(&modified)
+  call assert_true(empty(bufname('%')))
   call feedkeys('y', 'L')
-  call assert_fails('confirm b Xfile', ['', 'E37:'])
-  call assert_equal(1, &modified)
-  call assert_equal('', @%)
+  confirm b XgotoConf
+  call assert_equal('XgotoConf', bufname('%'))
+  call assert_equal(['test'], readfile('Untitled'))
+  e Untitled
+  call setline(2, 'test2')
   call feedkeys('n', 'L')
-  confirm b Xfile
-  call assert_equal('Xfile', @%)
+  confirm b XgotoConf
+  call assert_equal('XgotoConf', bufname('%'))
+  call assert_equal(['test'], readfile('Untitled'))
+  call delete('Untitled')
   close!
 endfunc
 
 " Test for splitting buffer with 'switchbuf'
 func Test_buffer_switchbuf()
-  new Xfile
+  new Xswitchbuf
   wincmd w
   set switchbuf=useopen
-  sbuf Xfile
+  sbuf Xswitchbuf
   call assert_equal(1, winnr())
   call assert_equal(2, winnr('$'))
   set switchbuf=usetab
   tabnew
-  sbuf Xfile
+  sbuf Xswitchbuf
   call assert_equal(1, tabpagenr())
   call assert_equal(2, tabpagenr('$'))
   set switchbuf&
@@ -301,11 +347,11 @@ func Test_bufadd_autocmd_bwipe()
   %bw!
   augroup BufAdd_Wipe
     au!
-    autocmd BufAdd Xfile %bw!
+    autocmd BufAdd Xbwipe %bw!
   augroup END
-  edit Xfile
+  edit Xbwipe
   call assert_equal('', @%)
-  call assert_equal(0, bufexists('Xfile'))
+  call assert_equal(0, bufexists('Xbwipe'))
   augroup BufAdd_Wipe
     au!
   augroup END
@@ -315,8 +361,8 @@ endfunc
 " Test for trying to load a buffer with text locked
 " <C-\>e in the command line is used to lock the text
 func Test_load_buf_with_text_locked()
-  new Xfile1
-  edit Xfile2
+  new Xlockfile1
+  edit Xlockfile2
   let cmd = ":\<C-\>eexecute(\"normal \<C-O>\")\<CR>\<C-C>"
   call assert_fails("call feedkeys(cmd, 'xt')", 'E565:')
   %bw!
@@ -325,40 +371,38 @@ endfunc
 " Test for using CTRL-^ to edit the alternative file keeping the cursor
 " position with 'nostartofline'. Also test using the 'buf' command.
 func Test_buffer_edit_altfile()
-  call writefile(repeat(['one two'], 50), 'Xfile1')
-  call writefile(repeat(['five six'], 50), 'Xfile2')
+  call writefile(repeat(['one two'], 50), 'Xaltfile1', 'D')
+  call writefile(repeat(['five six'], 50), 'Xaltfile2', 'D')
   set nosol
-  edit Xfile1
+  edit Xaltfile1
   call cursor(25, 5)
-  edit Xfile2
+  edit Xaltfile2
   call cursor(30, 4)
   exe "normal \<C-^>"
   call assert_equal([0, 25, 5, 0], getpos('.'))
   exe "normal \<C-^>"
   call assert_equal([0, 30, 4, 0], getpos('.'))
-  buf Xfile1
+  buf Xaltfile1
   call assert_equal([0, 25, 5, 0], getpos('.'))
-  buf Xfile2
+  buf Xaltfile2
   call assert_equal([0, 30, 4, 0], getpos('.'))
   set sol&
-  call delete('Xfile1')
-  call delete('Xfile2')
 endfunc
 
 " Test for running the :sball command with a maximum window count and a
 " modified buffer
 func Test_sball_with_count()
   %bw!
-  edit Xfile1
+  edit Xcountfile1
   call setline(1, ['abc'])
-  new Xfile2
-  new Xfile3
-  new Xfile4
+  new Xcountfile2
+  new Xcountfile3
+  new Xcountfile4
   2sball
-  call assert_equal(bufnr('Xfile4'), winbufnr(1))
-  call assert_equal(bufnr('Xfile1'), winbufnr(2))
-  call assert_equal(0, getbufinfo('Xfile2')[0].loaded)
-  call assert_equal(0, getbufinfo('Xfile3')[0].loaded)
+  call assert_equal(bufnr('Xcountfile4'), winbufnr(1))
+  call assert_equal(bufnr('Xcountfile1'), winbufnr(2))
+  call assert_equal(0, getbufinfo('Xcountfile2')[0].loaded)
+  call assert_equal(0, getbufinfo('Xcountfile3')[0].loaded)
   %bw!
 endfunc
 
@@ -372,6 +416,13 @@ func Test_badd_options()
   close
   close
   bwipe! SomeNewBuffer
+
+  badd +3 XbaddFile
+  call writefile(range(6), 'XbaddFile', 'D')
+  buf XbaddFile
+  call assert_equal([0, 3, 1, 0], getpos('.'))
+
+  bwipe! XbaddFile
 endfunc
 
 func Test_balt()
@@ -386,6 +437,7 @@ endfunc
 func Test_buffer_scheme()
   CheckMSWindows
 
+  set noswapfile
   set noshellslash
   %bwipe!
   let bufnames = [
@@ -408,6 +460,24 @@ func Test_buffer_scheme()
   endfor
 
   set shellslash&
+  set swapfile&
+endfunc
+
+" this was using a NULL pointer after failing to use the pattern
+func Test_buf_pattern_invalid()
+  vsplit 0000000
+  silent! buf [0--]\&\zs*\zs*e
+  bwipe!
+
+  vsplit 00000000000000000000000000
+  silent! buf [0--]\&\zs*\zs*e
+  bwipe!
+
+  " similar case with different code path
+  split 0
+  edit ÿ
+  silent! buf [0--]\&\zs*\zs*0
+  bwipe!
 endfunc
 
 " Test for the 'maxmem' and 'maxmemtot' options
@@ -428,6 +498,110 @@ func Test_buffer_maxmem()
   close
   call assert_equal('', v:errmsg)
   set maxmem& maxmemtot&
+endfunc
+
+" Test for buffer allocation failure
+func Test_buflist_alloc_failure()
+  %bw!
+
+  edit XallocFail1
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('edit XallocFail2', 'E342:')
+
+  " test for bufadd()
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('call bufadd("Xbuffer")', 'E342:')
+
+  " test for setting the arglist
+  edit XallocFail2
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('next XallocFail3', 'E342:')
+
+  " test for setting the alternate buffer name when writing a file
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('write Xother', 'E342:')
+  call delete('Xother')
+
+  " test for creating a buffer using bufnr()
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails("call bufnr('Xnewbuf', v:true)", 'E342:')
+
+  " test for renaming buffer using :file
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('file Xnewfile', 'E342:')
+
+  " test for creating a buffer for a popup window
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('call popup_create("mypop", {})', 'E342:')
+
+  if has('terminal')
+    " test for creating a buffer for a terminal window
+    call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+    call assert_fails('call term_start(&shell)', 'E342:')
+    %bw!
+  endif
+
+  " test for loading a new buffer after wiping out all the buffers
+  edit XallocFail4
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('%bw!', 'E342:')
+
+  " test for :checktime loading the buffer
+  call writefile(['one'], 'XallocFail5', 'D')
+  if has('unix')
+    edit XallocFail5
+    " sleep for some time to make sure the timestamp is different
+    sleep 200m
+    call writefile(['two'], 'XallocFail5')
+    set autoread
+    call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+    call assert_fails('checktime', 'E342:')
+    set autoread&
+    bw!
+  endif
+
+  " test for :vimgrep loading a dummy buffer
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('vimgrep two XallocFail5', 'E342:')
+
+  " test for quickfix command loading a buffer
+  call test_alloc_fail(GetAllocId('newbuf_bvars'), 0, 0)
+  call assert_fails('cexpr "XallocFail6:10:Line10"', 'E342:')
+endfunc
+
+func Test_closed_buffer_still_in_window()
+  %bw!
+
+  let s:w = win_getid()
+  new
+  let s:b = bufnr()
+  setl bufhidden=wipe
+
+  augroup ViewClosedBuffer
+    autocmd!
+    autocmd BufUnload * ++once call assert_fails(
+          \ 'call win_execute(s:w, "' .. s:b .. 'b")', 'E1546:')
+  augroup END
+  quit!
+  " Previously resulted in s:b being curbuf while unloaded (no memfile).
+  call assert_equal(1, bufloaded(bufnr()))
+  call assert_equal(0, bufexists(s:b))
+
+  let s:w = win_getid()
+  split
+  new
+  let s:b = bufnr()
+
+  augroup ViewClosedBuffer
+    autocmd!
+    autocmd BufWipeout * ++once call win_gotoid(s:w)
+          \| call assert_fails(s:b .. 'b', 'E1546:') | wincmd p
+  augroup END
+  bw! " Close only this buffer first; used to be a heap UAF.
+
+  unlet! s:w s:b
+  autocmd! ViewClosedBuffer
+  %bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

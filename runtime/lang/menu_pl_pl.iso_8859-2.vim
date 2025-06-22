@@ -2,6 +2,7 @@
 " Maintainer:		Mikolaj Machowski ( mikmach AT wp DOT pl )
 " Initial Translation:	Marcin Dalecki <martin@dalecki.de>
 " Last Change: 17 May  2010
+" Generated from menu_pl_pl.utf-8.vim, DO NOT EDIT
 
 " Quit when menu translations have already been done.
 if exists("did_menu_trans")
@@ -39,7 +40,7 @@ menutrans Split\ Patched\ &By\.\.\.	Podziel\ ³atane\ przez\.\.\.
 menutrans &Print			&Drukuj
 menutrans Sa&ve-Exit<Tab>:wqa		W&yj¶cie\ z\ zapisem<Tab>:wqa
 menutrans E&xit<Tab>:qa			&Wyj¶cie<Tab>:qa
-menutrans Open\ Tab\.\.\.<Tab>:tabnew	Otwórz\ &kartê\.\.\.<Tab>:tabnew
+menutrans Open\ &Tab\.\.\.<Tab>:tabnew	Otwórz\ &kartê\.\.\.<Tab>:tabnew
 
 " Edit menu
 menutrans &Edit				&Edycja

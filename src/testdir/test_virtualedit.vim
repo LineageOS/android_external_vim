@@ -77,13 +77,40 @@ endfunc
 func Test_edit_change()
   new
   set virtualedit=all
+
   call setline(1, "\t⒌")
   normal Cx
   call assert_equal('x', getline(1))
+
+  call setline(1, "\ta̳")
+  normal Cx
+  call assert_equal('x', getline(1))
+
+  call setline(1, "\tβ̳")
+  normal Cx
+  call assert_equal('x', getline(1))
+
+  if has('arabic')
+    call setline(1, "\tلا")
+    normal Cx
+    call assert_equal('x', getline(1))
+  endif
+
   " Do a visual block change
   call setline(1, ['a', 'b', 'c'])
   exe "normal gg3l\<C-V>2jcx"
   call assert_equal(['a  x', 'b  x', 'c  x'], getline(1, '$'))
+
+  bwipe!
+  set virtualedit=
+endfunc
+
+func Test_edit_special_char()
+  new
+  se ve=all
+  norm a0
+  sil! exe "norm o00000\<Nul>k<a0s"
+
   bwipe!
   set virtualedit=
 endfunc
@@ -226,7 +253,7 @@ func Test_ve_completion()
   set virtualedit=
 endfunc
 
-" Using "C" then then <CR> moves the last remaining character to the next
+" Using "C" then <CR> moves the last remaining character to the next
 " line.  (Mary Ellen Foster)
 func Test_ve_del_to_eol()
   new
@@ -535,6 +562,174 @@ func Test_global_local_virtualedit()
 
   setlocal virtualedit&
   set virtualedit&
+endfunc
+
+func Test_virtualedit_setlocal()
+  enew
+  setglobal virtualedit=all
+  setlocal virtualedit=all
+  normal! l
+  redraw
+  setlocal virtualedit=none
+  call assert_equal(1, wincol())
+
+  setlocal virtualedit&
+  set virtualedit&
+endfunc
+
+func Test_virtualedit_mouse()
+  let save_mouse = &mouse
+  set mouse=a
+  set virtualedit=all
+  botright new
+  let row = win_screenpos(0)[0]
+  20vsplit
+  wincmd p
+
+  call setline(1, ["text\tword"])
+  redraw
+  call test_setmouse(row, 21 + 4)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 4, 0, 4], getcurpos())
+  call test_setmouse(row, 21 + 5)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 5, 0, 5], getcurpos())
+  call test_setmouse(row, 21 + 6)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 5, 1, 6], getcurpos())
+  call test_setmouse(row, 21 + 7)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 5, 2, 7], getcurpos())
+  call test_setmouse(row, 21 + 8)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 5, 3, 8], getcurpos())
+  call test_setmouse(row, 21 + 9)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 6, 0, 9], getcurpos())
+  call test_setmouse(row, 21 + 12)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 9, 0, 12], getcurpos())
+  call test_setmouse(row, 21 + 13)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 10, 0, 13], getcurpos())
+  call test_setmouse(row, 21 + 15)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 10, 2, 15], getcurpos())
+  call test_setmouse(row, 21 + 20)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 10, 7, 20], getcurpos())
+
+  setlocal nowrap
+  call setline(2, repeat('a', 19))
+  normal! j14zl
+  redraw
+  call test_setmouse(row, 21 + 1)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 10, 2, 15], getcurpos())
+  call test_setmouse(row, 21 + 11)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 10, 12, 25], getcurpos())
+  call test_setmouse(row + 1, 21 + 1)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 2, 15, 0, 15], getcurpos())
+  call test_setmouse(row + 1, 21 + 11)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 2, 20, 5, 25], getcurpos())
+
+  setlocal number numberwidth=2
+  redraw
+  call test_setmouse(row, 21 + 3)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 10, 2, 15], getcurpos())
+  call test_setmouse(row, 21 + 13)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 10, 12, 25], getcurpos())
+  call test_setmouse(row + 1, 21 + 3)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 2, 15, 0, 15], getcurpos())
+  call test_setmouse(row + 1, 21 + 13)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 2, 20, 5, 25], getcurpos())
+  setlocal nonumber
+
+  if has('signs')
+    sign define Sign1 text=口
+    sign place 1 name=Sign1 line=1
+    sign place 2 name=Sign1 line=2
+    redraw
+    call test_setmouse(row, 21 + 3)
+    call feedkeys("\<LeftMouse>", "xt")
+    call assert_equal([0, 1, 10, 2, 15], getcurpos())
+    call test_setmouse(row, 21 + 13)
+    call feedkeys("\<LeftMouse>", "xt")
+    call assert_equal([0, 1, 10, 12, 25], getcurpos())
+    call test_setmouse(row + 1, 21 + 3)
+    call feedkeys("\<LeftMouse>", "xt")
+    call assert_equal([0, 2, 15, 0, 15], getcurpos())
+    call test_setmouse(row + 1, 21 + 13)
+    call feedkeys("\<LeftMouse>", "xt")
+    call assert_equal([0, 2, 20, 5, 25], getcurpos())
+    sign unplace 1
+    sign unplace 2
+    sign undefine Sign1
+  endif
+
+  wincmd h
+  4wincmd >
+  normal! gg24I.
+  redraw
+  call test_setmouse(row + 1, 12)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 24 + 9, 0, 24 + 12], getcurpos())
+  call test_setmouse(row + 1, 13)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 24 + 10, 0, 24 + 13], getcurpos())
+  call test_setmouse(row + 1, 15)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 24 + 10, 2, 24 + 15], getcurpos())
+  call test_setmouse(row + 1, 20)
+  call feedkeys("\<LeftMouse>", "xt")
+  call assert_equal([0, 1, 24 + 10, 7, 24 + 20], getcurpos())
+
+  bwipe!
+  let &mouse = save_mouse
+  set virtualedit&
+endfunc
+
+" this was replacing the NUL at the end of the line
+func Test_virtualedit_replace_after_tab()
+  new
+  s/\v/	0
+  set ve=all
+  let @" = ''
+  sil! norm vPvr0
+
+  call assert_equal("\t0", getline(1))
+  set ve&
+  bwipe!
+endfunc
+
+" Test that setpos('.') and cursor() behave the same for v:maxcol
+func Test_virtualedit_set_cursor_pos_maxcol()
+  new
+  set virtualedit=all
+
+  call setline(1, 'foobar')
+  exe "normal! V\<Esc>"
+  call assert_equal([0, 1, 1, 0], getpos("'<"))
+  call assert_equal([0, 1, v:maxcol, 0], getpos("'>"))
+  let pos = getpos("'>")
+
+  call cursor(1, 1)
+  call setpos('.', pos)
+  call assert_equal([0, 1, 7, 0], getpos('.'))
+
+  call cursor(1, 1)
+  call cursor(pos[1:])
+  call assert_equal([0, 1, 7, 0], getpos('.'))
+
+  set virtualedit&
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

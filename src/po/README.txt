@@ -20,6 +20,9 @@ environment variables.  When you use the Makefile in this directory that will
 be done for you.  This does NOT work with gettext 0.10.36.  Don't use it, get
 0.10.37.
 
+Have a look at these helper scripts, they may be useful for you:
+https://github.com/adaext/vim-menutrans-helper
+
 
 ON MS-WINDOWS
 
@@ -27,10 +30,12 @@ The distributed files are generated on Unix, but this should also be possible
 on MS-Windows.  Download the gettext packages, for example from:
 
 	http://sourceforge.net/projects/gettext
+or
+	https://mlocati.github.io/articles/gettext-iconv-windows.html
 
 You might have to do the commands manually.  Example:
 
-   cd c:\vim\vim81
+   cd c:\vim\vim91
    mkdir runtime\lang\ja\LC_MESSAGES
    msgfmt -o runtime\lang\ja\LC_MESSAGES\vim.mo src\po\ja.po
 
@@ -38,7 +43,7 @@ You might have to do the commands manually.  Example:
 WHEN THERE IS A MISTAKE
 
 If you find there is a mistake in one of the translations, please report this
-to the maintainer of the translation.  His/her E-mail address is in the
+to the maintainer of the translation.  His/her e-mail address is in the
 comments at the start of the file.  You can also see this with the ":messages"
 command in Vim when the translation is being used.
 
@@ -48,7 +53,10 @@ CREATING A NEW PO FILE
 We will use "xx.po" as an example here, replace "xx" with the name of your
 language.
 
-- Edit Makefile to add xx to LANGUAGES and xx.mo to MOFILES.
+- Edit Make_all.mak to add xx to LANGUAGES and xx.mo to MOFILES, xx.po to
+  POFILES and xx.ck to CHECKFILES.
+- If the encoding of the translation text differs from the default UTF-8, add a
+  corresponding entry in MOCONVERTED, specifying the required encoding.
 - If you haven't done so already, run ./configure in the top vim directory
   (i.e. go up two directories) and then come back here afterwards.
 - Execute these commands:
@@ -87,7 +95,7 @@ language.
     Remove the "#, fuzzy" line after adding the translation.
 
     There is one special message:
-	msgid "Messages maintainer: Bram Moolenaar <Bram@vim.org>"
+	msgid "Messages maintainer: The Vim Project"
     You should include your name and E-mail address instead, for example:
 	msgstr "Berichten übersetzt bei: John Doe <john@doe.org>"
 
@@ -142,13 +150,35 @@ convert ja.po to EUC-JP (supposed as your system encoding):
 (1) Convert the file encoding:
 
 	mv ja.po ja.po.orig
-	iconv -f utf-8 -t euc-jp ja.po.orig > ja.po
+	iconv -f UTF-8 -t EUC-JP ja.po.orig > ja.po
 
 (2) Rewrite charset declaration in the file:
 
     Open ja.po find this line:
-	"Content-Type: text/plain; charset=utf-8\n"
+	"Content-Type: text/plain; charset=UTF-8\n"
     You should change "charset" like this:
-	"Content-Type: text/plain; charset=euc-jp\n"
+	"Content-Type: text/plain; charset=EUC-JP\n"
 
 There are examples in the Makefile for the conversions already supported.
+
+
+TRANSLATION OF VIM THE EDITOR PLUG-INS
+
+Vim supports displaying plugin messages for various native languages.
+Translation is available both for plugins that are supplied as part of the Vim
+editor (e.g. "optwin.vim") and for third-party plugin packages.
+
+To translate the plugins supplied with the Vim editor, you must specify a
+gettext() function call for the strings you want to translate.
+The translation of these strings will be retrieved by gettext() from the MO
+file "vim.mo".
+
+For third-party plugins, it is necessary to specify a one-time call to the
+bindtextdomain() function in scripts containing translation strings and for
+all message strings to add a {package} argument to the gettext() function. For
+more information, see ":help package-translation".
+
+COMMITTING CHANGES
+
+Before committing changes to the repo, make sure to run "make check" to verify
+any changes here do not fail the test script (and therefore the CI)
