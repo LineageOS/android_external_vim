@@ -133,16 +133,10 @@
 /* #undef PTYRANGE0 */
 /* #undef PTYRANGE1 */
 
-/* Define as the return type of signal handlers (int or void).  */
-#define RETSIGTYPE void
-
-/* Define as the command at the end of signal handlers ("" or "return 0;").  */
-#define SIGRETURN return
-
 /* Define if struct sigcontext is present */
 #define HAVE_SIGCONTEXT 1
 
-/* Define if touuper/tolower only work on lower/upercase characters */
+/* Define if toupper/tolower only work on lower/uppercase characters */
 /* #undef BROKEN_TOUPPER */
 
 /* Define if stat() ignores a trailing slash */
@@ -164,7 +158,6 @@
 #define HAVE_FCHDIR 1
 #define HAVE_FCHOWN 1
 #define HAVE_FCHMOD 1
-#define HAVE_FLOAT_FUNCS 1
 #define HAVE_FSEEKO 1
 #define HAVE_FSYNC 1
 #define HAVE_FTRUNCATE 1
@@ -217,6 +210,7 @@
 /* #undef HAVE_CANBERRA */
 /* #undef HAVE_SODIUM */
 #define HAVE_ST_BLKSIZE 1
+#define HAVE_SYNC 1
 #define HAVE_SYSCONF 1
 /* #undef HAVE_SYSCTL */
 #define HAVE_SYSINFO 1
@@ -230,8 +224,10 @@
 #define HAVE_UNSETENV 1
 #define HAVE_USLEEP 1
 #define HAVE_UTIME 1
-/* #undef HAVE_BIND_TEXTDOMAIN_CODESET */
 #define HAVE_MBLEN 1
+#define HAVE_TIMER_CREATE 1
+#define HAVE_CLOCK_GETTIME 1
+#define HAVE_XATTR 1
 
 /* Define, if needed, for accessing large files. */
 /* #undef _LARGE_FILES */
@@ -243,6 +239,7 @@
 
 /* Define if you have the header file: */
 #define HAVE_DIRENT_H 1
+/* #undef HAVE_DISPATCH_DISPATCH_H */
 #define HAVE_ERRNO_H 1
 #define HAVE_FCNTL_H 1
 /* #undef HAVE_FRAME_H */
@@ -251,7 +248,7 @@
 #define HAVE_LANGINFO_H 1
 /* #undef HAVE_LIBC_H */
 #define HAVE_LIBGEN_H 1
-#define HAVE_LIBINTL_H 1
+/* #undef HAVE_LIBINTL_H */
 #define HAVE_LOCALE_H 1
 #define HAVE_MATH_H 1
 /* #undef HAVE_NDIR_H */
@@ -291,7 +288,7 @@
 /* #undef HAVE_UTIL_DEBUG_H */
 /* #undef HAVE_UTIL_MSGI18N_H */
 #define HAVE_UTIME_H 1
-#define HAVE_X11_SUNKEYSYM_H 1
+/* #undef HAVE_X11_SUNKEYSYM_H */
 /* #undef HAVE_XM_XM_H */
 /* #undef HAVE_XM_XPMP_H */
 /* #undef HAVE_XM_TRAITP_H */
@@ -299,9 +296,9 @@
 /* #undef HAVE_XM_UNHIGHLIGHTT_H */
 /* #undef HAVE_XM_JOINSIDET_H */
 /* #undef HAVE_XM_NOTEBOOK_H */
-#define HAVE_X11_XPM_H 1
+/* #undef HAVE_X11_XPM_H */
 /* #undef HAVE_X11_XMU_EDITRES_H */
-#define HAVE_X11_SM_SMLIB_H 1
+/* #undef HAVE_X11_SM_SMLIB_H */
 
 /* Define to the type of the XpmAttributes type. */
 /* #undef XPMATTRIBUTES_TYPE */
@@ -326,17 +323,11 @@
 /* Define if you want tiny features. */
 /* #undef FEAT_TINY */
 
-/* Define if you want small features. */
-#define FEAT_SMALL 1
-
 /* Define if you want normal features. */
 /* #undef FEAT_NORMAL */
 
-/* Define if you want big features. */
-/* #undef FEAT_BIG */
-
 /* Define if you want huge features. */
-/* #undef FEAT_HUGE */
+#define FEAT_HUGE 1
 
 /* Define if you want to include the Lua interpreter. */
 /* #undef FEAT_LUA */
@@ -365,6 +356,9 @@
 /* Define for linking via dlopen() or LoadLibrary() */
 /* #undef DYNAMIC_PYTHON3 */
 
+/* Define if compiled against Python 3 stable ABI / limited API */
+/* #undef DYNAMIC_PYTHON3_STABLE_ABI */
+
 /* Define if dynamic python does not require RTLD_GLOBAL */
 /* #undef PY_NO_RTLD_GLOBAL */
 
@@ -390,7 +384,7 @@
 /* #undef HAVE_AIX_ACL */
 
 /* Define if pango_shape_full() is available. */
-#define HAVE_PANGO_SHAPE_FULL 1
+/* #undef HAVE_PANGO_SHAPE_FULL */
 
 /* Define if you want to add support of GPM (Linux console mouse daemon) */
 /* #undef HAVE_GPM */
@@ -430,6 +424,15 @@
 
 /* Define if there is a working gettext(). */
 /* #undef HAVE_GETTEXT */
+
+/* Define if there is a working bind_textdomain_codeset(). */
+/* #undef HAVE_BIND_TEXTDOMAIN_CODESET */
+
+/* Define if there is a working dgettext(). */
+/* #undef HAVE_DGETTEXT */
+
+/* Define if there is a working dngettext(). */
+/* #undef HAVE_DNGETTEXT */
 
 /* Define if _nl_msg_cat_cntr is present. */
 /* #undef HAVE_NL_MSG_CAT_CNTR */
@@ -483,10 +486,10 @@
 /* #undef HAVE_AVAILABILITYMACROS_H */
 
 /* Define if Xutf8SetWMProperties() is in an X library. */
-#define HAVE_XUTF8SETWMPROPERTIES 1
+/* #undef HAVE_XUTF8SETWMPROPERTIES */
 
 /* Define if GResource is used to load icons */
-#define USE_GRESOURCE 1
+/* #undef USE_GRESOURCE */
 
 /* Define if GTK+ GUI is to be linked against GTK+ 3 */
 /* #undef USE_GTK3 */
@@ -508,3 +511,6 @@
 
 /* Define if _SC_SIGSTKSZ is available via sysconf() */
 /* #undef HAVE_SYSCONF_SIGSTKSZ */
+
+/* Define if you want to load libgpm dynamically */
+/* #undef DYNAMIC_GPM */
