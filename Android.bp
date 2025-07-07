@@ -258,7 +258,6 @@ cc_binary {
         "vim-runtime-colors-lists",
         "vim-runtime-colors-tools",
         "vim-runtime-colors",
-        "vim-runtime-doc",
         "vim-runtime-plugin",
         "vim-runtime-syntax",
         "vim-runtime",
