@@ -1,6 +1,6 @@
 " Tests for the Blob types
 
-import './vim9.vim' as v9
+import './util/vim9.vim' as v9
 
 func TearDown()
   " Run garbage collection after every test
@@ -863,6 +863,17 @@ func Test_indexof()
   call assert_fails('let i = indexof(b, "val == 0xde")', 'E121:')
   call assert_fails('let i = indexof(b, {})', 'E1256:')
   call assert_fails('let i = indexof(b, " ")', 'E15:')
+endfunc
+
+" Test for using the items() function with a blob
+func Test_blob_items()
+  let lines =<< trim END
+    call assert_equal([[0, 0xAA], [1, 0xBB], [2, 0xCC]], 0zAABBCC->items())
+    call assert_equal([[0, 0]], 0z00->items())
+    call assert_equal([], 0z->items())
+    call assert_equal([], test_null_blob()->items())
+  END
+  call v9.CheckSourceLegacyAndVim9Success(lines)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

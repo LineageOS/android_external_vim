@@ -20,7 +20,8 @@
  * 10..35 = registers 'a' to 'z' ('A' to 'Z' for appending)
  *     36 = delete register '-'
  *     37 = Selection register '*'. Only if FEAT_CLIPBOARD defined
- *     38 = Clipboard register '+'. Only if FEAT_CLIPBOARD and FEAT_X11 defined
+ *     38 = Clipboard register '+'. Only if FEAT_CLIPBOARD and FEAT_X11
+ *                                  or FEAT_WAYLAND_CLIPBOARD defined
  */
 static yankreg_T	y_regs[NUM_REGISTERS];
 
@@ -37,7 +38,7 @@ static void	copy_yank_reg(yankreg_T *reg);
 #endif
 static void	dis_msg(char_u *p, int skip_esc);
 
-#if defined(FEAT_VIMINFO) || defined(PROTO)
+#if defined(FEAT_VIMINFO)
     yankreg_T *
 get_y_regs(void)
 {
@@ -45,7 +46,7 @@ get_y_regs(void)
 }
 #endif
 
-#if defined(FEAT_CLIPBOARD) || defined(PROTO)
+#if defined(FEAT_CLIPBOARD)
     yankreg_T *
 get_y_register(int reg)
 {
@@ -84,7 +85,7 @@ reset_y_append(void)
 }
 
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Keep the last expression line here, for repeating.
  */
@@ -203,7 +204,7 @@ valid_yank_reg(
     else if (regname == '*' || regname == '+')
     {
 	// Warn about missing clipboard support once
-	msg_warn_missing_clipboard();
+	msg_warn_missing_clipboard(true, true);
 	return FALSE;
     }
 #endif
@@ -345,7 +346,7 @@ put_register(int name, void *reg)
 #endif
 }
 
-#if defined(FEAT_CLIPBOARD) || defined(PROTO)
+#if defined(FEAT_CLIPBOARD)
     void
 free_register(void *reg)
 {
@@ -498,7 +499,7 @@ stuff_yank(int regname, char_u *p)
  */
 static int execreg_lastc = NUL;
 
-#if defined(FEAT_VIMINFO) || defined(PROTO)
+#if defined(FEAT_VIMINFO)
     int
 get_execreg_lastc(void)
 {
@@ -1112,7 +1113,7 @@ init_yank(void)
 	y_regs[i].y_array = NULL;
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
     void
 clear_registers(void)
 {
@@ -1170,7 +1171,7 @@ op_yank(oparg_T *oap, int deleting, int mess)
     linenr_T		yankendlnum = oap->end.lnum;
     char_u		*pnew;
     struct block_def	bd;
-#if defined(FEAT_CLIPBOARD) && defined(FEAT_X11)
+#if defined(FEAT_CLIPBOARD) && (defined(FEAT_X11) || defined(FEAT_WAYLAND_CLIPBOARD))
     int			did_star = FALSE;
 #endif
 
@@ -1188,7 +1189,7 @@ op_yank(oparg_T *oap, int deleting, int mess)
 	(!clip_plus.available && oap->regname == '+'))
     {
 	oap->regname = 0;
-	msg_warn_missing_clipboard();
+	msg_warn_missing_clipboard(!clip_plus.available, !clip_star.available);
     }
 #endif
 
@@ -1396,12 +1397,12 @@ op_yank(oparg_T *oap, int deleting, int mess)
 
 	clip_own_selection(&clip_star);
 	clip_gen_set_selection(&clip_star);
-# ifdef FEAT_X11
+# if defined(FEAT_X11) || defined(FEAT_WAYLAND_CLIPBOARD)
 	did_star = TRUE;
 # endif
     }
 
-# ifdef FEAT_X11
+# if defined(FEAT_X11) || defined(FEAT_WAYLAND_CLIPBOARD)
     // If we were yanking to the '+' register, send result to selection.
     // Also copy to the '*' register, in case auto-select is off.  But not when
     // 'clipboard' has "unnamedplus" and not "unnamed"; and not when
@@ -2356,7 +2357,7 @@ get_register_name(int num)
 	return num + 'a' - 10;
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return the index of the register "" points to.
  */
@@ -2563,7 +2564,7 @@ dis_msg(
     ui_breakcheck();
 }
 
-#if defined(FEAT_DND) || defined(PROTO)
+#if defined(FEAT_DND)
 /*
  * Replace the contents of the '~' register with str.
  */
@@ -2623,7 +2624,7 @@ get_reg_type(int regname, long *reglen)
     return MAUTO;
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * When "flags" has GREG_LIST return a list with text "s".
  * Otherwise just return "s".
@@ -3083,4 +3084,4 @@ str_to_reg(
     y_ptr->y_time_set = vim_time();
 # endif
 }
-#endif // FEAT_CLIPBOARD || FEAT_EVAL || PROTO
+#endif // FEAT_CLIPBOARD || FEAT_EVAL

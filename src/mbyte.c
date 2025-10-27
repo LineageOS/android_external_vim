@@ -120,14 +120,6 @@
 # include <wchar.h>
 #endif
 
-#if 0
-// This has been disabled, because several people reported problems with the
-// wcwidth() and iswprint() library functions, esp. for Hebrew.
-# ifdef __STDC_ISO_10646__
-#  define USE_WCHAR_FUNCTIONS
-# endif
-#endif
-
 static int dbcs_char2len(int c);
 static int dbcs_char2bytes(int c, char_u *buf);
 static int dbcs_ptr2len(char_u *p);
@@ -802,7 +794,7 @@ bomb_size(void)
     return n;
 }
 
-#if defined(FEAT_QUICKFIX) || defined(PROTO)
+#if defined(FEAT_QUICKFIX)
 /*
  * Remove all BOM from "s" by moving remaining text.
  */
@@ -1354,7 +1346,7 @@ static struct interval ambiguous[] =
     {0x100000, 0x10fffd}
 };
 
-#if defined(FEAT_TERMINAL) || defined(PROTO)
+#if defined(FEAT_TERMINAL)
 /*
  * utf_char2cells() with different argument type for libvterm.
  */
@@ -1593,11 +1585,7 @@ utf_char2cells(int c)
 #ifdef FEAT_EVAL
     // Use the value from setcellwidths() at 0x80 and higher, unless the
     // character is not printable.
-    if (c >= 0x80 &&
-# ifdef USE_WCHAR_FUNCTIONS
-	    wcwidth(c) >= 1 &&
-# endif
-	    vim_isprintc(c))
+    if (c >= 0x80 && vim_isprintc(c))
     {
 	int n = cw_value(c);
 	if (n != 0)
@@ -1607,25 +1595,10 @@ utf_char2cells(int c)
 
     if (c >= 0x100)
     {
-#ifdef USE_WCHAR_FUNCTIONS
-	int	n;
-
-	/*
-	 * Assume the library function wcwidth() works better than our own
-	 * stuff.  It should return 1 for ambiguous width chars!
-	 */
-	n = wcwidth(c);
-
-	if (n < 0)
-	    return 6;		// unprintable, displays <xxxx>
-	if (n > 1)
-	    return n;
-#else
 	if (!utf_printable(c))
 	    return 6;		// unprintable, displays <xxxx>
 	if (intable(doublewidth, sizeof(doublewidth), c))
 	    return 2;
-#endif
 	if (p_emoji && intable(emoji_wide, sizeof(emoji_wide), c))
 	    return 2;
     }
@@ -1948,7 +1921,7 @@ mb_cptr2char_adv(char_u **pp)
     return c;
 }
 
-#if defined(FEAT_ARABIC) || defined(PROTO)
+#if defined(FEAT_ARABIC)
 /*
  * Check if the character pointed to by "p2" is a composing character when it
  * comes after "p1".  For Arabic sometimes "ab" is replaced with "c", which
@@ -2323,7 +2296,7 @@ utf_char2bytes(int c, char_u *buf)
     return 6;
 }
 
-#if defined(FEAT_TERMINAL) || defined(PROTO)
+#if defined(FEAT_TERMINAL)
 /*
  * utf_iscomposing() with different argument type for libvterm.
  */
@@ -2712,12 +2685,6 @@ utf_iscomposing(int c)
     int
 utf_printable(int c)
 {
-#ifdef USE_WCHAR_FUNCTIONS
-    /*
-     * Assume the iswprint() library function works better than our own stuff.
-     */
-    return iswprint(c);
-#else
     // Sorted list of non-overlapping intervals.
     // 0xd800-0xdfff is reserved for UTF-16, actually illegal.
     static struct interval nonprint[] =
@@ -2728,7 +2695,6 @@ utf_printable(int c)
     };
 
     return !intable(nonprint, sizeof(nonprint), c);
-#endif
 }
 
 // Sorted list of non-overlapping intervals of all Emoji characters,
@@ -2947,7 +2913,7 @@ utf_class_buf(int c, buf_T *buf)
 	{0x202f, 0x202f, 0},
 	{0x2030, 0x205e, 1},		// punctuation and symbols
 	{0x205f, 0x205f, 0},
-	{0x2060, 0x27ff, 1},		// punctuation and symbols
+	{0x2060, 0x206f, 1},		// punctuation and symbols
 	{0x2070, 0x207f, 0x2070},	// superscript
 	{0x2080, 0x2094, 0x2080},	// subscript
 	{0x20a0, 0x27ff, 1},		// all kinds of symbols
@@ -4355,7 +4321,7 @@ theend:
     convert_setup(&vimconv, NULL, NULL);
 }
 
-#if defined(FEAT_GUI_GTK) || defined(FEAT_SPELL) || defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_GUI_GTK) || defined(FEAT_SPELL) || defined(FEAT_EVAL)
 /*
  * Return TRUE if string "s" is a valid utf-8 string.
  * When "end" is NULL stop at the first NUL.  Otherwise stop at "end".
@@ -4382,7 +4348,7 @@ utf_valid_string(char_u *s, char_u *end)
 }
 #endif
 
-#if defined(FEAT_GUI) || defined(PROTO)
+#if defined(FEAT_GUI)
 /*
  * Special version of mb_tail_off() for use in ScreenLines[].
  */
@@ -4798,7 +4764,7 @@ enc_locale(void)
 #endif
 }
 
-# if defined(MSWIN) || defined(PROTO) || defined(FEAT_CYGWIN_WIN32_CLIPBOARD)
+# if defined(MSWIN) || defined(FEAT_CYGWIN_WIN32_CLIPBOARD)
 /*
  * Convert an encoding name to an MS-Windows codepage.
  * Returns zero if no codepage can be figured out.
@@ -4827,7 +4793,7 @@ encname2codepage(char_u *name)
 }
 # endif
 
-# if defined(USE_ICONV) || defined(PROTO)
+# if defined(USE_ICONV)
 
 /*
  * Call iconv_open() with a check if iconv() works properly (there are broken
@@ -4985,7 +4951,7 @@ iconv_string(
     return result;
 }
 
-#  if defined(DYNAMIC_ICONV) || defined(PROTO)
+#  if defined(DYNAMIC_ICONV)
 /*
  * Dynamically load the "iconv.dll" on Win32.
  */
@@ -5096,7 +5062,7 @@ iconv_end(void)
 #  endif // DYNAMIC_ICONV
 # endif // USE_ICONV
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * "getimstatus()" function
  */
@@ -5275,8 +5241,7 @@ convert_setup_ext(
     return OK;
 }
 
-#if defined(FEAT_GUI) || defined(AMIGA) || defined(MSWIN) \
-	|| defined(PROTO)
+#if defined(FEAT_GUI) || defined(AMIGA) || defined(MSWIN)
 /*
  * Do conversion on typed input characters in-place.
  * The input and output are not NUL terminated!
@@ -5604,7 +5569,7 @@ get_cellwidth(int c UNUSED)
 #endif
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
 /*
  * Table set by setcellwidths().

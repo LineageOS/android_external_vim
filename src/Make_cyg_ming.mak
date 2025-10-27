@@ -665,9 +665,7 @@ endif
 
 ifeq ($(CHANNEL),yes)
 DEFINES += -DFEAT_JOB_CHANNEL -DFEAT_IPV6
- ifeq ($(shell expr "$$(($(WINVER)))" \>= "$$((0x600))"),1)
 DEFINES += -DHAVE_INET_NTOP
- endif
 endif
 
 ifeq ($(TERMINAL),yes)
@@ -823,6 +821,7 @@ OBJ = \
 	$(OUTDIR)/findfile.o \
 	$(OUTDIR)/float.o \
 	$(OUTDIR)/fold.o \
+	$(OUTDIR)/fuzzy.o \
 	$(OUTDIR)/getchar.o \
 	$(OUTDIR)/gc.o \
 	$(OUTDIR)/gui_xim.o \
@@ -895,6 +894,7 @@ OBJ = \
 	$(OUTDIR)/vim9compile.o \
 	$(OUTDIR)/vim9execute.o \
 	$(OUTDIR)/vim9expr.o \
+	$(OUTDIR)/vim9generics.o \
 	$(OUTDIR)/vim9instr.o \
 	$(OUTDIR)/vim9script.o \
 	$(OUTDIR)/vim9type.o \
@@ -1327,6 +1327,8 @@ $(OUTDIR)/vim9compile.o: vim9compile.c $(INCL) vim9.h
 $(OUTDIR)/vim9execute.o: vim9execute.c $(INCL) vim9.h
 
 $(OUTDIR)/vim9expr.o: vim9expr.c $(INCL) vim9.h
+
+$(OUTDIR)/vim9generics.o: vim9generics.c $(INCL) vim9.h
 
 $(OUTDIR)/vim9instr.o: vim9instr.c $(INCL) vim9.h
 

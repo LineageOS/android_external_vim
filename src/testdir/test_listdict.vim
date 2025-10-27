@@ -1,7 +1,7 @@
 " Tests for the List and Dict types
 scriptencoding utf-8
 
-import './vim9.vim' as v9
+import './util/vim9.vim' as v9
 
 func TearDown()
   " Run garbage collection after every test
@@ -230,7 +230,7 @@ func Test_list_items()
   endfor
   call assert_equal([[0, 'a'], [1, 'b'], [2, 'c']], r)
 
-  call assert_fails('call items(3)', 'E1225:')
+  call assert_fails('call items(3)', 'E1251:')
 endfunc
 
 func Test_string_items()

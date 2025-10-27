@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_TABPANEL) || defined(PROTO)
+#if defined(FEAT_TABPANEL)
 
 static void do_by_tplmode(int tplmode, int col_start, int col_end,
 	int *pcurtab_row, int *ptabpagenr);
@@ -59,7 +59,6 @@ tabpanelopt_changed(void)
     int		new_align = ALIGN_LEFT;
     int		new_columns = 20;
     int		new_is_vert = FALSE;
-    int		do_equal = 0;
 
     p = p_tplo;
     while (*p != NUL)
@@ -97,19 +96,11 @@ tabpanelopt_changed(void)
 	    ++p;
     }
 
-    // Whether all the windows are automatically made the same size
-    // when tabpanel size is changed.
-    do_equal = p_ea && tpl_columns != new_columns;
-
     tpl_align = new_align;
     tpl_columns = new_columns;
     tpl_is_vert = new_is_vert;
 
     shell_new_columns();
-
-    if (do_equal)
-	win_equal(curwin, FALSE, 0);
-
     return OK;
 }
 
@@ -148,38 +139,18 @@ tabpanel_leftcol(void)
     void
 draw_tabpanel(void)
 {
-    int		saved_KeyTyped = KeyTyped;
-    int		saved_got_int = got_int;
-    int		maxwidth = tabpanel_width();
-    int		vs_attr = HL_ATTR(HLF_C);
-    int		curtab_row = 0;
-#ifndef MSWIN
-    int		row = 0;
-    int		off = 0;
-#endif
-    int		vsrow = 0;
-    int		is_right = tpl_align == ALIGN_RIGHT;
+    int saved_KeyTyped = KeyTyped;
+    int saved_got_int = got_int;
+    int maxwidth = tabpanel_width();
+    int vs_attr = HL_ATTR(HLF_C);
+    int curtab_row = 0;
+    int vsrow = 0;
+    int is_right = tpl_align == ALIGN_RIGHT;
 
     if (maxwidth == 0)
 	return;
 
-#ifndef MSWIN
-    // We need this section only for the Vim running on WSL.
-    for (row = 0; row < cmdline_row; row++)
-    {
-	if (is_right)
-	    off = LineOffset[row] + Columns - maxwidth;
-	else
-	    off = LineOffset[row];
-
-	vim_memset(ScreenLines + off, ' ', (size_t)maxwidth * sizeof(schar_T));
-	if (enc_utf8)
-	    vim_memset(ScreenLinesUC + off, -1,
-		(size_t)maxwidth * sizeof(u8char_T));
-    }
-#endif
-
-    // Reset got_int to avoid build_stl_str_hl() isn't evaluted.
+    // Reset got_int to avoid build_stl_str_hl() isn't evaluated.
     got_int = FALSE;
 
     if (tpl_is_vert)
@@ -494,7 +465,7 @@ starts_with_percent_and_bang(tabpanel_T *pargs)
 
 #ifdef FEAT_EVAL
     // if "fmt" was set insecurely it needs to be evaluated in the sandbox
-    int	use_sandbox = was_set_insecurely(opt_name, opt_scope);
+    int	use_sandbox = was_set_insecurely(curwin, opt_name, opt_scope);
 
     // When the format starts with "%!" then evaluate it as an expression and
     // use the result as the actual format string.

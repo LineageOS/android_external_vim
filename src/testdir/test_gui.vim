@@ -1,10 +1,8 @@
 " Tests specifically for the GUI
 
-source shared.vim
-source check.vim
 CheckCanRunGui
 
-source setup_gui.vim
+source util/setup_gui.vim
 
 func Setup()
   call GUISetUpCommon()
@@ -664,6 +662,13 @@ func Test_set_guioptions()
   if has('win32')
     " Default Value
     set guioptions&
+    call assert_equal('egmrLtT', &guioptions)
+
+    set guioptions+=C
+    exec 'sleep' . duration
+    call assert_equal('egmrLtTC', &guioptions)
+    set guioptions-=C
+    exec 'sleep' . duration
     call assert_equal('egmrLtT', &guioptions)
 
   else
@@ -1769,17 +1774,37 @@ func Test_CursorHold_not_triggered_at_startup()
   call assert_equal(['g:cursorhold_triggered=0'], found)
 endfunc
 
-" Test that buffer names are shown at the end in the :Buffers menu
+" Test that Buffers menu generates the correct index for different buffer
+" names for sorting.
 func Test_Buffers_Menu()
   doautocmd LoadBufferMenu VimEnter
 
-  let name = '天'
-  exe ':badd ' .. name
-  let nr = bufnr('$')
+  " Non-ASCII characters only use the first character as idx
+  let idx_emoji = or(char2nr('😑'), 0x40000000)
 
-  let cmd = printf(':amenu Buffers.%s\ (%d)', name, nr)
-  let menu = split(execute(cmd), '\n')[1]
-  call assert_match('^9999 '.. name, menu)
+  " Only first five letters are used for alphanumeric:
+  " ('a'-32) << 24 + ('b'-32) << 18 + ('c'-32) << 12 + ('d'-32) << 6 + ('e'-32)
+  let idx_abcde = 0x218A3925
+  " ('a'-32) << 24 + ('b'-32) << 18 + ('c'-32) << 12 + ('d'-32) << 6 + ('f'-32)
+  let idx_abcdf = 0x218A3926
+  " ('a'-32) << 24 + 63 (clamped) << 18 + ('c'-32) << 12 + ('d'-32) << 6 + ('e'-32)
+  let idx_a_emoji_cde = 0x21FE3925
+
+  let names = ['😑', '😑1', '😑2', 'abcde', 'abcdefghi', 'abcdf', 'a😑cde']
+  let indices = [idx_emoji, idx_emoji, idx_emoji, idx_abcde, idx_abcde, idx_abcdf, idx_a_emoji_cde]
+  for i in range(len(names))
+    let name = names[i]
+    let idx = indices[i]
+    exe ':badd ' .. name
+    let nr = bufnr('$')
+
+    let cmd = printf(':amenu Buffers.%s\ (%d)', name, nr)
+    let menu = split(execute(cmd), '\n')[1]
+    call assert_inrange(0, 0x7FFFFFFF, idx)
+    call assert_match('^' .. idx .. ' '.. name, menu)
+  endfor
+
+  %bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

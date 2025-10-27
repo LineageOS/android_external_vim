@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_QUICKFIX) || defined(PROTO)
+#if defined(FEAT_QUICKFIX)
 
 struct dir_stack_T
 {
@@ -2203,7 +2203,7 @@ decr_quickfix_busy(void)
 #endif
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
     void
 check_quickfix_busy(void)
 {
@@ -6429,8 +6429,8 @@ vgr_match_buflines(
     long	lnum;
     colnr_T	col;
     int		pat_len = (int)STRLEN(spat);
-    if (pat_len > MAX_FUZZY_MATCHES)
-	pat_len = MAX_FUZZY_MATCHES;
+    if (pat_len > FUZZY_MATCH_MAX_LEN)
+	pat_len = FUZZY_MATCH_MAX_LEN;
 
     for (lnum = 1; lnum <= buf->b_ml.ml_line_count && *tomatch > 0; ++lnum)
     {
@@ -6483,13 +6483,13 @@ vgr_match_buflines(
 	    char_u  *str = ml_get_buf(buf, lnum, FALSE);
 	    colnr_T linelen = ml_get_buf_len(buf, lnum);
 	    int	    score;
-	    int_u   matches[MAX_FUZZY_MATCHES];
+	    int_u   matches[FUZZY_MATCH_MAX_LEN];
 	    int_u   sz = ARRAY_LENGTH(matches);
 
 	    // Fuzzy string match
 	    CLEAR_FIELD(matches);
 	    while (fuzzy_match(str + col, spat, FALSE, &score,
-			matches, sz, TRUE) > 0)
+			matches, sz) > 0)
 	    {
 		// Pass the buffer number so that it gets used even for a
 		// dummy buffer, unless duplicate_name is set, then the
@@ -7128,7 +7128,7 @@ unload_dummy_buffer(buf_T *buf, char_u *dirname_start)
     restore_start_dir(dirname_start);
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Copy the specified quickfix entry items into a new dict and append the dict
  * to 'list'.  Returns OK on success.
@@ -8565,7 +8565,7 @@ ex_cbuffer(exarg_T *eap)
     decr_quickfix_busy();
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return the autocmd name for the :cexpr Ex commands.
  */
@@ -8988,7 +8988,7 @@ ex_helpgrep(exarg_T *eap)
     }
 }
 
-# if defined(EXITFREE) || defined(PROTO)
+# if defined(EXITFREE)
     void
 free_quickfix(void)
 {
@@ -9006,7 +9006,7 @@ free_quickfix(void)
 
 #endif // FEAT_QUICKFIX
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 # ifdef FEAT_QUICKFIX
     static void
 get_qf_loc_list(int is_qf, win_T *wp, typval_T *what_arg, typval_T *rettv)

@@ -59,7 +59,7 @@ static void recording_mode(int attr);
 // Ugly global: overrule attribute used by screen_char()
 static int screen_char_attr = 0;
 
-#if defined(FEAT_CONCEAL) || defined(PROTO)
+#if defined(FEAT_CONCEAL)
 /*
  * Return TRUE if the cursor line in window "wp" may be concealed, according
  * to the 'concealcursor' option.
@@ -229,7 +229,7 @@ win_draw_end(
     set_empty_rows(wp, row);
 }
 
-#if defined(FEAT_FOLDING) || defined(PROTO)
+#if defined(FEAT_FOLDING)
 /*
  * Compute the width of the foldcolumn.  Based on 'foldcolumn' and how much
  * space is available for window "wp", minus "col".
@@ -287,6 +287,8 @@ fill_foldcolumn(
 	    symbol = wp->w_fill_chars.foldopen;
 	else if (first_level == 1)
 	    symbol = wp->w_fill_chars.foldsep;
+	else if (wp->w_fill_chars.foldinner != NUL)
+	    symbol = wp->w_fill_chars.foldinner;
 	else if (first_level + i <= 9)
 	    symbol = '0' + first_level + i;
 	else
@@ -366,13 +368,10 @@ char_needs_redraw(int off_from, int off_to, int cols)
 			    && ScreenLines[off_from + 1]
 						!= ScreenLines[off_to + 1])))))
 	return TRUE;
-    // TODO: This is a temporary solution until the root cause is fixed.
-    if (firstwin->w_wincol > 0)
-	return TRUE;
     return FALSE;
 }
 
-#if defined(FEAT_TERMINAL) || defined(PROTO)
+#if defined(FEAT_TERMINAL)
 /*
  * Return the index in ScreenLines[] for the current screen line.
  */
@@ -888,7 +887,7 @@ screen_line(
     }
 }
 
-#if defined(FEAT_RIGHTLEFT) || defined(PROTO)
+#if defined(FEAT_RIGHTLEFT)
 /*
  * Mirror text "str" for right-left displaying.
  * Only works for single-byte characters (e.g., numbers).
@@ -1007,7 +1006,7 @@ get_keymap_str(
     return plen;
 }
 
-#if defined(FEAT_STL_OPT) || defined(PROTO)
+#if defined(FEAT_STL_OPT)
 /*
  * Redraw the status line or ruler of window "wp".
  * When "wp" is NULL redraw the tab pages line from 'tabline'.
@@ -1551,7 +1550,7 @@ screen_puts_len(
     }
 }
 
-#if defined(FEAT_SEARCH_EXTRA) || defined(PROTO)
+#if defined(FEAT_SEARCH_EXTRA)
 /*
  * Prepare for 'hlsearch' highlighting.
  */
@@ -3691,9 +3690,9 @@ screen_ins_lines(
 	    LineOffset[j + line_count] = temp;
 	    LineWraps[j + line_count] = FALSE;
 	    if (can_clear((char_u *)" "))
-		lineclear(temp, topframe->fr_width, clear_attr);
+		lineclear(temp, (int)Columns, clear_attr);
 	    else
-		lineinvalid(temp, topframe->fr_width);
+		lineinvalid(temp, (int)Columns);
 	}
     }
 
@@ -4051,6 +4050,7 @@ showmode(void)
     int		attr;
     int		nwr_save;
     int		sub_attr;
+    int		show_ruler_with_pum = FALSE;
 
     do_mode = p_smd && msg_silent == 0
 	    && ((State & MODE_INSERT)
@@ -4182,6 +4182,10 @@ showmode(void)
 		    msg_puts_attr(_(p), attr);
 		}
 		msg_puts_attr(" --", attr);
+		// Ensure ruler is shown when a popup is visible and only the mode name
+		// is displayed. Without this, the ruler may disappear during insert-mode
+		// completion when 'shortmess' includes 'c'.
+		show_ruler_with_pum = TRUE;
 	    }
 
 	    need_clear = TRUE;
@@ -4217,7 +4221,7 @@ showmode(void)
     // If the last window has no status line, the ruler is after the mode
     // message and must be redrawn
     if (redrawing() && lastwin->w_status_height == 0)
-	win_redr_ruler(lastwin, TRUE, FALSE);
+	win_redr_ruler(lastwin, TRUE, show_ruler_with_pum);
 
     redraw_cmdline = FALSE;
     redraw_mode = FALSE;
@@ -4282,6 +4286,16 @@ recording_mode(int attr)
 
     sprintf(s, " @%c", reg_recording);
     msg_puts_attr(s, attr);
+}
+
+/*
+ * Return TRUE if mouse is enabled.
+ */
+    static int
+mouse_has_any(void)
+{
+    return mouse_has(MOUSE_NORMAL) || mouse_has(MOUSE_INSERT)
+	|| mouse_has(MOUSE_VISUAL);
 }
 
 /*
@@ -4460,7 +4474,7 @@ draw_tabline(void)
 	}
 
 	// Put an "X" for closing the current tab if there are several.
-	if (tabcount > 1)
+	if (tabcount > 1 && mouse_has_any())
 	{
 	    screen_putchar('X', 0, (int)Columns - 1, attr_nosel);
 	    TabPageIdxs[Columns - 1] = -999;
@@ -4608,7 +4622,7 @@ comp_col(void)
 #endif
 }
 
-#if defined(FEAT_LINEBREAK) || defined(PROTO)
+#if defined(FEAT_LINEBREAK)
 /*
  * Return the width of the 'number' and 'relativenumber' column.
  * Caller may need to check if 'number' or 'relativenumber' is set.
@@ -4656,7 +4670,7 @@ number_width(win_T *wp)
 }
 #endif
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return the current cursor column. This is the actual position on the
  * screen. First column is 0.
@@ -4726,6 +4740,7 @@ static struct charstab filltab[] =
     CHARSTAB_ENTRY(&fill_chars.foldopen,    "foldopen"),
     CHARSTAB_ENTRY(&fill_chars.foldclosed,  "foldclose"),
     CHARSTAB_ENTRY(&fill_chars.foldsep,	    "foldsep"),
+    CHARSTAB_ENTRY(&fill_chars.foldinner,   "foldinner"),
     CHARSTAB_ENTRY(&fill_chars.diff,	    "diff"),
     CHARSTAB_ENTRY(&fill_chars.eob,	    "eob"),
     CHARSTAB_ENTRY(&fill_chars.lastline,    "lastline"),
@@ -4844,6 +4859,7 @@ set_chars_option(win_T *wp, char_u *value, int is_listchars, int apply,
 		fill_chars.foldopen = '-';
 		fill_chars.foldclosed = '+';
 		fill_chars.foldsep = '|';
+		fill_chars.foldinner = NUL;
 		fill_chars.diff = '-';
 		fill_chars.eob = '~';
 		fill_chars.lastline = '@';

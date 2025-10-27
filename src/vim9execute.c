@@ -14,13 +14,7 @@
 #define USING_FLOAT_STUFF
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
-
-// When not generating protos this is included in proto.h
-#ifdef PROTO
-# include "vim9.h"
-#endif
-
+#if defined(FEAT_EVAL)
 
 // Structure put on ec_trystack when ISN_TRY is encountered.
 typedef struct {
@@ -1182,20 +1176,30 @@ invoke_defer_funcs(ectx_T *ectx)
 	    argvars[i] = arg_li->li_tv;
 	}
 
-	funcexe_T   funcexe;
+	funcexe_T	funcexe;
+	char_u		*name = NULL;
+	partial_T	*pt = NULL;
+
 	CLEAR_FIELD(funcexe);
 	funcexe.fe_evaluate = TRUE;
 	rettv.v_type = VAR_UNKNOWN;
+
 	if (functv->v_type == VAR_PARTIAL)
 	{
-	    funcexe.fe_partial = functv->vval.v_partial;
-	    funcexe.fe_object = functv->vval.v_partial->pt_obj;
+	    pt = functv->vval.v_partial;
+	    functv->vval.v_partial = NULL;
+
+	    name = pt->pt_func->uf_name;
+	    funcexe.fe_partial = pt;
+	    funcexe.fe_object = pt->pt_obj;
 	    if (funcexe.fe_object != NULL)
 		++funcexe.fe_object->obj_refcount;
 	}
-
-	char_u *name = functv->vval.v_string;
-	functv->vval.v_string = NULL;
+	else
+	{
+	    name = functv->vval.v_string;
+	    functv->vval.v_string = NULL;
+	}
 
 	// If the deferred function is called after an exception, then only the
 	// first statement in the function will be executed (because of the
@@ -1210,7 +1214,10 @@ invoke_defer_funcs(ectx_T *ectx)
 	exception_state_restore(&estate);
 
 	clear_tv(&rettv);
-	vim_free(name);
+	if (functv->v_type == VAR_PARTIAL)
+	    partial_unref(pt);
+	else
+	    vim_free(name);
     }
 }
 
@@ -1522,6 +1529,14 @@ call_by_name(
 	return call_bfunc(func_idx, argcount, ectx);
     }
 
+    char_u	cc = NUL;
+    char_u	*start_bracket = generic_func_find_open_bracket(name);
+    if (start_bracket != NULL)
+    {
+	cc = *start_bracket;
+	*start_bracket = NUL;
+    }
+
     ufunc = find_func(name, FALSE);
 
     if (ufunc == NULL)
@@ -1533,11 +1548,36 @@ call_by_name(
 	    ufunc = find_func(name, FALSE);
 
 	if (vim9_aborting(prev_uncaught_emsg))
+	{
+	    if (start_bracket != NULL)
+		*start_bracket = cc;
 	    return FAIL;  // bail out if loading the script caused an error
+	}
     }
+
+    if (start_bracket != NULL)
+	*start_bracket = cc;
 
     if (ufunc != NULL)
     {
+	if (IS_GENERIC_FUNC(ufunc))
+	{
+	    if (start_bracket != NULL)
+		ufunc = find_generic_func(ufunc, name, &start_bracket);
+	    else
+	    {
+		emsg_funcname(e_generic_func_missing_type_args_str, name);
+		ufunc = NULL;
+	    }
+	    if (ufunc == NULL)
+		return FAIL;
+	}
+	else if (start_bracket != NULL)
+	{
+	    emsg_funcname(e_not_a_generic_function_str, name);
+	    return FAIL;
+	}
+
 	if (check_ufunc_arg_types(ufunc, argcount, 0, ectx) == FAIL)
 	    return FAIL;
 
@@ -4477,7 +4517,7 @@ exec_instructions(ectx_T *ectx)
 		tv->vval.v_number = iptr->isn_arg.storenr.stnr_val;
 		break;
 
-	    // Store a value in a list, dict, blob or object variable.
+	    // Store a value in a list, tuple, dict, blob or object variable.
 	    case ISN_STOREINDEX:
 		{
 		    int res = execute_storeindex(iptr, ectx);
@@ -5068,7 +5108,7 @@ exec_instructions(ectx_T *ectx)
 		    ea.cmd = ea.arg = iptr->isn_arg.string;
 		    ga_init2(&lines_to_free, sizeof(char_u *), 50);
 		    SOURCING_LNUM = iptr->isn_lnum;
-		    define_function(&ea, NULL, &lines_to_free, 0, NULL, 0);
+		    define_function(&ea, NULL, &lines_to_free, 0, NULL, 0, NULL);
 		    ga_clear_strings(&lines_to_free);
 		}
 		break;

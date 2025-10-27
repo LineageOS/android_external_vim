@@ -13,8 +13,8 @@
 
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
-# if defined(FEAT_PROFILE) || defined(FEAT_RELTIME) || defined(PROTO)
+#if defined(FEAT_EVAL)
+# if defined(FEAT_PROFILE) || defined(FEAT_RELTIME)
 /*
  * Store the current time in "tm".
  */
@@ -200,7 +200,7 @@ profile_divide(proftime_T *tm, int count, proftime_T *tm2)
 }
 #endif
 
-# if defined(FEAT_PROFILE) || defined(PROTO)
+# if defined(FEAT_PROFILE)
 /*
  * Functions for profiling.
  */

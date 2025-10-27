@@ -1,7 +1,6 @@
 " Test Vim9 classes
 
-source check.vim
-import './vim9.vim' as v9
+import './util/vim9.vim' as v9
 
 def Test_class_basic()
   # Class supported only in "vim9script"
@@ -1259,7 +1258,7 @@ def Test_class_object_member_inits()
        var value: void
     endclass
   END
-  v9.CheckSourceFailure(lines, 'E1330: Invalid type for object variable: void', 3)
+  v9.CheckSourceFailure(lines, 'E1330: Invalid type used in variable declaration: void', 3)
 enddef
 
 " Test for instance variable access
@@ -11033,7 +11032,6 @@ def Test_method_string()
   v9.CheckScriptSuccess(lines)
 enddef
 
-
 " Test for using a class in the class definition
 def Test_Ref_Class_Within_Same_Class()
   var lines =<< trim END
@@ -12520,7 +12518,7 @@ def Test_super_keyword()
   END
   v9.CheckSourceFailure(lines, 'E1326: Variable "foo" not found in object "B"')
 
-  # Using super to access an overriden method in the parent class
+  # Using super to access an overridden method in the parent class
   lines =<< trim END
     vim9script
 
@@ -13151,6 +13149,37 @@ def Test_obj_class_member_type()
     D.d->extend({c: 'C'})
   END
   v9.CheckSourceFailure(lines, 'E1013: Argument 2: type mismatch, expected dict<number> but got dict<string> in extend()', 7)
+enddef
+
+" Test for garbage collecting a class with a member referring to the class
+" (self reference)
+func Test_class_selfref_gc()
+  let lines =<< trim END
+    vim9script
+    class Foo
+      static var MyFoo = Foo.new()
+      static var d = {a: [1, 2]}
+      static var l = [{a: 'a', b: 'b'}]
+    endclass
+    assert_equal(2, test_refcount(Foo))
+    test_garbagecollect_now()
+    assert_equal(2, test_refcount(Foo))
+  END
+  call v9.CheckSourceSuccess(lines)
+endfunc
+
+" Test for defining an interface in a function
+def Test_interface_defined_in_function()
+  var lines =<< trim END
+    vim9script
+    def Fn()
+      var x = 1
+      interface Foo
+      endinterface
+    enddef
+    defcompile
+  END
+  v9.CheckScriptFailure(lines, 'E1436: Interface can only be used in a script', 2)
 enddef
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

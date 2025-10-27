@@ -346,7 +346,7 @@ vim_strup(
 	*p2++ = (c < 'a' || c > 'z') ? c : (c - 0x20);
 }
 
-#if defined(FEAT_EVAL) || defined(FEAT_SPELL) || defined(PROTO)
+#if defined(FEAT_EVAL) || defined(FEAT_SPELL)
 /*
  * Make string "s" all upper-case and return it in allocated memory.
  * Handles multi-byte characters as well as possible.
@@ -538,7 +538,7 @@ vim_strlen_maxlen(char *s, size_t maxlen)
     return i;
 }
 
-#if (!defined(HAVE_STRCASECMP) && !defined(HAVE_STRICMP)) || defined(PROTO)
+#if !defined(HAVE_STRCASECMP) && !defined(HAVE_STRICMP)
 /*
  * Compare two strings, ignoring case, using current locale.
  * Doesn't work for multi-byte characters.
@@ -563,7 +563,7 @@ vim_stricmp(char *s1, char *s2)
 }
 #endif
 
-#if (!defined(HAVE_STRNCASECMP) && !defined(HAVE_STRNICMP)) || defined(PROTO)
+#if !defined(HAVE_STRNCASECMP) && !defined(HAVE_STRNICMP)
 /*
  * Compare two strings, for length "len", ignoring case, using current locale.
  * Doesn't work for multi-byte characters.
@@ -755,7 +755,7 @@ sort_strings(
     qsort((void *)files, (size_t)count, sizeof(char_u *), sort_compare);
 }
 
-#if defined(FEAT_QUICKFIX) || defined(FEAT_SPELL) || defined(PROTO)
+#if defined(FEAT_QUICKFIX) || defined(FEAT_SPELL)
 /*
  * Return TRUE if string "s" contains a non-ASCII character (128 or higher).
  * When "s" is NULL FALSE is returned.
@@ -795,7 +795,7 @@ concat_str(char_u *str1, char_u *str2)
     return dest;
 }
 
-#if defined(FEAT_EVAL) || defined(FEAT_RIGHTLEFT) || defined(PROTO)
+#if defined(FEAT_EVAL) || defined(FEAT_RIGHTLEFT)
 /*
  * Reverse text into allocated memory.
  * Returns the allocated string, NULL when out of memory.
@@ -825,7 +825,7 @@ reverse_text(char_u *s)
 }
 #endif
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return string "str" in ' quotes, doubling ' characters.
  * If "str" is NULL an empty string is assumed.
@@ -1407,7 +1407,7 @@ f_str2blob(typval_T *argvars, typval_T *rettv)
 	char_u	*str = li->li_tv.vval.v_string;
 
 	if (str == NULL)
-	    continue;
+	    str = (char_u *)"";
 
 	if (to_encoding != NULL)
 	{
@@ -2308,6 +2308,151 @@ f_trim(typval_T *argvars, typval_T *rettv)
 	}
     }
     rettv->vval.v_string = vim_strnsave(head, tail - head);
+}
+
+/*
+ * Decodes a URI-encoded string.
+ *
+ * Parameters:
+ *   str - The URI-encoded input string (may contain %XX sequences and '+').
+ *
+ * Returns:
+ *   A newly allocated string with URI encoding decoded:
+ *     - %XX sequences are converted to the corresponding character.
+ *     - If the input is malformed (e.g., incomplete % sequence), the original
+ *       characters are copied.
+ *   The output string will never be longer than the input string.
+ *   The caller is responsible for freeing the returned string.
+ *
+ * Returns NULL if input is NULL or memory allocation fails.
+ */
+    static char_u *
+uri_decode(char_u *str)
+{
+    if (str == NULL)
+	return NULL;
+
+    size_t len = STRLEN(str);
+
+    char_u *decoded = alloc(len + 1);
+    if (!decoded)
+	return NULL;
+
+    char_u	*p = decoded;
+    size_t	i = 0;
+
+    while (i < len)
+    {
+	if (str[i] == '%')
+	{
+	    if (i + 2 >= len)
+	    {
+		// Malformed encoding
+		*p++ = str[i++];
+		if (str[i] != NUL)
+		    *p++ = str[i++];
+	    }
+	    else
+	    {
+		int val = hexhex2nr(&str[i + 1]);
+		if (val != -1)
+		{
+		    *p++ = (char_u)val;
+		    i += 3;
+		}
+		else
+		{
+		    // invalid hex digits following "%"
+		    for (int j = 0; j < 3; j++)
+			*p++ = str[i++];
+		}
+	    }
+
+	}
+	else
+	    *p++ = str[i++];
+    }
+
+    *p = NUL;
+
+    return decoded;
+}
+
+/*
+ * "uri_decode({str})" function
+ */
+    void
+f_uridecode(typval_T *argvars, typval_T *rettv)
+{
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
+
+    if (check_for_string_arg(argvars, 0) == FAIL)
+	return;
+
+    rettv->vval.v_string = uri_decode(tv_get_string(&argvars[0]));
+}
+
+/*
+ * Encodes a string for safe use in a URI.
+ *
+ * Parameters:
+ *   str - The input string to encode.
+ *
+ * Returns:
+ *   A newly allocated string where:
+ *     - Alphanumeric characters and '-', '_', '.', '~' are left unchanged.
+ *     - All other bytes are encoded as %XX (uppercase hex).
+ *   The caller is responsible for freeing the returned string.
+ *
+ *   Returns NULL if input is NULL or memory allocation fails.
+ */
+    static char_u *
+uri_encode(char_u *str)
+{
+    if (str == NULL)
+	return NULL;
+
+    size_t len = STRLEN(str);
+
+    // Worst case: every character needs encoding => 3x size + 1 for null
+    // terminator
+    char_u *encoded = alloc(len * 3 + 1);
+    if (encoded == NULL)
+	return NULL;
+
+    char_u *p = encoded;
+
+    for (size_t i = 0; i < len; ++i)
+    {
+	char_u c = str[i];
+	if (ASCII_ISALNUM(c) || c == '-' || c == '_' || c == '.' || c == '~')
+	    *p++ = c;
+	else
+	{
+	    sprintf((char *)p, "%%%02X", c);
+	    p += 3;
+	}
+    }
+
+    *p = NUL;
+
+    return encoded;
+}
+
+/*
+ * "uri_encode({str})" function
+ */
+    void
+f_uriencode(typval_T *argvars, typval_T *rettv)
+{
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
+
+    if (check_for_string_arg(argvars, 0) == FAIL)
+	return;
+
+    rettv->vval.v_string = uri_encode(tv_get_string(&argvars[0]));
 }
 
 static char *e_printf = N_(e_insufficient_arguments_for_printf);

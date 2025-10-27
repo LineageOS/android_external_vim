@@ -14,7 +14,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
 #ifdef VMS
 # include <float.h>
@@ -22,6 +22,7 @@
 
 #define NAMESPACE_CHAR	(char_u *)"abglstvw"
 
+static int eval0_simple_funccal(char_u *arg, typval_T *rettv, exarg_T *eap, evalarg_T *evalarg);
 static int eval2(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval3(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval4(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
@@ -96,7 +97,7 @@ eval_init(void)
     func_init();
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
     void
 eval_clear(void)
 {
@@ -1004,7 +1005,7 @@ call_func_retlist(
     return rettv.vval.v_list;
 }
 
-#if defined(FEAT_FOLDING) || defined(PROTO)
+#if defined(FEAT_FOLDING)
 /*
  * Evaluate "arg", which is 'foldexpr'.
  * Note: caller must set "curwin" to match "arg".
@@ -1019,7 +1020,7 @@ eval_foldexpr(win_T *wp, int *cp)
     varnumber_T	retval;
     char_u	*s;
     sctx_T	saved_sctx = current_sctx;
-    int		use_sandbox = was_set_insecurely((char_u *)"foldexpr",
+    int		use_sandbox = was_set_insecurely(wp, (char_u *)"foldexpr",
 								    OPT_LOCAL);
 
     arg = skipwhite(wp->w_p_fde);
@@ -1620,12 +1621,12 @@ get_lval_tuple(
  * The method index, method function pointer and method type are returned in
  * "lp".
  */
-    static void
+    static int
 get_lval_oc_method(
     lval_T	*lp,
     class_T	*cl,
     char_u	*key,
-    char_u	*key_end,
+    char_u	**key_end,
     vartype_T	v_type)
 {
     // Look for a method with this name.
@@ -1637,8 +1638,13 @@ get_lval_oc_method(
 	ufunc_T	*fp;
 
 	fp = method_lookup(cl, round == 1 ? VAR_CLASS : VAR_OBJECT,
-						key, key_end - key, &m_idx);
+						key, *key_end - key, &m_idx);
 	lp->ll_oi = m_idx;
+
+	// process generic method (if present)
+	if (fp && (fp = eval_generic_func(fp, key, key_end)) == NULL)
+	    return FAIL;
+
 	if (fp != NULL)
 	{
 	    lp->ll_ufunc = fp;
@@ -1646,6 +1652,8 @@ get_lval_oc_method(
 	    break;
 	}
     }
+
+    return OK;
 }
 
 /*
@@ -1711,7 +1719,7 @@ get_lval_oc_variable(
 get_lval_class_or_obj(
     lval_T	*lp,
     char_u	*key,
-    char_u	*key_end,
+    char_u	**key_end,
     vartype_T	v_type,
     class_T	*cl_exec,
     int		flags,
@@ -1747,19 +1755,20 @@ get_lval_class_or_obj(
     lp->ll_valtype = NULL;
 
     if (flags & GLV_PREFER_FUNC)
-	get_lval_oc_method(lp, cl, key, key_end, v_type);
+	if (get_lval_oc_method(lp, cl, key, key_end, v_type) == FAIL)
+	    return FAIL;
 
     // Look for object/class member variable
     if (lp->ll_valtype == NULL)
     {
-	if (get_lval_oc_variable(lp, cl, key, key_end, v_type, cl_exec, flags)
+	if (get_lval_oc_variable(lp, cl, key, *key_end, v_type, cl_exec, flags)
 								== FAIL)
 	    return FAIL;
     }
 
     if (lp->ll_valtype == NULL)
     {
-	member_not_found_msg(cl, v_type, key, key_end - key);
+	member_not_found_msg(cl, v_type, key, *key_end - key);
 	return FAIL;
     }
 
@@ -2039,7 +2048,7 @@ get_lval_subscript(
 	}
 	else  // v_type == VAR_CLASS || v_type == VAR_OBJECT
 	{
-	    if (get_lval_class_or_obj(lp, key, p, v_type, cl_exec, flags,
+	    if (get_lval_class_or_obj(lp, key, &p, v_type, cl_exec, flags,
 							quiet) == FAIL)
 		goto done;
 	}
@@ -2213,8 +2222,9 @@ get_lval(
 		// parse the type after the name
 		lp->ll_type = parse_type(&tp,
 			       &SCRIPT_ITEM(current_sctx.sc_sid)->sn_type_list,
-			       !quiet);
-		if (lp->ll_type == NULL && !quiet)
+			       NULL, NULL, !quiet);
+		if (!quiet && (lp->ll_type == NULL
+			    || !valid_declaration_type(lp->ll_type)))
 		    return NULL;
 		lp->ll_name_end = tp;
 	    }
@@ -2226,13 +2236,33 @@ get_lval(
 
     if (*p == '.')
     {
-	imported_T *import = find_imported(lp->ll_name, p - lp->ll_name, TRUE);
-	if (import != NULL)
+	// In legacy script, when a local variable and import exists with this name,
+	// prioritize local variable over imports to avoid conflicts.
+	int var_exists = FALSE;
+	if (!vim9script)
 	{
-	    p++;	// skip '.'
-	    p = get_lval_imported(lp, import->imp_sid, p, &v, fne_flags);
-	    if (p == NULL)
-		return NULL;
+	    cc = *p;
+	    *p = NUL;
+	    hashtab_T *local_ht = get_funccal_local_ht();
+	    if (local_ht != NULL)
+	    {
+		hashitem_T *hi = hash_find(local_ht, lp->ll_name);
+		if (!HASHITEM_EMPTY(hi))
+		    var_exists = TRUE;
+	    }
+	    *p = cc;
+	}
+
+	if (!var_exists)
+	{
+	    imported_T *import = find_imported(lp->ll_name, p - lp->ll_name, TRUE);
+	    if (import != NULL)
+	    {
+		p++;	// skip '.'
+		p = get_lval_imported(lp, import->imp_sid, p, &v, fne_flags);
+		if (p == NULL)
+		    return NULL;
+	    }
 	}
     }
 
@@ -3083,6 +3113,8 @@ set_context_for_expression(
 		|| cmdidx == CMD_echo
 		|| cmdidx == CMD_echon
 		|| cmdidx == CMD_echomsg
+		|| cmdidx == CMD_echoerr
+		|| cmdidx == CMD_echoconsole
 		|| cmdidx == CMD_echowindow)
 	    && xp->xp_context == EXPAND_EXPRESSION)
     {
@@ -3179,6 +3211,8 @@ eval_func(
 	funcexe.fe_basetv = basetv;
 	funcexe.fe_check_type = type;
 	funcexe.fe_found_var = found_var;
+	if (evalarg != NULL)
+	    funcexe.fe_cctx = evalarg->eval_cctx;
 	ret = get_func_tv(s, len, rettv, arg, evalarg, &funcexe);
     }
     vim_free(s);
@@ -3388,7 +3422,6 @@ skipwhite_and_linebreak(char_u *arg, evalarg_T *evalarg)
  * Handle zero level expression.
  * This calls eval1() and handles error message and nextcmd.
  * Put the result in "rettv" when returning OK and "evaluate" is TRUE.
- * Note: "rettv.v_lock" is not set.
  * "evalarg" can be NULL, EVALARG_EVALUATE or a pointer.
  * Return OK or FAIL.
  */
@@ -3429,7 +3462,7 @@ may_call_simple_func(
  * Handle zero level expression with optimization for a simple function call.
  * Same arguments and return value as eval0().
  */
-    int
+    static int
 eval0_simple_funccal(
     char_u	*arg,
     typval_T	*rettv,
@@ -3539,8 +3572,6 @@ eval0_retarg(
  *
  * "arg" must point to the first non-white of the expression.
  * "arg" is advanced to just after the recognized expression.
- *
- * Note: "rettv.v_lock" is not set.
  *
  * Return OK or FAIL.
  */
@@ -4725,7 +4756,7 @@ eval8(
     {
 	++*arg;
 	ga_init2(&type_list, sizeof(type_T *), 10);
-	want_type = parse_type(arg, &type_list, TRUE);
+	want_type = parse_type(arg, &type_list, NULL, NULL, TRUE);
 	if (want_type == NULL && (evaluate || **arg != '>'))
 	{
 	    clear_type_list(&type_list);
@@ -4973,7 +5004,7 @@ eval9_nested_expr(
 
     if (vim9script)
     {
-	ret = get_lambda_tv(arg, rettv, TRUE, evalarg);
+	ret = get_lambda_tv(arg, rettv, TRUE, evalarg, NULL);
 	if (ret == OK && evaluate)
 	{
 	    ufunc_T *ufunc = rettv->vval.v_partial->pt_func;
@@ -5062,7 +5093,8 @@ eval9_var_func_name(
 	    semsg(_(e_cannot_use_s_colon_in_vim9_script_str), s);
 	    ret = FAIL;
 	}
-	else if ((vim9script ? **arg : *skipwhite(*arg)) == '(')
+	else if ((vim9script ? **arg : *skipwhite(*arg)) == '('
+				|| (vim9script && generic_func_call(arg)))
 	{
 	    // "name(..."  recursive!
 	    *arg = skipwhite(*arg);
@@ -5079,6 +5111,12 @@ eval9_var_func_name(
 		*name_start = s;
 		ret = eval_variable(s, len, 0, rettv, NULL,
 					EVAL_VAR_VERBOSE + EVAL_VAR_IMPORT);
+
+		// skip the generic function arguments (if present)
+		// they are already processed by eval_variable
+		if (ret == OK && vim9script && **arg == '<'
+						&& rettv->v_type == VAR_FUNC)
+		    ret = skip_generic_func_type_args(arg);
 	    }
 	}
 	else
@@ -5230,7 +5268,7 @@ eval9(
     case '{':	if (vim9script)
 		    ret = NOTDONE;
 		else
-		    ret = get_lambda_tv(arg, rettv, vim9script, evalarg);
+		    ret = get_lambda_tv(arg, rettv, vim9script, evalarg, NULL);
 		if (ret == NOTDONE)
 		    ret = eval_dict(arg, rettv, evalarg, FALSE);
 		break;
@@ -5438,6 +5476,8 @@ call_func_rettv(
     funcexe.fe_partial = pt;
     funcexe.fe_selfdict = selfdict;
     funcexe.fe_basetv = basetv;
+    if (evalarg != NULL)
+	funcexe.fe_cctx = evalarg->eval_cctx;
     ret = get_func_tv(s, -1, rettv, arg, evalarg, &funcexe);
 
 theend:
@@ -5471,7 +5511,7 @@ eval_lambda(
     if (**arg == '{')
     {
 	// ->{lambda}()
-	ret = get_lambda_tv(arg, rettv, FALSE, evalarg);
+	ret = get_lambda_tv(arg, rettv, FALSE, evalarg, NULL);
     }
     else
     {
@@ -5663,6 +5703,15 @@ eval_index(
 	    ;
 	if (keylen == 0)
 	    return FAIL;
+	if (vim9script && key[keylen] == '<')
+	{
+	    // skip generic type arguments
+	    char_u	*p = &key[keylen];
+
+	    if (skip_generic_func_type_args(&p) == FAIL)
+		return FAIL;
+	    keylen = p - key;
+	}
 	*arg = key + keylen;
     }
     else
@@ -6025,7 +6074,8 @@ partial_free(partial_T *pt)
     }
     else
 	func_ptr_unref(pt->pt_func);
-    object_unref(pt->pt_obj);
+    if (pt->pt_obj != NULL)
+	object_unref(pt->pt_obj);
 
     // "out_up" is no longer used, decrement refcount on partial that owns it.
     partial_unref(pt->pt_outer.out_up_partial);
@@ -7373,7 +7423,19 @@ handle_subscript(
 	    else
 	    {
 		rettv->v_type = VAR_FUNC;
-		rettv->vval.v_string = vim_strnsave(ufunc->uf_name, ufunc->uf_namelen);
+		if (**arg == '<')
+		{
+		    char_u *s = get_generic_func_name(ufunc, arg);
+		    if (s != NULL)
+			rettv->vval.v_string = s;
+		    else
+			ret = FAIL;
+		}
+		else
+		{
+		    rettv->vval.v_string =
+			vim_strnsave(ufunc->uf_name, ufunc->uf_namelen);
+		}
 	    }
 	    continue;
 	}

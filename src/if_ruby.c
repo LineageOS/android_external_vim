@@ -107,11 +107,21 @@
 # undef SIZEOF_TIME_T
 #endif
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
+#if defined(__GNUC__) || defined(__clang__)
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
+
+#if defined(__clang__) && (__clang_major__ >= 21)
+# pragma GCC diagnostic ignored "-Wdefault-const-init-field-unsafe"
+#endif
+
 #include <ruby.h>
-#pragma GCC diagnostic pop
 #include <ruby/encoding.h>
+
+#if defined(__GNUC__) || defined(__clang__)
+# pragma GCC diagnostic pop
+#endif
 
 // See above.
 #ifdef SIZEOF_TIME_T
@@ -194,12 +204,6 @@
 # endif
 #endif
 
-#if defined(PROTO) && !defined(FEAT_RUBY)
-// Define these to be able to generate the function prototypes.
-# define VALUE int
-# define RUBY_DATA_FUNC int
-#endif
-
 static int ruby_initialized = 0;
 static void *ruby_stack_start;
 static VALUE objtbl;
@@ -220,10 +224,7 @@ static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 # define ruby_init_stack(addr) ruby_init_stack((addr), rb_ia64_bsp())
 #endif
 
-#if defined(DYNAMIC_RUBY) || defined(PROTO)
-# if defined(PROTO) && !defined(HINSTANCE)
-#  define HINSTANCE int		// for generating prototypes
-# endif
+#if defined(DYNAMIC_RUBY)
 
 /*
  * Wrapper defines
@@ -793,7 +794,7 @@ ruby_enabled(int verbose)
 {
     return ruby_runtime_link_init((char *)p_rubydll, verbose) == OK;
 }
-#endif // defined(DYNAMIC_RUBY) || defined(PROTO)
+#endif // defined(DYNAMIC_RUBY)
 
     void
 ruby_end(void)

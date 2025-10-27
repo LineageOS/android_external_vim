@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_DIGRAPHS) || defined(PROTO)
+#if defined(FEAT_DIGRAPHS)
 
 typedef int result_T;
 
@@ -1028,8 +1028,8 @@ static digr_T digraphdefault[] = {
 	{'T', 'R', 0x2315},
 	{'I', 'u', 0x2320},
 	{'I', 'l', 0x2321},
-	{'<', '/', 0x2329},
-	{'/', '>', 0x232a},
+	{'<', '[', 0x27e8},
+	{']', '>', 0x27e9},
 #   define DG_START_OTHER2 0x2423
 	{'V', 's', 0x2423},
 	{'1', 'h', 0x2440},
@@ -1176,6 +1176,8 @@ static digr_T digraphdefault[] = {
 	{'*', '_', 0x3005},
 	{';', '_', 0x3006},
 	{'0', '_', 0x3007},
+	{'<', '/', 0x3008},
+	{'/', '>', 0x3009},
 	{'<', '+', 0x300a},
 	{'>', '+', 0x300b},
 	{'<', '\'', 0x300c},
@@ -2064,7 +2066,7 @@ digraph_set_common(typval_T *argchars, typval_T *argdigraph)
 
 #endif // FEAT_DIGRAPHS
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * "digraph_get()" function
  */
@@ -2213,7 +2215,7 @@ f_digraph_setlist(typval_T * argvars, typval_T *rettv)
 #endif // FEAT_EVAL
 
 
-#if defined(FEAT_KEYMAP) || defined(PROTO)
+#if defined(FEAT_KEYMAP)
 
 // structure used for b_kmap_ga.ga_data
 typedef struct

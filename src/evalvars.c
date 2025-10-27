@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
 static dictitem_T	globvars_var;		// variable used for g:
 static dict_T		globvardict;		// Dictionary with g: variables
@@ -163,6 +163,10 @@ static struct vimvar
     {VV_NAME("t_enumvalue",	 VAR_NUMBER), NULL, VV_RO},
     {VV_NAME("stacktrace",	 VAR_LIST), &t_list_dict_any, VV_RO},
     {VV_NAME("t_tuple",		 VAR_NUMBER), NULL, VV_RO},
+    {VV_NAME("wayland_display",  VAR_STRING), NULL, VV_RO},
+    {VV_NAME("clipmethod",	 VAR_STRING), NULL, VV_RO},
+    {VV_NAME("termda1",		 VAR_STRING), NULL, VV_RO},
+    {VV_NAME("termosc",	 VAR_STRING), NULL, VV_RO},
 };
 
 // shorthand
@@ -283,7 +287,7 @@ evalvars_init(void)
     set_reg_var(0);
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
 /*
  * Free all vim variables information on exit
  */
@@ -412,7 +416,7 @@ eval_charconvert(
     return OK;
 }
 
-# if defined(FEAT_POSTSCRIPT) || defined(PROTO)
+# if defined(FEAT_POSTSCRIPT)
     int
 eval_printexpr(char_u *fname, char_u *args)
 {
@@ -442,7 +446,7 @@ eval_printexpr(char_u *fname, char_u *args)
 }
 # endif
 
-# if defined(FEAT_DIFF) || defined(PROTO)
+# if defined(FEAT_DIFF)
     void
 eval_diff(
     char_u	*origfile,
@@ -500,7 +504,7 @@ eval_patch(
 }
 # endif
 
-#if defined(FEAT_SPELL) || defined(PROTO)
+#if defined(FEAT_SPELL)
 /*
  * Evaluate an expression to a list with suggestions.
  * For the "expr:" part of 'spellsuggest'.
@@ -964,7 +968,11 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
 	    }
 
 	    if (list_append_string(l, str, -1) == FAIL)
+	    {
+		if (free_str)
+		    vim_free(str);
 		break;
+	    }
 	    if (free_str)
 		vim_free(str);
 	}
@@ -2516,7 +2524,7 @@ item_lock(typval_T *tv, int deep, int lock, int check_refcount)
     --recurse;
 }
 
-#if (defined(FEAT_MENU) && defined(FEAT_MULTI_LANG)) || defined(PROTO)
+#if defined(FEAT_MENU) && defined(FEAT_MULTI_LANG)
 /*
  * Delete all "menutrans_" variables.
  */
@@ -2907,6 +2915,17 @@ set_vim_var_string(
 	vimvars[idx].vv_str = vim_strnsave(val, len);
 }
 
+    void
+set_vim_var_string_direct(
+    int		idx,
+    char_u	*val)
+{
+    clear_tv(&vimvars[idx].vv_di.di_tv);
+    vimvars[idx].vv_tv_type = VAR_STRING;
+
+    vimvars[idx].vv_str = val;
+}
+
 /*
  * Set List v: variable to "val".
  */
@@ -3194,6 +3213,20 @@ eval_variable(
 	    int	    has_g_prefix = STRNCMP(name, "g:", 2) == 0;
 	    ufunc_T *ufunc = find_func(name, FALSE);
 
+	    if (ufunc != NULL && cc == '<')
+	    {
+		// handle generic function
+		char_u	*argp = name + len;
+		name[len] = cc;
+		ufunc = eval_generic_func(ufunc, name, &argp);
+		name[len] = NUL;
+		if (ufunc == NULL)
+		{
+		    ret = FAIL;
+		    goto done;
+		}
+	    }
+
 	    // In Vim9 script we can get a function reference by using the
 	    // function name.  For a global non-autoload function "g:" is
 	    // required.
@@ -3205,9 +3238,22 @@ eval_variable(
 		{
 		    rettv->v_type = VAR_FUNC;
 		    if (has_g_prefix)
+		    {
 			// Keep the "g:", otherwise script-local may be
 			// assumed.
-			rettv->vval.v_string = vim_strsave(name);
+			if (cc != '<')
+			    rettv->vval.v_string = vim_strsave(name);
+			else
+			{
+			    // append the generic function arguments
+			    char_u	*argp = name + len;
+			    name[len] = cc;
+			    rettv->vval.v_string =
+				append_generic_func_type_args(name, len,
+									&argp);
+			    name[len] = NUL;
+			}
+		    }
 		    else
 			rettv->vval.v_string = vim_strnsave(ufunc->uf_name, ufunc->uf_namelen);
 		    if (rettv->vval.v_string != NULL)
@@ -3317,7 +3363,7 @@ eval_variable(
 		    }
 		}
 	    }
-	    copy_tv(tv, rettv);
+	    ret = copy_tv(tv, rettv);
 	}
     }
 

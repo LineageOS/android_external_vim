@@ -3,11 +3,7 @@
 set encoding=latin1
 scriptencoding latin1
 
-source check.vim
 CheckFeature mksession
-
-source shared.vim
-source term_util.vim
 
 " Test for storing global and local argument list in a session file
 " This one must be done first.
@@ -1223,7 +1219,7 @@ func Test_mkvimrc()
   set pastetoggle=<F5>
   set wildchar=<F6>
   set wildcharm=<F7>
-  call assert_fails('mkvimrc Xtestvimrc')
+  call assert_fails('mkvimrc Xtestvimrc', 'E189: "Xtestvimrc" exists')
   mkvimrc! Xtestvimrc
   call assert_notequal(-1, index(readfile('Xtestvimrc'), 'set pastetoggle=<F5>'))
   call assert_notequal(-1, index(readfile('Xtestvimrc'), 'set wildchar=<F6>'))

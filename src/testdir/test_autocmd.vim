@@ -1,10 +1,7 @@
 " Tests for autocommands
 
-source shared.vim
-source check.vim
-source term_util.vim
-source screendump.vim
-import './vim9.vim' as v9
+source util/screendump.vim
+import './util/vim9.vim' as v9
 
 func s:cleanup_buffers() abort
   for bnr in range(1, bufnr('$'))
@@ -821,25 +818,47 @@ func Test_WinClosed_switch_tab()
   %bwipe!
 endfunc
 
-" This used to trigger WinClosed twice for the same window, and the window's
-" buffer was NULL in the second autocommand.
-func Test_WinClosed_BufUnload_close_other()
-  tabnew
+" This used to trigger WinClosed/WinLeave/BufLeave twice for the same window,
+" and the window's buffer was NULL in the second autocommand.
+func Run_test_BufUnload_close_other(extra_cmd)
+  let oldtab = tabpagenr()
+  tabnew Xb1
   let g:tab = tabpagenr()
-  let g:buf = bufnr()
-  new
-  setlocal bufhidden=wipe
-  augroup test-WinClosed
-    autocmd BufUnload * ++once exe g:buf .. 'bwipe!'
-    autocmd WinClosed * call tabpagebuflist(g:tab)
+  let g:w1 = win_getid()
+  new Xb2
+  let g:w2 = win_getid()
+  let g:log = []
+  exe a:extra_cmd
+
+  augroup test-BufUnload-close-other
+    autocmd BufUnload * ++nested ++once bwipe! Xb1
+    for event in ['WinClosed', 'BufLeave', 'WinLeave', 'TabLeave']
+      exe $'autocmd {event} * call tabpagebuflist(g:tab)'
+      exe $'autocmd {event} * let g:log += ["{event}:" .. expand("<afile>")]'
+    endfor
   augroup END
+
   close
+  " WinClosed is triggered once for each of the 2 closed windows.
+  " Others are only triggered once.
+  call assert_equal(['BufLeave:Xb2', 'WinLeave:Xb2', $'WinClosed:{g:w2}',
+        \ $'WinClosed:{g:w1}', 'TabLeave:Xb2'], g:log)
+  call assert_equal(oldtab, tabpagenr())
+  call assert_equal([0, 0], win_id2tabwin(g:w1))
+  call assert_equal([0, 0], win_id2tabwin(g:w2))
 
   unlet g:tab
-  unlet g:buf
-  autocmd! test-WinClosed
-  augroup! test-WinClosed
+  unlet g:w1
+  unlet g:w2
+  unlet g:log
+  autocmd! test-BufUnload-close-other
+  augroup! test-BufUnload-close-other
   %bwipe!
+endfunc
+
+func Test_BufUnload_close_other()
+  call Run_test_BufUnload_close_other('')
+  call Run_test_BufUnload_close_other('setlocal bufhidden=wipe')
 endfunc
 
 func s:AddAnAutocmd()
@@ -2186,6 +2205,17 @@ func Test_Cmdline()
         \ '0abc1abc2abc3',
         \ ], g:log)
 
+  " <Del> should trigger CmdlineChanged
+  let g:log = []
+  call feedkeys(":foo\<Left>\<Left>\<Del>\<Del>\<Esc>", 'xt')
+  call assert_equal([
+        \ 'f',
+        \ 'fo',
+        \ 'foo',
+        \ 'fo',
+        \ 'f',
+        \ ], g:log)
+
   unlet g:log
   au! CmdlineChanged
 
@@ -2454,7 +2484,10 @@ func Test_BufReadCmd()
 
   call writefile(['one', 'two', 'three'], 'Xcmd.test', 'D')
   edit Xcmd.test
+  set noruler
   call assert_match('Xcmd.test" line 1 of 3', execute('file'))
+  set ruler
+  call assert_match('Xcmd.test" 3 lines --33%--', execute('file'))
   normal! Gofour
   write
   call assert_equal(['one', 'two', 'three', 'four'], readfile('Xcmd.test'))
@@ -5477,6 +5510,31 @@ func Test_eventignore_subtract()
   unlet! s:triggered
   call CleanUpTestAuGroup()
   %bw!
+endfunc
+
+func Test_VimResized_and_window_width_not_equalized()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    let g:vim_resized = 0
+    autocmd VimResized * let g:vim_resized = 1
+    10vsplit
+  END
+  call writefile(lines, 'XTest_VimResize', 'D')
+  let buf = RunVimInTerminal('-S XTest_VimResize', {'rows': 10, 'cols': 30})
+
+  " redraw now to avoid a redraw after the :echo command
+  call term_sendkeys(buf, ":redraw!\<CR>")
+  call TermWait(buf)
+
+  call term_sendkeys(buf, ":set columns=40\<CR>")
+  call term_sendkeys(buf, ":echo 'VimResized:' g:vim_resized\<CR>")
+  call WaitForAssert({-> assert_match('^VimResized: 1$', term_getline(buf, 10))}, 1000)
+  call term_sendkeys(buf, ":let window_width = getwininfo(win_getid())[0].width\<CR>")
+  call term_sendkeys(buf, ":echo 'window_width:' window_width\<CR>")
+  call WaitForAssert({-> assert_match('^window_width: 10$', term_getline(buf, 10))}, 1000)
+
+  call StopVimInTerminal(buf)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -734,7 +734,10 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	    wp->w_p_list = TRUE;
 	}
 
-	bufferlen = vim_snprintf((char *)buffer, RULER_BUF_LEN, "%ld,",
+	// row number, column number is appended
+	// l10n: leave as-is unless a space after the comma is preferred
+	// l10n: do not add any row/column label, due to the limited space
+	bufferlen = vim_snprintf((char *)buffer, RULER_BUF_LEN, _("%ld,"),
 		(wp->w_buffer->b_ml.ml_flags & ML_EMPTY)
 		    ? 0L
 		    : (long)(wp->w_cursor.lnum));
@@ -1043,7 +1046,7 @@ redraw_win_toolbar(win_T *wp)
 }
 #endif
 
-#if defined(FEAT_FOLDING) || defined(PROTO)
+#if defined(FEAT_FOLDING)
 /*
  * Copy "buf[len]" to ScreenLines["off"] and set attributes to "attr".
  */
@@ -2872,7 +2875,7 @@ update_finish(void)
 }
 #endif
 
-#if defined(FEAT_NETBEANS_INTG) || defined(PROTO)
+#if defined(FEAT_NETBEANS_INTG)
     void
 update_debug_sign(buf_T *buf, linenr_T lnum)
 {
@@ -2922,7 +2925,7 @@ update_debug_sign(buf_T *buf, linenr_T lnum)
 }
 #endif
 
-#if defined(FEAT_GUI) || defined(PROTO)
+#if defined(FEAT_GUI)
 /*
  * Update a single window, its status line and maybe the command line msg.
  * Used for the GUI scrollbar.
@@ -3274,7 +3277,7 @@ redraw_buf_later(buf_T *buf, int type)
 #endif
 }
 
-#if defined(FEAT_SIGNS) || defined(PROTO)
+#if defined(FEAT_SIGNS)
     void
 redraw_buf_line_later(buf_T *buf, linenr_T lnum)
 {
@@ -3287,7 +3290,7 @@ redraw_buf_line_later(buf_T *buf, linenr_T lnum)
 }
 #endif
 
-#if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
+#if defined(FEAT_JOB_CHANNEL)
     void
 redraw_buf_and_status_later(buf_T *buf, int type)
 {

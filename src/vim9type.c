@@ -14,15 +14,10 @@
 #define USING_FLOAT_STUFF
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
 #ifdef VMS
 # include <float.h>
-#endif
-
-// When not generating protos this is included in proto.h
-#ifdef PROTO
-# include "vim9.h"
 #endif
 
 /*
@@ -101,7 +96,7 @@ copy_type_deep_rec(type_T *type, garray_T *type_gap, garray_T *seen_types)
  * Make a deep copy of "type".
  * When allocation fails returns "type".
  */
-    static type_T *
+    type_T *
 copy_type_deep(type_T *type, garray_T *type_gap)
 {
     garray_T seen_types;
@@ -342,7 +337,10 @@ get_list_type(type_T *member_type, garray_T *type_gap)
     type_T *type;
 
     // recognize commonly used types
-    if (member_type == NULL || member_type->tt_type == VAR_ANY)
+    // A generic type is t_any initially before being set to a concrete type
+    // later.  So don't use the static t_list_any for a generic type.
+    if (member_type == NULL || (member_type->tt_type == VAR_ANY
+					&& !IS_GENERIC_TYPE(member_type)))
 	return &t_list_any;
     if (member_type->tt_type == VAR_VOID
 	    || member_type->tt_type == VAR_UNKNOWN)
@@ -810,7 +808,29 @@ fp_typval2type(typval_T *tv, garray_T *type_gap)
 		    type_gap);
 	}
 	else
-	    ufunc = find_func(name, FALSE);
+	{
+	    // Check if name contains "<".  If it does, then replace "<" with
+	    // NUL and lookup the function and then look up the specific
+	    // generic function using the supplied types.
+	    char_u *p = generic_func_find_open_bracket(name);
+	    if (p == NULL)
+		ufunc = find_func(name, FALSE);
+	    else
+	    {
+		// generic function
+		char_u	cc = *p;
+
+		*p = NUL;
+		ufunc = find_func(name, FALSE);
+		*p = cc;
+		if (ufunc != NULL && IS_GENERIC_FUNC(ufunc))
+		{
+		    ufunc = find_generic_func(ufunc, name, &p);
+		    if (ufunc == NULL)
+			return NULL;
+		}
+	    }
+	}
     }
     if (ufunc != NULL)
     {
@@ -972,7 +992,7 @@ valid_declaration_type(type_T *type)
     {
 	char *tofree = NULL;
 	char *name = type_name(type, &tofree);
-	semsg(_(e_invalid_type_for_object_variable_str), name);
+	semsg(_(e_invalid_type_in_variable_declaration_str), name);
 	vim_free(tofree);
 	return FALSE;
     }
@@ -1582,7 +1602,9 @@ parse_type_member(
 	type_T	    *type,
 	garray_T    *type_gap,
 	int	    give_error,
-	char	    *info)
+	char	    *info,
+	ufunc_T	    *ufunc,
+	cctx_T	    *cctx)
 {
     char_u  *arg_start = *arg;
     type_T  *member_type;
@@ -1601,8 +1623,8 @@ parse_type_member(
     }
     *arg = skipwhite(*arg + 1);
 
-    member_type = parse_type(arg, type_gap, give_error);
-    if (member_type == NULL)
+    member_type = parse_type(arg, type_gap, ufunc, cctx, give_error);
+    if (member_type == NULL || !valid_declaration_type(member_type))
 	return NULL;
 
     *arg = skipwhite(*arg);
@@ -1625,7 +1647,13 @@ parse_type_member(
  * Return NULL for failure.
  */
     static type_T *
-parse_type_func(char_u **arg, size_t len, garray_T *type_gap, int give_error)
+parse_type_func(
+    char_u	**arg,
+    size_t	len,
+    garray_T	*type_gap,
+    int		give_error,
+    ufunc_T	*ufunc,
+    cctx_T	*cctx)
 {
     char_u  *p;
     type_T  *type;
@@ -1665,8 +1693,8 @@ parse_type_func(char_u **arg, size_t len, garray_T *type_gap, int give_error)
 		return NULL;
 	    }
 
-	    type = parse_type(&p, type_gap, give_error);
-	    if (type == NULL)
+	    type = parse_type(&p, type_gap, ufunc, cctx, give_error);
+	    if (type == NULL || !valid_declaration_type(type))
 		return NULL;
 	    if ((flags & TTFLAG_VARARGS) != 0 && type->tt_type != VAR_LIST)
 	    {
@@ -1725,7 +1753,7 @@ parse_type_func(char_u **arg, size_t len, garray_T *type_gap, int give_error)
 	if (!VIM_ISWHITE(**arg) && give_error)
 	    semsg(_(e_white_space_required_after_str_str), ":", *arg - 1);
 	*arg = skipwhite(*arg);
-	ret_type = parse_type(arg, type_gap, give_error);
+	ret_type = parse_type(arg, type_gap, ufunc, cctx, give_error);
 	if (ret_type == NULL)
 	    return NULL;
     }
@@ -1755,7 +1783,12 @@ parse_type_func(char_u **arg, size_t len, garray_T *type_gap, int give_error)
  * Return NULL for failure.
  */
     static type_T *
-parse_type_tuple(char_u **arg, garray_T *type_gap, int give_error)
+parse_type_tuple(
+    char_u	**arg,
+    garray_T	*type_gap,
+    int		give_error,
+    ufunc_T	*ufunc,
+    cctx_T	*cctx)
 {
     char_u	*p;
     type_T	*type;
@@ -1792,8 +1825,8 @@ parse_type_tuple(char_u **arg, garray_T *type_gap, int give_error)
 	    p += 3;
 	}
 
-	type = parse_type(&p, type_gap, give_error);
-	if (type == NULL)
+	type = parse_type(&p, type_gap, ufunc, cctx, give_error);
+	if (type == NULL || !valid_declaration_type(type))
 	    goto on_err;
 
 	if ((flags & TTFLAG_VARARGS) != 0 && type->tt_type != VAR_LIST)
@@ -1849,7 +1882,10 @@ parse_type_tuple(char_u **arg, garray_T *type_gap, int give_error)
     ret_type->tt_flags = flags;
     ret_type->tt_argcount = typecount;
     if (tuple_type_add_types(ret_type, typecount, type_gap) == FAIL)
-	return NULL;
+    {
+	ret_type = NULL;
+	goto on_err;
+    }
     mch_memmove(ret_type->tt_args, tuple_types_ga.ga_data,
 						sizeof(type_T *) * typecount);
 
@@ -1865,7 +1901,11 @@ on_err:
  * Return NULL for failure.
  */
     static type_T *
-parse_type_object(char_u **arg, garray_T *type_gap, int give_error)
+parse_type_object(
+    char_u	**arg,
+    garray_T	*type_gap,
+    int		give_error,
+    cctx_T	*cctx)
 {
     char_u	*arg_start = *arg;
     type_T	*object_type;
@@ -1889,7 +1929,7 @@ parse_type_object(char_u **arg, garray_T *type_gap, int give_error)
     // skip spaces following "object<"
     *arg = skipwhite(*arg + 1);
 
-    object_type = parse_type(arg, type_gap, give_error);
+    object_type = parse_type(arg, type_gap, NULL, cctx, give_error);
     if (object_type == NULL)
 	return NULL;
 
@@ -1926,7 +1966,9 @@ parse_type_user_defined(
     char_u	**arg,
     size_t	len,
     garray_T	*type_gap,
-    int		give_error)
+    int		give_error,
+    ufunc_T	*ufunc,
+    cctx_T	*cctx)
 {
     int		did_emsg_before = did_emsg;
     typval_T	tv;
@@ -1968,6 +2010,14 @@ parse_type_user_defined(
 	clear_tv(&tv);
     }
 
+    // Check whether it is a generic type
+    type_T *type = find_generic_type(*arg, len, ufunc, cctx);
+    if (type != NULL)
+    {
+	*arg += len;
+	return type;
+    }
+
     if (give_error && (did_emsg == did_emsg_before))
     {
 	char_u	*p = skip_type(*arg, FALSE);
@@ -1987,7 +2037,12 @@ parse_type_user_defined(
  * Return NULL for failure.
  */
     type_T *
-parse_type(char_u **arg, garray_T *type_gap, int give_error)
+parse_type(
+    char_u	**arg,
+    garray_T	*type_gap,
+    ufunc_T	*ufunc,
+    cctx_T	*cctx,
+    int		give_error)
 {
     char_u  *p = *arg;
     size_t  len;
@@ -2029,8 +2084,9 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
 	    if (len == 4 && STRNCMP(*arg, "dict", len) == 0)
 	    {
 		*arg += len;
-		return parse_type_member(arg, &t_dict_any,
-						 type_gap, give_error, "dict");
+		return parse_type_member(arg, &t_dict_any, type_gap,
+						give_error, "dict", ufunc,
+						cctx);
 	    }
 	    break;
 	case 'f':
@@ -2040,7 +2096,8 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
 		return &t_float;
 	    }
 	    if (len == 4 && STRNCMP(*arg, "func", len) == 0)
-		return parse_type_func(arg, len, type_gap, give_error);
+		return parse_type_func(arg, len, type_gap, give_error, ufunc,
+									cctx);
 	    break;
 	case 'j':
 	    if (len == 3 && STRNCMP(*arg, "job", len) == 0)
@@ -2053,8 +2110,9 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
 	    if (len == 4 && STRNCMP(*arg, "list", len) == 0)
 	    {
 		*arg += len;
-		return parse_type_member(arg, &t_list_any,
-						 type_gap, give_error, "list");
+		return parse_type_member(arg, &t_list_any, type_gap,
+						give_error, "list", ufunc,
+						cctx);
 	    }
 	    break;
 	case 'n':
@@ -2068,7 +2126,7 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
 	    if (len == 6 && STRNCMP(*arg, "object", len) == 0)
 	    {
 		*arg += len;
-		return parse_type_object(arg, type_gap, give_error);
+		return parse_type_object(arg, type_gap, give_error, cctx);
 	    }
 	    break;
 	case 's':
@@ -2082,7 +2140,8 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
 	    if (len == 5 && STRNCMP(*arg, "tuple", len) == 0)
 	    {
 		*arg += len;
-		return parse_type_tuple(arg, type_gap, give_error);
+		return parse_type_tuple(arg, type_gap, give_error, ufunc,
+									cctx);
 	    }
 	    break;
 	case 'v':
@@ -2095,7 +2154,8 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
     }
 
     // User defined type
-    return parse_type_user_defined(arg, len, type_gap, give_error);
+    return parse_type_user_defined(arg, len, type_gap, give_error, ufunc,
+									cctx);
 }
 
 /*

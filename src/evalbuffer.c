@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Mark references in functions of buffers.
  */
@@ -42,6 +42,9 @@ set_ref_in_buffers(int copyID)
 	    abort = abort || set_ref_in_callback(&bp->b_ofu_cb, copyID);
 	if (!abort)
 	    abort = abort || set_ref_in_callback(&bp->b_tsrfu_cb, copyID);
+	if (!abort && bp->b_p_cpt_cb != NULL)
+	    abort = abort || set_ref_in_cpt_callbacks(bp->b_p_cpt_cb,
+		    bp->b_p_cpt_count, copyID);
 #endif
 	if (!abort)
 	    abort = abort || set_ref_in_callback(&bp->b_tfu_cb, copyID);
@@ -930,7 +933,7 @@ f_setline(typval_T *argvars, typval_T *rettv)
 }
 #endif  // FEAT_EVAL
 
-#if defined(FEAT_PYTHON) || defined(FEAT_PYTHON3) || defined(PROTO)
+#if defined(FEAT_PYTHON) || defined(FEAT_PYTHON3)
 /*
  * Make "buf" the current buffer.  restore_buffer() MUST be called to undo.
  * No autocommands will be executed.  Use aucmd_prepbuf() if there are any.

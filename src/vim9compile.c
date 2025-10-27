@@ -14,12 +14,7 @@
 #define USING_FLOAT_STUFF
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
-
-// When not generating protos this is included in proto.h
-#ifdef PROTO
-# include "vim9.h"
-#endif
+#if defined(FEAT_EVAL)
 
 // Functions defined with :def are stored in this growarray.
 // They are never removed, so that they can be found by index.
@@ -1032,10 +1027,12 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
     compiletype_T   compile_type;
     int		funcref_isn_idx = -1;
     lvar_T	*lvar = NULL;
+    char_u	*bracket_start = NULL;
 
     if (eap->forceit)
     {
-	emsg(_(e_cannot_use_bang_with_nested_def));
+	semsg(_(e_cannot_use_bang_with_nested_def_str),
+		eap->cmdidx == CMD_def ? ":def" : ":function");
 	return NULL;
     }
 
@@ -1046,6 +1043,14 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
 	    ++name_end;
 	set_nextcmd(eap, name_end);
     }
+
+    if (*name_end == '<')
+    {
+	bracket_start = name_end;
+	if (skip_generic_func_type_args(&name_end) == FAIL)
+	    return NULL;
+    }
+
     if (name_end == name_start || *skipwhite(name_end) != '(')
     {
 	if (!ends_excmd2(name_start, name_end))
@@ -1063,6 +1068,11 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
 	    return NULL;
 	return eap->nextcmd == NULL ? (char_u *)"" : eap->nextcmd;
     }
+
+    if (bracket_start != NULL)
+	// generic function.  The function name ends before the list of types
+	// (opening angle bracket).
+	name_end = bracket_start;
 
     // Only g:Func() can use a namespace.
     if (name_start[1] == ':' && !is_global)
@@ -1103,7 +1113,8 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
     int save_KeyTyped = KeyTyped;
     KeyTyped = FALSE;
 
-    ufunc = define_function(eap, lambda_name.string, lines_to_free, 0, NULL, 0);
+    ufunc = define_function(eap, lambda_name.string, lines_to_free, 0, NULL, 0,
+									cctx);
 
     KeyTyped = save_KeyTyped;
 
@@ -2104,8 +2115,9 @@ compile_lhs_set_type(cctx_T *cctx, lhs_T *lhs, char_u *var_end, int is_decl)
 	}
 
 	p = skipwhite(var_end + 1);
-	lhs->lhs_type = parse_type(&p, cctx->ctx_type_list, TRUE);
-	if (lhs->lhs_type == NULL)
+	lhs->lhs_type = parse_type(&p, cctx->ctx_type_list, cctx->ctx_ufunc, cctx, TRUE);
+	if (lhs->lhs_type == NULL
+		|| !valid_declaration_type(lhs->lhs_type))
 	    return FAIL;
 
 	lhs->lhs_has_type = TRUE;
@@ -3422,6 +3434,27 @@ compile_assign_rhs(cctx_T *cctx, cac_T *cac)
 }
 
 /*
+ * Returns OK if "type" supports compound operator "op_arg" (e.g. +=, -=, %=,
+ * etc.).  Compound operators are not supported with a tuple and a dict.
+ * Returns FAIL if compound operator is not supported.
+ */
+    static int
+check_type_supports_compound_op(type_T *type, char_u op_arg)
+{
+    if (type->tt_type == VAR_TUPLE || type->tt_type == VAR_DICT)
+    {
+	char_u	op[2];
+
+	op[0] = op_arg;
+	op[1] = NUL;
+	semsg(_(e_wrong_variable_type_for_str_equal), op);
+	return FAIL;
+    }
+
+    return OK;
+}
+
+/*
  * Compile a compound op assignment statement (+=, -=, *=, %=, etc.)
  */
     static int
@@ -3431,26 +3464,30 @@ compile_assign_compound_op(cctx_T *cctx, cac_T *cac)
     type_T	    *expected;
     type_T	    *stacktype = NULL;
 
-    if (cac->cac_lhs.lhs_type->tt_type == VAR_TUPLE)
-    {
-	// compound operators are not supported with a tuple
-	char_u	op[2];
-
-	op[0] = *cac->cac_op;
-	op[1] = NUL;
-	semsg(_(e_wrong_variable_type_for_str_equal), op);
+    if (cac->cac_lhs.lhs_type->tt_type == VAR_TUPLE
+	    && check_type_supports_compound_op(cac->cac_lhs.lhs_type,
+							*cac->cac_op) == FAIL)
 	return FAIL;
-    }
 
     if (*cac->cac_op == '.')
     {
-	if (may_generate_2STRING(-1, TOSTRING_NONE, cctx) == FAIL)
+	expected = lhs->lhs_member_type;
+	stacktype = get_type_on_stack(cctx, 0);
+	if (expected != &t_string
+		&& need_type(stacktype, expected, FALSE, -1, 0, cctx,
+					FALSE, FALSE) == FAIL)
+	    return FAIL;
+	else if (may_generate_2STRING(-1, TOSTRING_NONE, cctx) == FAIL)
 	    return FAIL;
     }
     else
     {
 	expected = lhs->lhs_member_type;
 	stacktype = get_type_on_stack(cctx, 0);
+
+	if (check_type_supports_compound_op(expected, *cac->cac_op) == FAIL)
+	    return FAIL;
+
 	if (
 		// If variable is float operation with number is OK.
 		!(expected == &t_float && (stacktype == &t_number
@@ -4728,6 +4765,14 @@ compile_def_function_body(
 		    emsg(_(e_class_can_only_be_used_in_script));
 		    return FAIL;
 
+	    case CMD_enum:
+		    emsg(_(e_enum_can_only_be_used_in_script));
+		    return FAIL;
+
+	    case CMD_interface:
+		    emsg(_(e_interface_can_only_be_used_in_script));
+		    return FAIL;
+
 	    case CMD_type:
 		    emsg(_(e_type_can_only_be_used_in_script));
 		    return FAIL;
@@ -4770,15 +4815,32 @@ compile_dfunc_scope_end_missing(cctx_T *cctx)
     if (cctx->ctx_scope == NULL)
 	return FALSE;
 
-    if (cctx->ctx_scope->se_type == IF_SCOPE)
-	emsg(_(e_missing_endif));
-    else if (cctx->ctx_scope->se_type == WHILE_SCOPE)
-	emsg(_(e_missing_endwhile));
-    else if (cctx->ctx_scope->se_type == FOR_SCOPE)
-	emsg(_(e_missing_endfor));
-    else
-	emsg(_(e_missing_rcurly));
-
+    switch (cctx->ctx_scope->se_type)
+    {
+	case IF_SCOPE:
+	    emsg(_(e_missing_endif));
+	    break;
+	case WHILE_SCOPE:
+	    emsg(_(e_missing_endwhile));
+	    break;
+	case FOR_SCOPE:
+	    emsg(_(e_missing_endfor));
+	    break;
+	case TRY_SCOPE:
+	    emsg(_(e_missing_endtry));
+	    break;
+	case BLOCK_SCOPE:
+	    // end block scope from :try (maybe)
+	    compile_endblock(cctx);
+	    if (cctx->ctx_scope != NULL
+		    && cctx->ctx_scope->se_type == TRY_SCOPE)
+		emsg(_(e_missing_endtry));
+	    else
+		emsg(_(e_missing_rcurly));
+	    break;
+	default:
+	    emsg(_(e_missing_rcurly));
+    }
     return TRUE;
 }
 
@@ -5170,7 +5232,7 @@ link_def_function(ufunc_T *ufunc)
     ++dfunc->df_refcount;
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
 /*
  * Free all functions defined with ":def".
  */

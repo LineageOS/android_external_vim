@@ -13,7 +13,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 // The names of packages that once were loaded are remembered.
 static garray_T		ga_loaded = {0, 0, sizeof(char_u *), 4, NULL};
 #endif
@@ -70,7 +70,7 @@ estack_push(etype_T type, char_u *name, long lnum)
     return entry;
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Add a user function to the execution stack.
  */
@@ -758,7 +758,7 @@ source_in_path(char_u *path, char_u *name, int flags, int *ret_sid)
     return do_in_path_and_pp(path, name, flags, source_callback, ret_sid);
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
 /*
  * Find "name" in 'runtimepath'. If found a new scriptitem is created for it
@@ -1128,43 +1128,51 @@ ExpandRTDir_int(
 {
     for (int i = 0; dirnames[i] != NULL; ++i)
     {
-	size_t		buf_len = STRLEN(dirnames[i]) + pat_len + 22;
+	const size_t	buf_len = STRLEN(dirnames[i]) + pat_len + 64;
 	char		*buf = alloc(buf_len);
 	if (buf == NULL)
 	{
 	    ga_clear_strings(gap);
 	    return;
 	}
-	char		*tail = buf + 15;
-	size_t		tail_buflen = buf_len - 15;
 	int		glob_flags = 0;
 	int		expand_dirs = FALSE;
 
-	if (*(dirnames[i]) == NUL)  // empty dir used for :runtime
-	    vim_snprintf(tail, tail_buflen, "%s*.vim", pat);
-	else
-	    vim_snprintf(tail, tail_buflen, "%s/%s*.vim", dirnames[i], pat);
+	// Build base pattern
+	vim_snprintf(buf, buf_len, "%s%s%s%s",
+		     *dirnames[i] ? dirnames[i] : "", *dirnames[i] ? "/" : "",
+		     pat, "*.vim");
 
 expand:
 	if ((flags & DIP_NORTP) == 0)
-	    globpath(p_rtp, (char_u *)tail, gap, glob_flags, expand_dirs);
+	    globpath(p_rtp, (char_u *)buf, gap, glob_flags, expand_dirs);
 
 	if (flags & DIP_START)
 	{
-	    memcpy(tail - 15, "pack/*/start/*/", 15);
-	    globpath(p_pp, (char_u *)tail - 15, gap, glob_flags, expand_dirs);
+	    // Build complete search path: pack/*/start/*/dirnames[i]/pat*.vim
+	    vim_snprintf(buf, buf_len, "pack/*/start/*/%s%s%s%s",
+			 *dirnames[i] ? dirnames[i] : "",
+			 *dirnames[i] ? "/" : "",
+			 pat,
+			 expand_dirs ? "*" : "*.vim");
+	    globpath(p_pp, (char_u *)buf, gap, glob_flags, expand_dirs);
 	}
 
 	if (flags & DIP_OPT)
 	{
-	    memcpy(tail - 13, "pack/*/opt/*/", 13);
-	    globpath(p_pp, (char_u *)tail - 13, gap, glob_flags, expand_dirs);
+	    // Build complete search path: pack/*/opt/*/dirnames[i]/pat*.vim
+	    vim_snprintf(buf, buf_len, "pack/*/opt/*/%s%s%s%s",
+			 *dirnames[i] ? dirnames[i] : "",
+			 *dirnames[i] ? "/" : "", pat,
+			 expand_dirs ? "*" : "*.vim");
+	    globpath(p_pp, (char_u *)buf, gap, glob_flags, expand_dirs);
 	}
 
-	if (*(dirnames[i]) == NUL && !expand_dirs)
+	// Second round for directories
+	if (*dirnames[i] == NUL && !expand_dirs)
 	{
 	    // expand dir names in another round
-	    vim_snprintf(tail, tail_buflen, "%s*", pat);
+	    vim_snprintf(buf, buf_len, "%s*", pat);
 	    glob_flags = WILD_ADD_SLASH;
 	    expand_dirs = TRUE;
 	    goto expand;
@@ -1175,8 +1183,10 @@ expand:
 
     int pat_pathsep_cnt = 0;
     for (size_t i = 0; i < pat_len; ++i)
+    {
 	if (vim_ispathsep(pat[i]))
 	    ++pat_pathsep_cnt;
+    }
 
     for (int i = 0; i < gap->ga_len; ++i)
     {
@@ -1191,9 +1201,11 @@ expand:
 
 	int match_pathsep_cnt = (e > s && e[-1] == '/') ? -1 : 0;
 	for (s = e; s > match; MB_PTR_BACK(match, s))
+	{
 	    if (s < match || (vim_ispathsep(*s)
 				     && ++match_pathsep_cnt > pat_pathsep_cnt))
 		break;
+	}
 	++s;
 	if (s != match)
 	    mch_memmove(match, s, e - s + 1);
@@ -1407,7 +1419,7 @@ ex_source(exarg_T *eap)
 	cmd_source(eap->arg, eap);
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * ":options"
  */
@@ -1430,7 +1442,7 @@ ex_options(
  * ":source" and associated commands.
  */
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * Return the address holding the next breakpoint line for a source cookie.
  */
@@ -2036,7 +2048,7 @@ do_source(
 }
 
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
 /*
  * ":scriptnames"
@@ -2094,7 +2106,7 @@ ex_scriptnames(exarg_T *eap)
     }
 }
 
-# if defined(BACKSLASH_IN_FILENAME) || defined(PROTO)
+# if defined(BACKSLASH_IN_FILENAME)
 /*
  * Fix slashes in the list of script names for 'shellslash'.
  */
@@ -2131,7 +2143,7 @@ get_scriptname(scid_T id)
     return SCRIPT_ITEM(id)->sn_name;
 }
 
-# if defined(EXITFREE) || defined(PROTO)
+# if defined(EXITFREE)
     void
 free_scriptnames(void)
 {
@@ -2665,7 +2677,7 @@ ex_scriptversion(exarg_T *eap UNUSED)
     }
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * ":finish": Mark a sourced file as finished.
  */

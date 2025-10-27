@@ -1,7 +1,6 @@
 " Test for the xxd command
 
-source check.vim
-source screendump.vim
+source util/screendump.vim
 
 if empty($XXD) && executable('..\xxd\xxd.exe')
   let s:xxd_cmd = '..\xxd\xxd.exe'
@@ -681,4 +680,49 @@ func Test_xxd_color2()
   call delete('XXDfile_colors')
   unlet! $PS1
 endfunc
+
+" this caused a buffer overflow
+func Test_xxd_overflow()
+  CheckUnix
+  CheckExecutable /bin/true
+  new
+  " we are only checking, that there are addresses in the first 5 lines
+  let expected = [
+        \ '00000000: ',
+        \ '00000080: ',
+        \ '00000100: ',
+        \ '00000180: ',
+        \ '00000200: ']
+  exe "0r! " s:xxd_cmd "-b -E -c 128 -g 256 /bin/true 2>&1"
+  " there should not be an ASAN error message
+  call getline(1, '$')->join('\n')->assert_notmatch('runtime error')
+  6,$d
+  %s/^\x\+: \zs.*//g
+  call assert_equal(expected, getline(1, 5))
+  bw!
+endfunc
+
+" this caused a NULL dereference
+func Test_xxd_null_dereference()
+  CheckUnix
+  CheckExecutable /bin/true
+  new
+  " we are only checking, that there are addresses in the first 5 lines
+  let expected = [
+        \ '00000000: ',
+        \ '00000010: ',
+        \ '00000020: ',
+        \ '00000030: ',
+        \ '00000040: ']
+  exe "0r! " s:xxd_cmd "-a -R never /bin/true 2>&1"
+  " there should be more than 6 lines
+  call assert_true(line('$') > 5)
+  " there should not be an ASAN error message
+  call getline(1, '$')->join('\n')->assert_notmatch('runtime error')
+  6,$d
+  %s/^\x\+: \zs.*//g
+  call assert_equal(expected, getline(1, 5))
+  bw!
+endfunc
+
 " vim: shiftwidth=2 sts=2 expandtab
