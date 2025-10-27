@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "637ce279_05e2e069",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 34512
+      },
+      "writtenOn": "2025-10-27T22:15:09Z",
+      "side": 1,
+      "message": "WIP atm, will sort out the Android.bp changes later",
+      "revId": "cb78fe1a1d1509536e592331de0811b6eb000dbb",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
