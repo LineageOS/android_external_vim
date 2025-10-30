@@ -51,6 +51,23 @@
       "message": "WIP atm, will sort out the Android.bp changes later",
       "revId": "cb78fe1a1d1509536e592331de0811b6eb000dbb",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "bfcfc300_2d89c9ad",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 34512
+      },
+      "writtenOn": "2025-10-30T15:35:06Z",
+      "side": 1,
+      "message": "whoever submits this, please submit this at the same time\n\nhttps://review.lineageos.org/c/LineageOS/android_external_vim/+/458907",
+      "revId": "cb78fe1a1d1509536e592331de0811b6eb000dbb",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
