@@ -5739,6 +5739,7 @@ KVim	gui_x11.txt	/*KVim*
 KeyInputPre	autocmd.txt	/*KeyInputPre*
 Kibaale	uganda.txt	/*Kibaale*
 Korean	mbyte.txt	/*Korean*
+Kuwasha	uganda.txt	/*Kuwasha*
 L	motion.txt	/*L*
 Linux-backspace	options.txt	/*Linux-backspace*
 List	eval.txt	/*List*
@@ -6761,6 +6762,7 @@ compiler-ruff	quickfix.txt	/*compiler-ruff*
 compiler-select	quickfix.txt	/*compiler-select*
 compiler-spotbugs	quickfix.txt	/*compiler-spotbugs*
 compiler-tex	quickfix.txt	/*compiler-tex*
+compiler-tombi	quickfix.txt	/*compiler-tombi*
 compiler-tsc	quickfix.txt	/*compiler-tsc*
 compiler-typst	quickfix.txt	/*compiler-typst*
 compiler-vaxada	ft_ada.txt	/*compiler-vaxada*
@@ -8597,7 +8599,6 @@ i`	motion.txt	/*i`*
 ia64.vim	syntax.txt	/*ia64.vim*
 ib	motion.txt	/*ib*
 iccf	uganda.txt	/*iccf*
-iccf-donations	uganda.txt	/*iccf-donations*
 icon-changed	version4.txt	/*icon-changed*
 iconise	starting.txt	/*iconise*
 iconize	starting.txt	/*iconize*
@@ -9946,6 +9947,7 @@ quickfix-perl	quickfix.txt	/*quickfix-perl*
 quickfix-size	quickfix.txt	/*quickfix-size*
 quickfix-stack	quickfix.txt	/*quickfix-stack*
 quickfix-title	quickfix.txt	/*quickfix-title*
+quickfix-toml	quickfix.txt	/*quickfix-toml*
 quickfix-valid	quickfix.txt	/*quickfix-valid*
 quickfix-window	quickfix.txt	/*quickfix-window*
 quickfix-window-ID	quickfix.txt	/*quickfix-window-ID*
@@ -10021,7 +10023,6 @@ reg_executing()	builtin.txt	/*reg_executing()*
 reg_recording()	builtin.txt	/*reg_recording()*
 regexp	pattern.txt	/*regexp*
 regexp-changes-5.4	version5.txt	/*regexp-changes-5.4*
-register	sponsor.txt	/*register*
 register-faq	sponsor.txt	/*register-faq*
 register-functions	usr_41.txt	/*register-functions*
 register-variable	eval.txt	/*register-variable*
@@ -11358,6 +11359,7 @@ v:var	eval.txt	/*v:var*
 v:version	eval.txt	/*v:version*
 v:versionlong	eval.txt	/*v:versionlong*
 v:vim_did_enter	eval.txt	/*v:vim_did_enter*
+v:vim_did_init	eval.txt	/*v:vim_did_init*
 v:warningmsg	eval.txt	/*v:warningmsg*
 v:wayland_display	eval.txt	/*v:wayland_display*
 v:windowid	eval.txt	/*v:windowid*
@@ -11632,6 +11634,7 @@ vim:	options.txt	/*vim:*
 vim_announce	intro.txt	/*vim_announce*
 vim_dev	intro.txt	/*vim_dev*
 vim_did_enter-variable	eval.txt	/*vim_did_enter-variable*
+vim_did_init-variable	eval.txt	/*vim_did_init-variable*
 vim_mac	intro.txt	/*vim_mac*
 vim_starting	builtin.txt	/*vim_starting*
 vim_use	intro.txt	/*vim_use*
@@ -11703,7 +11706,6 @@ vms-notes	os_vms.txt	/*vms-notes*
 vms-problems	os_vms.txt	/*vms-problems*
 vms-started	os_vms.txt	/*vms-started*
 vms-usage	os_vms.txt	/*vms-usage*
-vote-for-features	sponsor.txt	/*vote-for-features*
 votes-for-changes	todo.txt	/*votes-for-changes*
 vreplace-mode	insert.txt	/*vreplace-mode*
 vt100-cursor-keys	term.txt	/*vt100-cursor-keys*

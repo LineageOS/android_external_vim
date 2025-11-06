@@ -3,7 +3,7 @@ vim9script
 # Vim functions for file type detection
 #
 # Maintainer:		The Vim Project <https://github.com/vim/vim>
-# Last Change:		2025 Oct 09
+# Last Change:		2025 Oct 31
 # Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 # These functions are moved here from runtime/filetype.vim to make startup
@@ -1659,6 +1659,7 @@ const ft_from_ext = {
   # XA65 MOS6510 cross assembler
   "a65": "a65",
   # Applescript
+  "applescript": "applescript",
   "scpt": "applescript",
   # Applix ELF
   "am": "elf",
@@ -2473,6 +2474,7 @@ const ft_from_ext = {
   "textproto": "pbtxt",
   "textpb": "pbtxt",
   "pbtxt": "pbtxt",
+  "aconfig": "pbtxt", # Android aconfig files
   # Poke
   "pk": "poke",
   # Nvidia PTX (Parallel Thread Execution)
