@@ -1081,7 +1081,7 @@ gui_get_wide_font(void)
 #if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MSWIN)
 /*
  * Set list of ascii characters that combined can create ligature.
- * Store them in char map for quick access from gui_gtk2_draw_string.
+ * Store them in char map for quick access from gui_gtk_draw_string.
  */
     void
 gui_set_ligatures(void)
@@ -2533,7 +2533,7 @@ gui_outstr_nowrap(
      */
 #ifdef FEAT_GUI_GTK
     // The value returned is the length in display cells
-    len = gui_gtk2_draw_string(gui.row, col, s, len, draw_flags);
+    len = gui_gtk_draw_string(gui.row, col, s, len, draw_flags);
 #else
     if (enc_utf8)
     {
@@ -3260,6 +3260,8 @@ button_set:
      */
     if ((State == MODE_NORMAL || State == MODE_NORMAL_BUSY
 						      || (State & MODE_INSERT))
+	    && X_2_COL(x) >= firstwin->w_wincol
+	    && X_2_COL(x) < firstwin->w_wincol + topframe->fr_width
 	    && Y_2_ROW(y) >= topframe->fr_height + firstwin->w_winrow
 	    && button != MOUSE_DRAG
 # ifdef FEAT_MOUSESHAPE
@@ -4941,7 +4943,12 @@ xy2win(int x, int y, mouse_find_T popup)
 	return NULL;
     wp = mouse_find_win(&row, &col, popup);
     if (wp == NULL)
+    {
+#ifdef FEAT_MOUSESHAPE
+	update_mouseshape(-2);
+#endif
 	return NULL;
+    }
 #ifdef FEAT_MOUSESHAPE
     if (State == MODE_HITRETURN || State == MODE_ASKMORE)
     {

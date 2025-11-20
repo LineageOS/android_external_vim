@@ -2095,6 +2095,9 @@ typedef int sock_T;
 // Lowest button code for using the mouse wheel (xterm only)
 #define MOUSEWHEEL_LOW		0x60
 
+// Lowest button code for extra mouse buttons 8-11
+#define MOUSESIDEBUTTONS_LOW		0xa0
+
 #define MOUSE_CLICK_MASK	0x03
 
 #define NUM_MOUSE_CLICKS(code) \
@@ -2675,12 +2678,6 @@ typedef int (*opt_expand_cb_T)(optexpand_T *args, int *numMatches, char_u ***mat
 #  endif
 # else
 #  define X_DISPLAY	xterm_dpy
-# endif
-#endif
-
-#if defined(FEAT_BROWSE) && defined(GTK_CHECK_VERSION)
-# if GTK_CHECK_VERSION(2,4,0)
-#  define USE_FILE_CHOOSER
 # endif
 #endif
 
