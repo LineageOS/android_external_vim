@@ -2,6 +2,7 @@
 
 import './util/vim9.vim' as v9
 source util/screendump.vim
+source util/shared.vim
 
 func Test_def_basic()
   def SomeFunc(): string
@@ -389,6 +390,12 @@ def Test_endfunc_enddef()
     enddef there
   END
   v9.CheckScriptFailure(lines, 'E1173: Text found after enddef: there', 6)
+
+  lines =<< trim END
+    def ShortEnddef()
+    endd
+  END
+  v9.CheckScriptFailure(lines, 'E1065: Command cannot be shortened: endd', 2)
 enddef
 
 def Test_missing_endfunc_enddef()
@@ -1920,6 +1927,18 @@ def MyDefVarargs(one: string, two = 'foo', ...rest: list<string>): string
     res ..= ',' .. s
   endfor
   return res
+enddef
+
+def Test_call_def_comments()
+  var lines =<< trim END
+      def Func(n: number)
+        echo n
+      enddef
+      Func( # comment
+        1
+        )
+  END
+  v9.CheckSourceDefSuccess(lines)
 enddef
 
 def Test_call_def_varargs()
@@ -4851,5 +4870,203 @@ if has('perl')
   enddef
 endif
 
+
+def Test_void_method_chain()
+  #### Case 1: Echo, method chain source is void ####
+  # outside def: runtime error
+  var lines =<< trim END
+    vim9script
+    var Fn1a: func = (): void => {
+      }
+    echo Fn1a()->empty()
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def, compile-time error (known void return)
+  lines =<< trim END
+    vim9script
+    def Fn1b(): void
+    enddef
+    def TestFunc()
+      echo Fn1b()->empty()
+    enddef
+    defcompile TestFunc
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def, runtime error (untyped func)
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      var Fn1c: func = (): void => {
+        }
+      echo Fn1c()->empty()
+    enddef
+    TestFunc()
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def, compile-time error (func(): void)
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      var Fn1d: func(): void = () => {
+        }
+      echo Fn1d()->empty()
+    enddef
+    defcompile TestFunc
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  #### Case 2: Echo, method chain destination is void ####
+  # outside def: runtime error
+  lines =<< trim END
+    vim9script
+    var Fn2a: func = (s: string): void => {
+      }
+    echo "x"->Fn2a()
+  END
+  v9.CheckScriptFailure(lines, 'E1186: Expression does not result in a value: "x"->Fn2a()')
+
+  # inside def, compile-time error (known void return)
+  lines =<< trim END
+    vim9script
+    def Fn2b(s: string): void
+    enddef
+    def TestFunc()
+      echo "x"->Fn2b()
+    enddef
+    defcompile TestFunc
+  END
+  v9.CheckScriptFailure(lines, 'E1186: Expression does not result in a value: "x"->Fn2b()')
+
+  # inside def, runtime error (untyped func)
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      var Fn2c: func = (s: string): void => {
+        }
+      echo "x"->Fn2c()
+    enddef
+    TestFunc()
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def, compile-time error (func(string): void)
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      var Fn2d: func(string): void = (s: string): void => {
+        }
+      echo "x"->Fn2d()
+    enddef
+    defcompile TestFunc
+  END
+  v9.CheckScriptFailure(lines, 'E1186: Expression does not result in a value: "x"->Fn2d()')
+
+  #### Case 3: Assignment, RHS is void ####
+  # outside def: runtime error
+  lines =<< trim END
+    vim9script
+    var Fn3a: func = (): void => {
+      }
+    var x = Fn3a()
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def, compile-time error (known void return)
+  lines =<< trim END
+    vim9script
+    def Fn3b(): void
+    enddef
+    def TestFunc()
+      var x = Fn3b()
+    enddef
+    defcompile TestFunc
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def, runtime error (untyped func)
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      var Fn3c: func = (): void => {
+        }
+      var x = Fn3c()
+    enddef
+    TestFunc()
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def, compile-time error (func(): void)
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      var Fn3d: func(): void = () => {
+        }
+      var x = Fn3d()
+    enddef
+    defcompile TestFunc
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  #### Case 4: Script-level and :def should behave the same ####
+  # script-level: void built-in assigned to variable
+  lines =<< trim END
+    vim9script
+    var x = bufload('')
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # inside def: same error
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      var x = bufload('')
+    enddef
+    TestFunc()
+  END
+  v9.CheckScriptFailure(lines, 'E1031: Cannot use void value')
+
+  # script-level: echo void built-in
+  lines =<< trim END
+    vim9script
+    echo bufload('')
+  END
+  v9.CheckScriptFailure(lines, 'E1186: Expression does not result in a value: bufload(')
+
+  # inside def: compile-time error
+  lines =<< trim END
+    vim9script
+    def TestFunc()
+      echo bufload('')
+    enddef
+    TestFunc()
+  END
+  v9.CheckScriptFailure(lines, 'E1186: Expression does not result in a value: bufload(')
+enddef
+
+def Test_term_wait_in_job_exit_cb()
+  CheckUnix
+  CheckFeature terminal
+
+  var cmd = g:GetVimCommand()
+
+  var lines =<< eval trim END
+      var buf: number = term_start(["{cmd}", "+q"], {{}})
+
+      var job: job = term_getjob(buf)
+
+      job_setoptions(job, {{
+      exit_cb: (_, _) => {{
+        term_wait(buf)
+          }}
+      }})
+  END
+
+  # This shouldn't cause an ASAN error immediately, but will result in a use
+  # after free when Vim exits.
+  v9.CheckDefSuccess(lines)
+enddef
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

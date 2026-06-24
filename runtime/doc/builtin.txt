@@ -1,4 +1,4 @@
-*builtin.txt*	For Vim version 9.1.  Last change: 2025 Nov 09
+*builtin.txt*	For Vim version 9.2.  Last change: 2026 Jun 24
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -23,9 +23,11 @@ Use CTRL-] on the function name to jump to the full explanation.
 
 USAGE				RESULT	DESCRIPTION	~
 
-abs({expr})			Float or Number  absolute value of {expr}
+abs({expr})			Float/Number
+					absolute value of {expr}
 acos({expr})			Float	arc cosine of {expr}
-add({object}, {item})		List/Blob   append {item} to {object}
+add({object}, {item})		List/Blob
+					append {item} to {object}
 and({expr}, {expr})		Number	bitwise AND
 append({lnum}, {text})		Number	append {text} below line {lnum}
 appendbufline({buf}, {lnum}, {text})
@@ -33,7 +35,8 @@ appendbufline({buf}, {lnum}, {text})
 					in buffer {buf}
 argc([{winid}])			Number	number of files in the argument list
 argidx()			Number	current index in the argument list
-arglistid([{winnr} [, {tabnr}]]) Number	argument list id
+arglistid([{winnr} [, {tabnr}]])
+				Number	argument list id
 argv({nr} [, {winid}])		String	{nr} entry of the argument list
 argv([-1, {winid}])		List	the argument list
 asin({expr})			Float	arc sine of {expr}
@@ -43,7 +46,7 @@ assert_equal({exp}, {act} [, {msg}])
 assert_equalfile({fname-one}, {fname-two} [, {msg}])
 				Number	assert file contents are equal
 assert_exception({error} [, {msg}])
-				Number	assert {error} is in v:exception
+				Number	assert {error} is in |v:exception|
 assert_fails({cmd} [, {error} [, {msg} [, {lnum} [, {context}]]]])
 				Number	assert {cmd} fails
 assert_false({actual} [, {msg}])
@@ -79,10 +82,10 @@ browsedir({title}, {initdir})	String	put up a directory requester
 bufadd({name})			Number	add a buffer to the buffer list
 bufexists({buf})		Number	|TRUE| if buffer {buf} exists
 buflisted({buf})		Number	|TRUE| if buffer {buf} is listed
-bufload({buf})			Number	load buffer {buf} if not loaded yet
+bufload({buf})			none	load buffer {buf} if not loaded yet
 bufloaded({buf})		Number	|TRUE| if buffer {buf} is loaded
-bufname([{buf}])		String	Name of the buffer {buf}
-bufnr([{buf} [, {create}]])	Number	Number of the buffer {buf}
+bufname([{buf}])		String	name of the buffer {buf}
+bufnr([{buf} [, {create}]])	Number	number of the buffer {buf}
 bufwinid({buf})			Number	window ID of buffer {buf}
 bufwinnr({buf})			Number	window number of buffer {buf}
 byte2line({byte})		Number	line number at byte count {byte}
@@ -102,7 +105,10 @@ ch_evalraw({handle}, {string} [, {options}])
 				any	evaluate {string} on raw {handle}
 ch_getbufnr({handle}, {what})	Number	get buffer number for {handle}/{what}
 ch_getjob({channel})		Job	get the Job of {channel}
-ch_info({handle})		String	info about channel {handle}
+ch_info({handle})		Dict	info about channel {handle}
+ch_listen({address} [, {options}])
+				Channel	listen on {address} - port on loopback
+					or UNIX domain socket
 ch_log({msg} [, {handle}])	none	write {msg} in the channel log file
 ch_logfile({fname} [, {mode}])	none	start logging channel activity
 ch_open({address} [, {options}])
@@ -115,13 +121,14 @@ ch_readraw({handle} [, {options}])
 ch_sendexpr({handle}, {expr} [, {options}])
 				any	send {expr} over JSON {handle}
 ch_sendraw({handle}, {expr} [, {options}])
-				any	send {expr} over raw {handle}
+				none	send {expr} over raw {handle}
 ch_setoptions({handle}, {options})
 				none	set options for {handle}
 ch_status({handle} [, {options}])
 				String	status of channel {handle}
 changenr()			Number	current change number
-char2nr({expr} [, {utf8}])	Number	ASCII/UTF-8 value of first char in {expr}
+char2nr({expr} [, {utf8}])	Number	ASCII/UTF-8 value of first char in
+					{expr}
 charclass({string})		Number	character class of {string}
 charcol({expr} [, {winid}])	Number	column number of cursor or mark
 charidx({string}, {idx} [, {countcc} [, {utf16}]])
@@ -136,7 +143,6 @@ complete({startcol}, {matches}) none	set Insert mode completion
 complete_add({expr})		Number	add completion match
 complete_check()		Number	check for key typed during completion
 complete_info([{what}])		Dict	get current completion information
-complete_match([{lnum}, {col}])	List	get completion column and trigger text
 confirm({msg} [, {choices} [, {default} [, {type}]]])
 				Number	number of choice picked by user
 copy({expr})			any	make a shallow copy of {expr}
@@ -181,11 +187,13 @@ expand({expr} [, {nosuf} [, {list}]])
 expandcmd({string} [, {options}])
 				String	expand {string} like with `:edit`
 extend({expr1}, {expr2} [, {expr3}])
-				List/Dict insert items of {expr2} into {expr1}
+				List/Dict
+					insert items of {expr2} into {expr1}
 extendnew({expr1}, {expr2} [, {expr3}])
-				List/Dict like |extend()| but creates a new
-					List or Dictionary
-feedkeys({string} [, {mode}])	Number	add key sequence to typeahead buffer
+				List/Dict
+					like |extend()| but creates a new List
+					or Dictionary
+feedkeys({string} [, {mode}])	none	add key sequence to typeahead buffer
 filecopy({from}, {to})		Number	|TRUE| if copying file {from} to {to}
 					worked
 filereadable({file})		Number	|TRUE| if {file} is a readable file
@@ -195,7 +203,8 @@ filter({expr1}, {expr2})	List/Dict/Blob/String
 					{expr2} is 0
 finddir({name} [, {path} [, {count}]])
 findfile({name} [, {path} [, {count}]])
-				String/List find dir/file {name} in {path}
+				String/List
+					find dir/file {name} in {path}
 flatten({list} [, {maxdepth}])	List	flatten {list} up to {maxdepth} levels
 flattennew({list} [, {maxdepth}])
 				List	flatten a copy of {list}
@@ -211,16 +220,18 @@ foldtext()			String	line displayed for closed fold
 foldtextresult({lnum})		String	text for closed fold at {lnum}
 foreach({expr1}, {expr2})	List/Tuple/Dict/Blob/String
 					for each item in {expr1} call {expr2}
-foreground()			Number	bring the Vim window to the foreground
+foreground()			none	bring the Vim window to the foreground
 fullcommand({name} [, {vim9}])	String	get full command from {name}
 funcref({name} [, {arglist}] [, {dict}])
 				Funcref	reference to function {name}
 function({name} [, {arglist}] [, {dict}])
 				Funcref	named reference to function {name}
-garbagecollect([{atexit}])	none	free memory, breaking cyclic references
+garbagecollect([{atexit}])	none	free memory, breaking cyclic
+					references
 get({list}, {idx} [, {def}])	any	get item {idx} from {list} or {def}
 get({dict}, {key} [, {def}])	any	get item {key} from {dict} or {def}
 get({func}, {what})		any	get property of funcref/partial {func}
+getbgcolor()			List	get background colour as [r, g, b]
 getbufinfo([{buf}])		List	information about buffers
 getbufline({buf}, {lnum} [, {end}])
 				List	lines {lnum} to {end} of buffer {buf}
@@ -230,7 +241,7 @@ getbufvar({buf}, {varname} [, {def}])
 getcellpixels()			List	get character cell pixel size
 getcellwidths()			List	get character cell width overrides
 getchangelist([{buf}])		List	list of change list items
-getchar([{expr} [, {opts}]])	Number or String
+getchar([{expr} [, {opts}]])	Number/String
 					get one character from the user
 getcharmod()			Number	modifiers for the last typed character
 getcharpos({expr})		List	position of cursor, mark, etc.
@@ -246,7 +257,8 @@ getcmdprompt()			String	return the current command-line prompt
 getcmdscreenpos()		Number	return cursor screen position in
 					command-line
 getcmdtype()			String	return current command-line type
-getcmdwintype()			String	return current command-line window type
+getcmdwintype()			String	return current command-line window
+					type
 getcompletion({pat}, {type} [, {filtered}])
 				List	list of cmdline completion matches
 getcompletiontype({pat})	String	return the type of the command-line
@@ -264,7 +276,8 @@ getimstatus()			Number	|TRUE| if the IME status is active
 getjumplist([{winnr} [, {tabnr}]])
 				List	list of jump list items
 getline({lnum})			String	line {lnum} of current buffer
-getline({lnum}, {end})		List	lines {lnum} to {end} of current buffer
+getline({lnum}, {end})		List	lines {lnum} to {end} of current
+					buffer
 getloclist({nr})		List	list of location list items
 getloclist({nr}, {what})	Dict	get specific location list properties
 getmarklist([{buf}])		List	list of global/local marks
@@ -276,7 +289,8 @@ getpos({expr})			List	position of cursor, mark, etc.
 getqflist()			List	list of quickfix items
 getqflist({what})		Dict	get specific quickfix list properties
 getreg([{regname} [, 1 [, {list}]]])
-				String or List   contents of a register
+				String/List
+					contents of a register
 getreginfo([{regname}])		Dict	information about a register
 getregion({pos1}, {pos2} [, {opts}])
 				List	get the text from {pos1} to {pos2}
@@ -287,7 +301,8 @@ getscriptinfo([{opts}])		List	list of sourced scripts
 getstacktrace()			List	get current stack trace of Vim scripts
 gettabinfo([{expr}])		List	list of tab pages
 gettabvar({nr}, {varname} [, {def}])
-				any	variable {varname} in tab {nr} or {def}
+				any	variable {varname} in tab {nr} or
+					{def}
 gettabwinvar({tabnr}, {winnr}, {name} [, {def}])
 				any	{name} in {winnr} in tab page {tabnr}
 gettagstack([{nr}])		Dict	get the tag stack of window {nr}
@@ -306,8 +321,8 @@ globpath({path}, {expr} [, {nosuf} [, {list} [, {alllinks}]]])
 has({feature} [, {check}])	Number	|TRUE| if feature {feature} supported
 has_key({dict}, {key})		Number	|TRUE| if {dict} has entry {key}
 haslocaldir([{winnr} [, {tabnr}]])
-				Number	|TRUE| if the window executed |:lcd|
-					or |:tcd|
+				Number	|TRUE| if the window executed `:lcd` or
+					`:tcd`
 hasmapto({what} [, {mode} [, {abbr}]])
 				Number	|TRUE| if mapping to {what} exists
 histadd({history}, {item})	Number	add an item to a history
@@ -333,9 +348,13 @@ inputdialog({prompt} [, {text} [, {cancelreturn}]])
 inputlist({textlist})		Number	let the user pick from a choice list
 inputrestore()			Number	restore typeahead
 inputsave()			Number	save and clear typeahead
-inputsecret({prompt} [, {text}]) String	like input() but hiding the text
-insert({object}, {item} [, {idx}]) List	insert {item} in {object} [before {idx}]
-instanceof({object}, {class})	Number	|TRUE| if {object} is an instance of {class}
+inputsecret({prompt} [, {text}])
+				String	like input() but hiding the text
+insert({object}, {item} [, {idx}])
+				List	insert {item} in {object}
+					[before {idx}]
+instanceof({object}, {class})	Bool	|TRUE| if {object} is an instance of
+					{class}
 interrupt()			none	interrupt script execution
 invert({expr})			Number	bitwise invert
 isabsolutepath({path})		Number	|TRUE| if {path} is an absolute path
@@ -347,7 +366,8 @@ isnan({expr})			Number	|TRUE| if {expr} is NaN
 items({expr})			List	key/index-value pairs in {expr}
 job_getchannel({job})		Channel	get the channel handle for {job}
 job_info([{job}])		Dict	get information about {job}
-job_setoptions({job}, {options}) none	set options for {job}
+job_setoptions({job}, {options})
+				none	set options for {job}
 job_start({command} [, {options}])
 				Job	start a job
 job_status({job})		String	get the status of {job}
@@ -359,9 +379,10 @@ json_decode({string})		any	decode JSON
 json_encode({expr})		String	encode JSON
 keys({dict})			List	keys in {dict}
 keytrans({string})		String	translate internal keycodes to a form
-					that can be used by |:map|
+					that can be used by `:map`
 len({expr})			Number	the length of {expr}
-libcall({lib}, {func}, {arg})	String	call {func} in library {lib} with {arg}
+libcall({lib}, {func}, {arg})	String	call {func} in library {lib} with
+					{arg}
 libcallnr({lib}, {func}, {arg})	Number	idem, but return a Number
 line({expr} [, {winid}])	Number	line nr of cursor, last line or mark
 line2byte({lnum})		Number	byte count of line {lnum}
@@ -372,7 +393,7 @@ list2tuple({list})		Tuple	turn {list} of items into a tuple
 listener_add({callback} [, {buf} [, {unbuffered}]])
 				Number	add a callback to listen to changes
 listener_flush([{buf}])		none	invoke listener callbacks
-listener_remove({id})		none	remove a listener callback
+listener_remove({id})		Number	remove a listener callback
 localtime()			Number	current time
 log({expr})			Float	natural logarithm (base e) of {expr}
 log10({expr})			Float	logarithm of Float {expr} to base 10
@@ -380,7 +401,7 @@ luaeval({expr} [, {expr}])	any	evaluate |Lua| expression
 map({expr1}, {expr2})		List/Dict/Blob/String
 					change each item in {expr1} to {expr2}
 maparg({name} [, {mode} [, {abbr} [, {dict}]]])
-				String or Dict
+				String/Dict
 					rhs of mapping {name} in mode {mode}
 mapcheck({name} [, {mode} [, {abbr}]])
 				String	check for mappings matching {name}
@@ -395,7 +416,7 @@ matchadd({group}, {pattern} [, {priority} [, {id} [, {dict}]]])
 				Number	highlight {pattern} with {group}
 matchaddpos({group}, {pos} [, {priority} [, {id} [, {dict}]]])
 				Number	highlight positions with {group}
-matcharg({nr})			List	arguments of |:match|
+matcharg({nr})			List	arguments of `:match`
 matchbufline({buf}, {pat}, {lnum}, {end}, [, {dict})
 				List	all the {pat} matches in buffer {buf}
 matchdelete({id} [, {win}])	Number	delete match identified by {id}
@@ -406,7 +427,8 @@ matchfuzzy({list}, {str} [, {dict}])
 matchfuzzypos({list}, {str} [, {dict}])
 				List	fuzzy match {str} in {list}
 matchlist({expr}, {pat} [, {start} [, {count}]])
-				List	match and submatches of {pat} in {expr}
+				List	match and submatches of {pat} in
+					{expr}
 matchstr({expr}, {pat} [, {start} [, {count}]])
 				String	{count}'th match of {pat} in {expr}
 matchstrlist({list}, {pat} [, {dict})
@@ -423,18 +445,20 @@ mzeval({expr})			any	evaluate |MzScheme| expression
 nextnonblank({lnum})		Number	line nr of non-blank line >= {lnum}
 ngettext({single}, {plural}, {number}[, {domain}])
 				String	translate text based on {number}
-nr2char({expr} [, {utf8}])	String	single char with ASCII/UTF-8 value {expr}
+nr2char({expr} [, {utf8}])	String	single char with ASCII/UTF-8 value
+					{expr}
 or({expr}, {expr})		Number	bitwise OR
 pathshorten({expr} [, {len}])	String	shorten directory names in a path
 perleval({expr})		any	evaluate |Perl| expression
-popup_atcursor({what}, {options}) Number create popup window near the cursor
+popup_atcursor({what}, {options})
+				Number	create popup window near the cursor
 popup_beval({what}, {options})	Number	create popup window for 'ballooneval'
 popup_clear()			none	close all popup windows
 popup_close({id} [, {result}])	none	close popup window {id}
 popup_create({what}, {options}) Number	create a popup window
 popup_dialog({what}, {options}) Number	create a popup window used as a dialog
-popup_filter_menu({id}, {key})  Number	filter for a menu popup window
-popup_filter_yesno({id}, {key}) Number	filter for a dialog popup window
+popup_filter_menu({id}, {key})  Bool	filter for a menu popup window
+popup_filter_yesno({id}, {key}) Bool	filter for a dialog popup window
 popup_findecho()		Number	get window ID of popup for `:echowin`
 popup_findinfo()		Number	get window ID of info popup window
 popup_findpreview()		Number	get window ID of preview popup window
@@ -447,7 +471,8 @@ popup_menu({what}, {options})	Number	create a popup window used as a menu
 popup_move({id}, {options})	none	set position of popup window {id}
 popup_notification({what}, {options})
 				Number	create a notification popup window
-popup_setbuf({id}, {buf})	Bool	set the buffer for the popup window {id}
+popup_setbuf({id}, {buf})	Bool	set the buffer for the popup window
+					{id}
 popup_setoptions({id}, {options})
 				none	set options for popup window {id}
 popup_settext({id}, {text})	none	set the text of popup window {id}
@@ -457,10 +482,13 @@ preinserted()			Number	whether text is inserted after cursor
 prevnonblank({lnum})		Number	line nr of non-blank line <= {lnum}
 printf({fmt}, {expr1}...)	String	format text
 prompt_getprompt({buf})		String	get prompt text
-prompt_setcallback({buf}, {expr}) none	set prompt callback function
-prompt_setinterrupt({buf}, {text}) none	set prompt interrupt function
+prompt_setcallback({buf}, {expr})
+				none	set prompt callback function
+prompt_setinterrupt({buf}, {text})
+				none	set prompt interrupt function
 prompt_setprompt({buf}, {text}) none	set prompt text
-prop_add({lnum}, {col}, {props})  none	add one text property
+prop_add({lnum}, {col}, {props})
+				Number	add one text property
 prop_add_list({props}, [[{lnum}, {col}, {end-lnum}, {end-col}], ...])
 				none	add multiple text properties
 prop_clear({lnum} [, {lnum-end} [, {props}]])
@@ -494,6 +522,8 @@ readdirex({dir} [, {expr} [, {dict}]])
 				List	file info in {dir} selected by {expr}
 readfile({fname} [, {type} [, {max}]])
 				List	get list of lines from file {fname}
+redraw_listener_add({opts})	Number	add callbacks to listen for redraws
+redraw_listener_remove({id})	none	remove a redraw listener
 reduce({object}, {func} [, {initial}])
 				any	reduce {object} using {func}
 reg_executing()			String	get the executing register name
@@ -503,7 +533,7 @@ reltimefloat({time})		Float	turn the time value into a Float
 reltimestr({time})		String	turn time value into a String
 remote_expr({server}, {string} [, {idvar} [, {timeout}]])
 				String	send expression
-remote_foreground({server})	Number	bring Vim server to the foreground
+remote_foreground({server})	none	bring Vim server to the foreground
 remote_peek({serverid} [, {retvar}])
 				Number	check for reply string
 remote_read({serverid} [, {timeout}])
@@ -526,9 +556,10 @@ round({expr})			Float	round off {expr}
 rubyeval({expr})		any	evaluate |Ruby| expression
 screenattr({row}, {col})	Number	attribute at screen position
 screenchar({row}, {col})	Number	character at screen position
-screenchars({row}, {col})	List	List of characters at screen position
+screenchars({row}, {col})	List	list of characters at screen position
 screencol()			Number	current cursor column
-screenpos({winid}, {lnum}, {col}) Dict	screen row and col of a text character
+screenpos({winid}, {lnum}, {col})
+				Dict	screen row and col of a text character
 screenrow()			Number	current cursor row
 screenstring({row}, {col})	String	characters at screen position
 search({pattern} [, {flags} [, {stopline} [, {timeout} [, {skip}]]]])
@@ -552,7 +583,7 @@ setbufvar({buf}, {varname}, {val})
 				none	set {varname} in buffer {buf} to {val}
 setcellwidths({list})		none	set character cell width overrides
 setcharpos({expr}, {list})	Number	set the {expr} position to {list}
-setcharsearch({dict})		Dict	set character search from {dict}
+setcharsearch({dict})		none	set character search from {dict}
 setcmdline({str} [, {pos}])	Number	set command-line
 setcmdpos({pos})		Number	set cursor position in command-line
 setcursorcharpos({list})	Number	move cursor to position in {list}
@@ -569,7 +600,9 @@ setqflist({list} [, {action}])	Number	modify quickfix list using {list}
 setqflist({list}, {action}, {what})
 				Number	modify specific quickfix list props
 setreg({n}, {v} [, {opt}])	Number	set register to value and type
-settabvar({nr}, {varname}, {val}) none	set {varname} in tab page {nr} to {val}
+settabvar({nr}, {varname}, {val})
+				none	set {varname} in tab page {nr} to
+					{val}
 settabwinvar({tabnr}, {winnr}, {varname}, {val})
 				none	set {varname} in window {winnr} in tab
 					page {tabnr} to {val}
@@ -599,7 +632,8 @@ sign_unplacelist({list})	List	unplace a list of signs
 simplify({filename})		String	simplify filename as much as possible
 sin({expr})			Float	sine of {expr}
 sinh({expr})			Float	hyperbolic sine of {expr}
-slice({expr}, {start} [, {end}])  String, List or Blob
+slice({expr}, {start} [, {end}])
+				String/List/Blob
 					slice of a String, List or Blob
 sort({list} [, {how} [, {dict}]])
 				List	sort {list}, compare with {how}
@@ -610,7 +644,7 @@ sound_playfile({path} [, {callback}])
 				Number	play sound file {path}
 sound_stop({id})		none	stop playing sound {id}
 soundfold({word})		String	sound-fold {word}
-spellbadword()			String	badly spelled word at cursor
+spellbadword()			List	badly spelled word at cursor
 spellsuggest({word} [, {max} [, {capital}]])
 				List	spelling suggestions
 split({expr} [, {pat} [, {keepempty}]])
@@ -629,7 +663,8 @@ strcharpart({str}, {start} [, {len} [, {skipcc}]])
 				String	{len} characters of {str} at
 					character {start}
 strchars({expr} [, {skipcc}])	Number	character count of the String {expr}
-strdisplaywidth({expr} [, {col}]) Number display length of the String {expr}
+strdisplaywidth({expr} [, {col}])
+				Number	display length of the String {expr}
 strftime({format} [, {time}])	String	format time with a specified format
 strgetchar({str}, {index})	Number	get char {index} from {str}
 stridx({haystack}, {needle} [, {start}])
@@ -637,20 +672,24 @@ stridx({haystack}, {needle} [, {start}])
 string({expr})			String	String representation of {expr} value
 strlen({expr})			Number	length of the String {expr}
 strpart({str}, {start} [, {len} [, {chars}]])
-				String	{len} bytes/chars of {str} at
-					byte {start}
+				String	{len} bytes/chars of {str} at byte
+					{start}
 strptime({format}, {timestring})
-				Number	Convert {timestring} to unix timestamp
+				Number	convert {timestring} to unix timestamp
 strridx({haystack}, {needle} [, {start}])
 				Number	last index of {needle} in {haystack}
 strtrans({expr})		String	translate string to make it printable
 strutf16len({string} [, {countcc}])
-				Number	number of UTF-16 code units in {string}
-strwidth({expr})		Number	display cell length of the String {expr}
-submatch({nr} [, {list}])	String or List
-					specific match in ":s" or substitute()
+				Number	number of UTF-16 code units in
+					{string}
+strwidth({expr})		Number	display cell length of the String
+					{expr}
+submatch({nr} [, {list}])	String/List
+					specific match in `:substitute` or
+					substitute()
 substitute({expr}, {pat}, {sub}, {flags})
-				String	all {pat} in {expr} replaced with {sub}
+				String	all {pat} in {expr} replaced with
+					{sub}
 swapfilelist()			List	swap files found in 'directory'
 swapinfo({fname})		Dict	information about swap file {fname}
 swapname({buf})			String	swap file of buffer {buf}
@@ -659,12 +698,16 @@ synIDattr({synID}, {what} [, {mode}])
 				String	attribute {what} of syntax ID {synID}
 synIDtrans({synID})		Number	translated syntax ID of {synID}
 synconcealed({lnum}, {col})	List	info about concealing
-synstack({lnum}, {col})		List	stack of syntax IDs at {lnum} and {col}
+synstack({lnum}, {col})		List	stack of syntax IDs at {lnum} and
+					{col}
 system({expr} [, {input}])	String	output of shell command/filter {expr}
 systemlist({expr} [, {input}])	List	output of shell command/filter {expr}
 tabpagebuflist([{arg}])		List	list of buffer numbers in tab page
 tabpagenr([{arg}])		Number	number of current or last tab page
-tabpagewinnr({tabarg} [, {arg}]) Number	number of current window in tab page
+tabpagewinnr({tabarg} [, {arg}])
+				Number	number of current window in tab page
+tabpanel_getinfo()		Dict	get current state of the tabpanel
+tabpanel_scroll({n} [, {opts}])	Bool	scroll the tabpanel
 tagfiles()			List	tags files used
 taglist({expr} [, {filename}])	List	list of tags matching {expr}
 tan({expr})			Float	tangent of {expr}
@@ -694,11 +737,12 @@ term_setansicolors({buf}, {colors})
 				none	set ANSI palette in GUI color mode
 term_setapi({buf}, {expr})	none	set |terminal-api| function name prefix
 term_setkill({buf}, {how})	none	set signal to stop job in terminal
-term_setrestore({buf}, {command}) none	set command to restore terminal
+term_setrestore({buf}, {command})
+				none	set command to restore terminal
 term_setsize({buf}, {rows}, {cols})
 				none	set the size of a terminal
 term_start({cmd} [, {options}])	Number	open a terminal window and run a job
-term_wait({buf} [, {time}])	Number  wait for screen to be updated
+term_wait({buf} [, {time}])	none    wait for screen to be updated
 terminalprops()			Dict	properties of the terminal
 test_alloc_fail({id}, {countdown}, {repeat})
 				none	make memory allocation fail
@@ -706,11 +750,11 @@ test_autochdir()		none	enable 'autochdir' during startup
 test_feedinput({string})	none	add key sequence to input buffer
 test_garbagecollect_now()	none	free memory right now for testing
 test_garbagecollect_soon()	none	free memory soon for testing
-test_getvalue({string})		any	get value of an internal variable
+test_getvalue({string})		Number	get value of an internal variable
 test_gui_event({event}, {args})	bool	generate a GUI event for testing
 test_ignore_error({expr})	none	ignore a specific error
 test_mswin_event({event}, {args})
-				bool	generate MS-Windows event for testing
+				Bool	generate MS-Windows event for testing
 test_null_blob()		Blob	null value for testing
 test_null_channel()		Channel	null value for testing
 test_null_dict()		Dict	null value for testing
@@ -727,15 +771,17 @@ test_setmouse({row}, {col})	none	set the mouse position for testing
 test_settime({expr})		none	set current time for testing
 test_srand_seed([{seed}])	none	set seed for testing srand()
 test_unknown()			any	unknown value for testing
-test_void()			any	void value for testing
+test_void()			none	void value for testing
 timer_info([{id}])		List	information about timers
 timer_pause({id}, {pause})	none	pause or unpause a timer
 timer_start({time}, {callback} [, {options}])
 				Number	create a timer
 timer_stop({timer})		none	stop a timer
 timer_stopall()			none	stop all timers
-tolower({expr})			String	the String {expr} switched to lowercase
-toupper({expr})			String	the String {expr} switched to uppercase
+tolower({expr})			String	the String {expr} switched to
+					lowercase
+toupper({expr})			String	the String {expr} switched to
+					uppercase
 tr({src}, {fromstr}, {tostr})	String	translate chars of {src} in {fromstr}
 					to chars in {tostr}
 trim({text} [, {mask} [, {dir}]])
@@ -745,7 +791,7 @@ tuple2list({tuple})		List	turn {tuple} of items into a list
 type({expr})			Number	type of value {expr}
 typename({expr})		String	representation of the type of {expr}
 undofile({name})		String	undo file name for {name}
-undotree([{buf}])		List	undo file tree for buffer {buf}
+undotree([{buf}])		Dict	undo file tree for buffer {buf}
 uniq({list} [, {func} [, {dict}]])
 				List	remove adjacent duplicates from a list
 uri_decode({string})		String	URI-decode a string
@@ -754,13 +800,13 @@ utf16idx({string}, {idx} [, {countcc} [, {charidx}]])
 				Number	UTF-16 index of byte {idx} in {string}
 values({dict})			List	values in {dict}
 virtcol({expr} [, {list} [, {winid}])
-				Number or List
+				Number/List
 					screen column of cursor or mark
 virtcol2col({winid}, {lnum}, {col})
 				Number  byte index of a character on screen
 visualmode([{expr}])		String	last visual mode used
 wildmenumode()			Number	whether 'wildmenu' mode is active
-wildtrigger()			Number	start wildcard expansion
+wildtrigger()			none	start wildcard expansion
 win_execute({id}, {command} [, {silent}])
 				String	execute {command} in window {id}
 win_findbuf({bufnr})		List	find windows containing {bufnr}
@@ -781,7 +827,8 @@ winheight({nr})			Number	height of window {nr}
 winlayout([{tabnr}])		List	layout of windows in tab {tabnr}
 winline()			Number	window line of the cursor
 winnr([{expr}])			Number	number of current window
-winrestcmd()			String	returns command to restore window sizes
+winrestcmd()			String	returns command to restore window
+					sizes
 winrestview({dict})		none	restore view of current window
 winsaveview()			Dict	save view of current window
 winwidth({nr})			Number	width of window {nr}
@@ -909,7 +956,7 @@ appendbufline({buf}, {lnum}, {text})			*appendbufline()*
 		for an invalid {lnum}, since {lnum} isn't actually used.
 
 		Can also be used as a |method| after a List, the base is
-		passed as the second argument: >
+		passed as the third argument: >
 			mylist->appendbufline(buf, lnum)
 <
 		Return type: |Number|
@@ -1229,7 +1276,7 @@ balloon_show({expr})					*balloon_show()*
 		{only available when compiled with the |+balloon_eval| or
 		|+balloon_eval_term| feature}
 
-		Return type: |Number|
+		Return type: void
 
 
 balloon_split({msg})					*balloon_split()*
@@ -1348,6 +1395,9 @@ blob2str({blob} [, {options}])				*blob2str()*
 		Can also be used as a |method|: >
 			GetBlob()->blob2str()
 <
+		If `iconv` is not available and the encoding cannot be converted
+		using built-in conversion rules, an error will be reported.
+
 		Return type: list<string>
 
 
@@ -1453,7 +1503,7 @@ bufload({buf})						*bufload()*
 		Can also be used as a |method|: >
 			eval 'somename'->bufload()
 <
-		Return type: |Number|
+		Return type: void
 
 
 bufloaded({buf})					*bufloaded()*
@@ -1848,7 +1898,7 @@ clearmatches([{win}])					*clearmatches()*
 		Can also be used as a |method|: >
 			GetWin()->clearmatches()
 <
-		Return type: |Number|
+		Return type: void
 
 
 cmdcomplete_info()					*cmdcomplete_info()*
@@ -1936,6 +1986,14 @@ complete({startcol}, {matches})				*complete()* *E785*
 		The match can be selected with CTRL-N and CTRL-P as usual with
 		Insert mode completion.  The popup menu will appear if
 		specified, see |ins-completion-menu|.
+		Unlike with other |ins-completion| modes, the CTRL-N and
+		CTRL-P keys can be mapped while this completion is active.
+		For example, to make CTRL-N move the selection without
+		inserting the match: >
+
+		inoremap <expr> <C-N> complete_info().mode ==# 'eval'
+			\ ? '<Down>' : '<C-N>'
+<
 
 		Example (using legacy Vim script): >
 
@@ -1968,7 +2026,7 @@ complete({startcol}, {matches})				*complete()* *E785*
 		second argument: >
 			GetMatches()->complete(col('.'))
 <
-		Return type: |Number|
+		Return type: void
 
 
 complete_add({expr})					*complete_add()*
@@ -2070,51 +2128,6 @@ complete_info([{what}])					*complete_info()*
 			GetItems()->complete_info()
 <
 		Return type: dict<any>
-
-
-complete_match([{lnum}, {col}])				*complete_match()*
-		Searches backward from the given position and returns a List
-		of matches according to the 'isexpand' option.  When no
-		arguments are provided, uses the current cursor position.
-
-		Each match is represented as a List containing
-		[startcol, trigger_text] where:
-		- startcol: column position where completion should start,
-		  or -1 if no trigger position is found.  For multi-character
-		  triggers, returns the column of the first character.
-		- trigger_text: the matching trigger string from 'isexpand',
-		  or empty string if no match was found or when using the
-		  default 'iskeyword' pattern.
-
-		When 'isexpand' is empty, uses the 'iskeyword' pattern "\k\+$"
-		to find the start of the current keyword.
-
-		Examples: >
-	set isexpand=.,->,/,/*,abc
-	func CustomComplete()
-	  let res = complete_match()
-	  if res->len() == 0 | return | endif
-	  let [col, trigger] = res[0]
-	  let items = []
-	  if trigger == '/*'
-	    let items = ['/** */']
-	  elseif trigger == '/'
-	    let items = ['/*! */', '// TODO:', '// fixme:']
-	  elseif trigger == '.'
-	    let items = ['length()']
-	  elseif trigger =~ '^\->'
-	    let items = ['map()', 'reduce()']
-	  elseif trigger =~ '^\abc'
-	    let items = ['def', 'ghk']
-	  endif
-	  if items->len() > 0
-	    let startcol = trigger =~ '^/' ? col : col + len(trigger)
-	    call complete(startcol, items)
-	  endif
-	endfunc
-	inoremap <Tab> <Cmd>call CustomComplete()<CR>
-<
-		Return type: list<list<any>>
 
 
 confirm({msg} [, {choices} [, {default} [, {type}]]])	*confirm()*
@@ -2657,7 +2670,7 @@ echoraw({string})					*echoraw()*
 			call echoraw(&t_TI)
 <		Use with care, you can mess up the terminal this way.
 
-		Return type: |Number|
+		Return type: void
 
 
 empty({expr})						*empty()*
@@ -2700,7 +2713,7 @@ err_teapot([{expr}])					*err_teapot()*
 		indicating that coffee is temporarily not available.
 		If {expr} is present it must be a String.
 
-		Return type: |Number|
+		Return type: void
 
 
 escape({string}, {chars})				*escape()*
@@ -2757,13 +2770,18 @@ executable({expr})					*executable()*
 		then the name is also tried without adding an extension.
 		On MS-Windows it only checks if the file exists and is not a
 		directory, not if it's really executable.
+
 		On MS-Windows an executable in the same directory as the Vim
 		executable is always found.  Since this directory is added to
 		$PATH it should also work to execute it |win32-PATH|.
-					*NoDefaultCurrentDirectoryInExePath*
-		On MS-Windows an executable in Vim's current working directory
-		is also normally found, but this can be disabled by setting
-		the $NoDefaultCurrentDirectoryInExePath environment variable.
+					*$NoDefaultCurrentDirectoryInExePath*
+		On MS-Windows when using cmd.exe as 'shell' an executable in
+		Vim's current working directory is also normally found, which
+		can be disabled by setting the
+		`$NoDefaultCurrentDirectoryInExePath` environment variable.
+		This variable is always set by Vim when executing external
+		commands (e.g., via |:!|, |:make|, or |system()|) for security
+		reasons.
 
 		The result is a Number:
 			1	exists
@@ -2933,7 +2951,7 @@ exists({expr})						*exists()*
 		Can also be used as a |method|: >
 			Varname()->exists()
 <
-		Return type: |String|
+		Return type: |Number|
 
 
 exists_compiled({expr})					*exists_compiled()*
@@ -2950,7 +2968,7 @@ exists_compiled({expr})					*exists_compiled()*
 		Can only be used in a |:def| function. *E1233*
 		This does not work to check for arguments or local variables.
 
-		Return type: |String|
+		Return type: |Number|
 
 
 exp({expr})						*exp()*
@@ -3212,7 +3230,7 @@ feedkeys({string} [, {mode}])				*feedkeys()*
 		Can also be used as a |method|: >
 			GetInput()->feedkeys()
 <
-		Return type: |Number|
+		Return type: void
 
 
 filecopy({from}, {to})					*filecopy()*
@@ -3649,7 +3667,7 @@ foreground()						*foreground()*
 		allow a window to bring itself to the foreground.  Use
 		|remote_foreground()| instead.
 
-		Return type: |Number|
+		Return type: void
 		{only in the Win32, Motif and GTK GUI versions and the
 		Win32 console version}
 
@@ -3663,14 +3681,22 @@ fullcommand({name} [, {vim9}])				*fullcommand()*
 		ambiguous (for user-defined commands) or cannot be shortened
 		this way. |vim9-no-shorten|
 
-		Without the {vim9} argument uses the current script version.
-		If {vim9} is present and FALSE then legacy script rules are
-		used.  When {vim9} is present and TRUE then Vim9 rules are
-		used, e.g. "en" is not a short form of "endif".
+		Without the {vim9} argument, the current script version is
+		used.  When {vim9} is present and FALSE, legacy script rules
+		are used.  When {vim9} is present and TRUE, Vim9 rules are
+		used (e.g., "en" is not a short form of "endif").
 
-		For example `fullcommand('s')`, `fullcommand('sub')`,
-		`fullcommand(':%substitute')` all return "substitute".
-
+		Note: Command validation is not performed.  Results depend on
+		Vim's internal command-specific identification rules.
+		Examples:
+>vim
+		  echo [fullcommand('s')]		|" ['substitute']
+		  echo [fullcommand('sub')]		|" ['substitute']
+		  echo [fullcommand(': mark word')]	|" ['mark']
+		  echo [fullcommand(': markword')]	|" ['']
+		  echo [fullcommand('en')]		|" ['endif']
+		  echo [fullcommand('en', v:true)]	|" ['']
+<
 		Can also be used as a |method|: >
 			GetName()->fullcommand()
 <
@@ -3801,7 +3827,7 @@ garbagecollect([{atexit}])				*garbagecollect()*
 		type a character.  To force garbage collection immediately use
 		|test_garbagecollect_now()|.
 
-		Return type: |String|
+		Return type: void
 
 
 get({list}, {idx} [, {default}])			*get()* *get()-list*
@@ -4015,6 +4041,25 @@ getbufvar({buf}, {varname} [, {def}])			*getbufvar()*
 			GetBufnr()->getbufvar(varname)
 <
 		Return type: any, depending on {varname}
+
+
+getbgcolor()						*getbgcolor()*
+		Returns a |List| describing the current background colour as
+		[red, green, blue], each component in the range 0..255.
+
+		In the GUI (or with 'termguicolors' set) the value comes from
+		the |hl-Normal| highlight group's background.  In a terminal
+		it comes from the OSC 11 response (also available as
+		|v:termrbgresp|).
+		Returns [] when no value is available, e.g. before the
+		terminal has answered the OSC 11 query, or when |hl-Normal|
+		has no background colour set.
+
+		Useful when manually crafting RGB image data and you want to
+		flatten alpha onto the same colour the terminal will actually
+		display behind the image.
+
+		Return type: list<any>
 
 
 getcellpixels()						*getcellpixels()*
@@ -4726,7 +4771,7 @@ getloclist({nr} [, {what}])				*getloclist()*
 			:echo getloclist(3, {'all': 0})
 			:echo getloclist(5, {'filewinid': 0})
 <
-		Return type: list<dict<any>> or list<any>
+		Return type: list<dict<any>> or dict<any>
 
 
 getmarklist([{buf}])					*getmarklist()*
@@ -4878,6 +4923,11 @@ getpos({expr})						*getpos()*
 		within the line.  To get the character position in the line,
 		use |getcharpos()|.
 
+		The visual marks |'<| and |'>| refer to the beginning and end
+		of the visual selection relative to the buffer.  Note that
+		this differs from |setpos()|, where they are relative to the
+		cursor position.
+
 		Note that for '< and '> Visual mode matters: when it is "V"
 		(visual line mode) the column of '< is zero and the column of
 		'> is a large number equal to |v:maxcol|.
@@ -5002,7 +5052,7 @@ getqflist([{what}])					*getqflist()*
 			:echo getqflist({'nr': 2, 'title': 1})
 			:echo getqflist({'lines' : ["F1:10:L10"]})
 <
-		Return type: list<dict<any>> or list<any>
+		Return type: list<dict<any>> or dict<any>
 
 
 getreg([{regname} [, 1 [, {list}]]])			*getreg()*
@@ -5389,9 +5439,13 @@ getwininfo([{winid}])					*getwininfo()*
 					{only with the +quickfix feature}
 			quickfix	1 if quickfix or location list window
 					{only with the +quickfix feature}
+			status_height	status lines height (0 or 1)
+			tabnr		tab page number
 			terminal	1 if a terminal window
 					{only with the +terminal feature}
-			tabnr		tab page number
+			textoff		number of columns occupied by any
+					'foldcolumn', 'signcolumn' and line
+					number in front of the text
 			topline		first displayed buffer line
 			variables	a reference to the dictionary with
 					window-local variables
@@ -5400,9 +5454,6 @@ getwininfo([{winid}])					*getwininfo()*
 					otherwise
 			wincol		leftmost screen column of the window;
 					"col" from |win_screenpos()|
-			textoff		number of columns occupied by any
-					'foldcolumn', 'signcolumn' and line
-					number in front of the text
 			winid		|window-ID|
 			winnr		window number
 			winrow		topmost screen line of the window;
@@ -6244,7 +6295,7 @@ insert({object}, {item} [, {idx}])			*insert()*
 		Return type: |Number|
 
 
-instanceof({object}, {class})			*instanceof()* *E614* *E616* *E693*
+instanceof({object}, {class})			*instanceof()* *E616* *E693*
 		The result is a Number, which is |TRUE| when the {object}
 		argument is a direct or indirect instance of a |Class|,
 		|Interface|, or class |:type| alias specified by {class}.
@@ -6256,7 +6307,7 @@ instanceof({object}, {class})			*instanceof()* *E614* *E616* *E693*
 <		Can also be used as a |method|: >
 			myobj->instanceof(mytype)
 <
-		Return type: |Number|
+		Return type: |vim9-boolean|
 
 
 interrupt()						*interrupt()*
@@ -6420,6 +6471,8 @@ js_decode({string})					*js_decode()*
 		- Strings can be in single quotes.
 		- Empty items in an array (between two commas) are allowed and
 		  result in v:none items.
+		- Capitalization is ignored in keywords: true, false, null,
+		  NaN, Infinity and -Infinity.
 
 		Can also be used as a |method|: >
 			ReadObject()->js_decode()
@@ -6458,12 +6511,9 @@ json_decode({string})					*json_decode()* *E491*
 		  same as {"1":2}.
 		- More floating point numbers are recognized, e.g. "1." for
 		  "1.0", or "001.2" for "1.2".  Special floating point values
-		  "Infinity", "-Infinity" and "NaN" (capitalization ignored)
-		  are accepted.
+		  "Infinity", "-Infinity" and "NaN" are accepted.
 		- Leading zeroes in integer numbers are ignored, e.g. "012"
 		  for "12" or "-012" for "-12".
-		- Capitalization is ignored in literal names null, true or
-		  false, e.g. "NULL" for "null", "True" for "true".
 		- Control characters U+0000 through U+001F which are not
 		  escaped in strings are accepted, e.g. "	" (tab
 		  character in string) for "\t".
@@ -6471,10 +6521,10 @@ json_decode({string})					*json_decode()* *E491*
 		  and results in v:none.
 		- Backslash in an invalid 2-character sequence escape is
 		  ignored, e.g. "\a" is decoded as "a".
-		- A correct surrogate pair in JSON strings should normally be
-		  a 12 character sequence such as "\uD834\uDD1E", but
-		  json_decode() silently accepts truncated surrogate pairs
-		  such as "\uD834" or "\uD834\u"
+		- A surrogate pair in JSON strings is a 12 character sequence
+		  such as "\uD834\uDD1E".  A lone surrogate or an invalid
+		  surrogate pair (e.g. "\uD800" or "\uD800\uD800") results
+		  in an error.
 							*E938*
 		A duplicate key in an object, valid in rfc7159, is not
 		accepted by json_decode() as the result must be a valid Vim
@@ -6819,9 +6869,10 @@ listener_add({callback} [, {buf} [, {unbuffered}]])	*listener_add()*
 		The entries are in the order the changes were made, thus the
 		most recent change is at the end.
 
-		Because of the third trigger reason for triggering a callback
-		listed above, the line numbers passed to the callback are not
-		guaranteed to be valid.  If this is a problem then make
+		Because of the third reason for triggering a callback listed
+		above, the line numbers passed to the callback are not
+		guaranteed to be valid. In particular, the end value can be
+		greater than line('$') + 1. If this is a problem then make
 		{unbuffered} |TRUE|.
 
 		When {unbuffered} is |TRUE| the {callback} is invoked for every
@@ -6850,6 +6901,8 @@ listener_add({callback} [, {buf} [, {unbuffered}]])	*listener_add()*
 		second argument: >
 			GetBuffer()->listener_add(callback)
 <
+		This function is not available in the |sandbox|.
+
 		Return type: |Number|
 
 
@@ -6864,7 +6917,9 @@ listener_flush([{buf}])					*listener_flush()*
 		Can also be used as a |method|: >
 			GetBuffer()->listener_flush()
 <
-		Return type: |Number|
+		This function is not available in the |sandbox|.
+
+		Return type: void
 
 
 listener_remove({id})					*listener_remove()*
@@ -6875,6 +6930,8 @@ listener_remove({id})					*listener_remove()*
 		Can also be used as a |method|: >
 			GetListenerId()->listener_remove()
 <
+		This function is not available in the |sandbox|.
+
 		Return type: |Number|
 
 
@@ -7208,7 +7265,7 @@ mapset({dict})
 			    mapset(d)
 			endfor
 <
-		Return type: |Number|
+		Return type: void
 
 
 match({expr}, {pat} [, {start} [, {count}]])		*match()*
@@ -7520,15 +7577,15 @@ matchfuzzy({list}, {str} [, {dict}])			*matchfuzzy()*
 				use for fuzzy matching.
 
 		{str} is treated as a literal string and regular expression
-		matching is NOT supported.  The maximum supported {str} length
-		is 256.
+		matching is NOT supported.  Only the first 1024 characters of
+		{str} and of each item in {list} are used for matching;
+		characters beyond that are ignored.
 
 		When {str} has multiple words each separated by white space,
 		then the list of strings that have all the words is returned.
 
 		If there are no matching strings or there is an error, then an
-		empty list is returned.  If length of {str} is greater than
-		256, then returns an empty list.
+		empty list is returned.
 
 		When {limit} is given, matchfuzzy() will find up to this
 		number of matches in {list} and return them in sorted order.
@@ -7971,8 +8028,8 @@ nr2char({expr} [, {utf8}])				*nr2char()*
 		value {expr}.  Examples: >
 			nr2char(64)		returns "@"
 			nr2char(32)		returns " "
-<		When {utf8} is omitted or zero, the current 'encoding' is used.
-		Example for "utf-8": >
+<		When {utf8} is omitted or zero, the current 'encoding' is
+		used.  Example for "utf-8": >
 			nr2char(300)		returns I with bow character
 <		When {utf8} is TRUE, always return UTF-8 characters.
 		Note that a NUL character in the file is specified with
@@ -8375,24 +8432,24 @@ printf({fmt}, {expr1} ...)				*printf()*
 
 							*E1502*
 		You can re-use a [field-width] (or [precision]) argument: >
-		    echo printf("%1$d at width %2$d is: %01$*2$d", 1, 2)
+		    echo printf("%1$d at width %2$d is: %1$0*2$d", 1, 2)
 <		    1 at width 2 is: 01
 
 		However, you can't use it as a different type: >
-		    echo printf("%1$d at width %2$ld is: %01$*2$d", 1, 2)
+		    echo printf("%1$d at width %2$ld is: %1$0*2$d", 1, 2)
 <		    E1502: Positional argument 2 used as field width reused as
 		    different type: long int/int
 
 							*E1503*
 		When a positional argument is used, but not the correct number
 		or arguments is given, an error is raised: >
-		    echo printf("%1$d at width %2$d is: %01$*2$.*3$d", 1, 2)
+		    echo printf("%1$d at width %2$d is: %1$0*2$.*3$d", 1, 2)
 <		    E1503: Positional argument 3 out of bounds: %1$d at width
-		    %2$d is: %01$*2$.*3$d
+		    %2$d is: %1$0*2$.*3$d
 
 		Only the first error is reported: >
-		    echo printf("%01$*2$.*3$d %4$d", 1, 2)
-<		    E1503: Positional argument 3 out of bounds: %01$*2$.*3$d
+		    echo printf("%1$0*2$.*3$d %4$d", 1, 2)
+<		    E1503: Positional argument 3 out of bounds: %1$0*2$.*3$d
 		    %4$d
 
 							*E1504*
@@ -8471,8 +8528,10 @@ prompt_setcallback({buf}, {expr})			*prompt_setcallback()*
 
 <		Can also be used as a |method|: >
 			GetBuffer()->prompt_setcallback(callback)
+<
+		Return type: void
 
-<		{only available when compiled with the |+channel| feature}
+		{only available when compiled with the |+channel| feature}
 
 prompt_setinterrupt({buf}, {expr})			*prompt_setinterrupt()*
 		Set a callback for buffer {buf} to {expr}.  When {expr} is an
@@ -8486,7 +8545,7 @@ prompt_setinterrupt({buf}, {expr})			*prompt_setinterrupt()*
 		Can also be used as a |method|: >
 			GetBuffer()->prompt_setinterrupt(callback)
 <
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+channel| feature}
 
@@ -8500,7 +8559,7 @@ prompt_setprompt({buf}, {text})				*prompt_setprompt()*
 		Can also be used as a |method|: >
 			GetBuffer()->prompt_setprompt('command: ')
 <
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+channel| feature}
 
@@ -8824,6 +8883,50 @@ readfile({fname} [, {type} [, {max}]])			*readfile()*
 		Return type: list<string> or list<any>
 
 
+redraw_listener_add({opts})				*redraw_listener_add()*
+		Add a listener that holds callback functions that will be
+		called at specific times in the redraw cycle.  {opts} is a
+		dictionary that contain the callback functions to be defined.
+		At least one callback must be specified. *E1571*
+		Returns a unique ID that can be passed to
+		|redraw_listener_remove()|.
+
+		{opts} may have the following entries:
+
+		    on_start	Called first on each screen redraw.  Takes no
+				arguments and returns nothing.
+		    on_end	Called at the end of each screen redraw.
+				Takes no arguments and returns nothing.
+
+		A good use case for this function is with the |listener_add()|
+		callback with unbuffered set to TRUE.  This allows you to
+		modify the state on buffer changes, and finally render that
+		state just before the next redraw, only if it has changed.
+		Attempting to render or redraw for every single buffer change
+		would be very inefficient.
+
+		You may not call redraw_listener_add() during any of the
+		callbacks defined in {opts}. *E1570*
+
+		Can also be used as a |method|: >
+			GetOpts()->redraw_listener_add()
+<
+		This function is not available in the |sandbox|.
+
+		Return type: |Number|
+
+
+redraw_listener_remove({id})			*redraw_listener_remove()*
+		Remove a redraw listener previously added with
+		|redraw_listener_add()|.  Returns FALSE when {id} could not be
+		found, TRUE when {id} was removed.
+
+		Can also be used as a |method|: >
+			GetRedrawListenerId()->redraw_listener_remove()
+<
+		Return type: void
+
+
 reduce({object}, {func} [, {initial}])			*reduce()* *E998*
 		{func} is called for every item in {object}, which can be a
 		|String|, |List|, |Tuple| or a |Blob|.  {func} is called with
@@ -8993,7 +9096,7 @@ remote_foreground({server})				*remote_foreground()*
 		Can also be used as a |method|: >
 			ServerName()->remote_foreground()
 <
-		Return type: |Number|
+		Return type: void
 
 		{only in the Win32, Motif and GTK GUI versions and the
 		Win32 console version}
@@ -9077,7 +9180,7 @@ remote_startserver({name})		*remote_startserver()* *E941* *E942*
 		Can also be used as a |method|: >
 			ServerName()->remote_startserver()
 <
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+clientserver| feature}
 
@@ -9762,15 +9865,25 @@ server2client({clientid}, {string})			*server2client()*
 		Return type: |Number|
 
 
-serverlist()						*serverlist()*
+serverlist([{dict}])					*serverlist()*
 		Return a list of available server names, one per line.
 		When there are no servers or the information is not available
-		an empty string is returned.  See also |clientserver|.
+		an empty string is returned.
 		{only available when compiled with the |+clientserver| feature}
+
+		If {dict} is given, then it is a |Dictionary| supporting the
+		following options:
+		    key		type		meaning ~
+		    list	|Boolean|	Return a list of strings,
+						where each string is a server
+						name.
+
+		See also |clientserver|.
+
 		Example: >
 			:echo serverlist()
 <
-		Return type: |String|
+		Return type: |String| or list<string>
 
 
 setbufline({buf}, {lnum}, {text})			*setbufline()*
@@ -9825,7 +9938,7 @@ setbufvar({buf}, {varname}, {val})			*setbufvar()*
 		third argument: >
 			GetValue()->setbufvar(buf, varname)
 <
-		Return type: |Number|
+		Return type: void
 
 
 setcellwidths({list})					*setcellwidths()*
@@ -9862,7 +9975,7 @@ setcellwidths({list})					*setcellwidths()*
 		match with what Vim knows about each emoji.  If it doesn't
 		look right you need to adjust the {list} argument.
 
-		Return type: |Number|
+		Return type: void
 
 
 setcharpos({expr}, {list})				*setcharpos()*
@@ -9905,7 +10018,7 @@ setcharsearch({dict})					*setcharsearch()*
 		Can also be used as a |method|: >
 			SavedSearch()->setcharsearch()
 <
-		Return type: dict<any>
+		Return type: void
 
 
 setcmdline({str} [, {pos}])				*setcmdline()*
@@ -9972,7 +10085,7 @@ setenv({name}, {val})					*setenv()*
 		second argument: >
 			GetPath()->setenv('PATH')
 <
-		Return type: |Number|
+		Return type: void
 
 
 setfperm({fname}, {mode})				*setfperm()* *chmod*
@@ -10107,9 +10220,14 @@ setpos({expr}, {list})					*setpos()*
 		preferred column is not set.  When it is present and setting a
 		mark position it is not used.
 
-		Note that for '< and '> changing the line number may result in
-		the marks to be effectively be swapped, so that '< is always
-		before '>.
+		Note that for |'<| and |'>| changing the line number may
+		result in the marks to be effectively swapped, so that |'<| is
+		always before |'>|.
+
+		The visual marks |'<| and |'>| refer to the beginning and end
+		of the visual selection relative to the cursor position.
+		Note that this differs from |getpos()|, where they are
+		relative to the buffer.
 
 		Returns 0 when the position could be set, -1 otherwise.
 		An error message is given if {expr} is invalid.
@@ -10326,7 +10444,7 @@ settabvar({tabnr}, {varname}, {val})			*settabvar()*
 		third argument: >
 			GetValue()->settabvar(tab, name)
 <
-		Return type: |Number|
+		Return type: void
 
 
 settabwinvar({tabnr}, {winnr}, {varname}, {val})	*settabwinvar()*
@@ -10351,7 +10469,7 @@ settabwinvar({tabnr}, {winnr}, {varname}, {val})	*settabwinvar()*
 		fourth argument: >
 			GetValue()->settabwinvar(tab, winnr, name)
 <
-		Return type: |Number|
+		Return type: void
 
 
 settagstack({nr}, {dict} [, {action}])			*settagstack()*
@@ -10404,7 +10522,7 @@ setwinvar({winnr}, {varname}, {val})			*setwinvar()*
 		third argument: >
 			GetValue()->setwinvar(winnr, name)
 <
-		Return type: |Number|
+		Return type: void
 
 
 sha256({expr})						*sha256()*
@@ -10644,7 +10762,7 @@ sound_clear()						*sound_clear()*
 		On some Linux systems you may need the libcanberra-pulse
 		package, otherwise sound may not stop.
 
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+sound| feature}
 
@@ -10714,7 +10832,7 @@ sound_stop({id})					*sound_stop()*
 		Can also be used as a |method|: >
 			soundid->sound_stop()
 <
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+sound| feature}
 
@@ -11255,7 +11373,12 @@ strptime({format}, {timestring})			*strptime()*
 		can try different {format} values until you get a non-zero
 		result.
 
+		Note: On MS-Windows, where the C runtime does not provide
+		strptime(), Vim uses a built-in fallback that always uses
+		English locale names regardless of the active locale.
+
 		See also |strftime()|.
+
 		Examples: >
 		  :echo strptime("%Y %b %d %X", "1997 Apr 27 11:49:23")
 <		  862156163 >
@@ -11635,6 +11758,30 @@ system({expr} [, {input}])				*system()* *E677*
 		Get the output of the shell command {expr} as a |String|.  See
 		|systemlist()| to get the output as a |List|.
 
+		{expr} can be a |String| or a |List|.
+		When {expr} is a |String|, the command is executed through the
+		shell (see below for how the command is constructed).
+
+								*E1575*
+		When {expr} is a |List|, the first item is the executable and
+		the remaining items are passed as arguments directly.  The
+		command is executed without using a shell, similar to
+		|job_start()|.  Since no shell is involved, shell features
+		such as redirection, piping, globbing, environment variable
+		expansion and backtick expansion will not work.  Characters
+		like ">" are passed as literal arguments to the command, not
+		interpreted as redirection.  Use this form when arguments may
+		contain special characters that should not be interpreted by
+		the shell.  Example: >
+		    :let out = system(['grep', '-r', 'pattern', '.'])
+<		With the String form ">" would be shell redirection, but
+		with a List it is passed as a literal argument: >
+		    :let out = system(['echo', 'hello', '>', 'world'])
+<		This outputs "hello > world", not redirect to a file.
+
+		To use the shell explicitly with a List: >
+		    :let out = system(['/bin/sh', '-c', 'echo $HOME'])
+<
 		When {input} is given and is a |String| this string is written
 		to a file and passed as stdin to the command.  The string is
 		written as-is, you need to take care of using the correct line
@@ -11653,14 +11800,18 @@ system({expr} [, {input}])				*system()* *E677*
 		When prepended by |:silent| the terminal will not be set to
 		cooked mode.  This is meant to be used for commands that do
 		not need the user to type.  It avoids stray characters showing
-		up on the screen which require |CTRL-L| to remove. >
+		up on the screen which require |CTRL-L| to remove.
+		When calling system() from a 'statusline' expression, an
+		|autocommand| or a |timer| callback, you should use |:silent|
+		to avoid terminal responses (e.g. from cursor style queries)
+		being echoed on the screen. >
 			:silent let f = system('ls *.vim')
 <
-		Note: Use |shellescape()| or |::S| with |expand()| or
-		|fnamemodify()| to escape special characters in a command
-		argument.  Newlines in {expr} may cause the command to fail.
-		The characters in 'shellquote' and 'shellxquote' may also
-		cause trouble.
+		Note: When {expr} is a String, use |shellescape()| or |::S|
+		with |expand()| or |fnamemodify()| to escape special
+		characters in a command argument.  Newlines in {expr} may
+		cause the command to fail.  The characters in 'shellquote'
+		and 'shellxquote' may also cause trouble.
 		This is not to be used for interactive commands.
 
 		The result is a String.  Example: >
@@ -11673,7 +11824,8 @@ system({expr} [, {input}])				*system()* *E677*
 		To avoid the string being truncated at a NUL, all NUL
 		characters are replaced with SOH (0x01).
 
-		The command executed is constructed using several options:
+		When {expr} is a String, the command executed is constructed
+		using several options:
 	'shell' 'shellcmdflag' 'shellxquote' {expr} 'shellredir' {tmp} 'shellxquote'
 		({tmp} is an automatically generated file name).
 		For Unix, braces are put around {expr} to allow for
@@ -11700,6 +11852,9 @@ system({expr} [, {input}])				*system()* *E677*
 systemlist({expr} [, {input}])				*systemlist()*
 		Same as |system()|, but returns a |List| with lines (parts of
 		output separated by NL) with NULs transformed into NLs.
+		Like |system()|, {expr} can be a |String| (executed through
+		the shell) or a |List| (executed directly without a shell).
+		See |system()| for details.
 		Output is the same as |readfile()| will output with {binary}
 		argument set to "b", except that there is no extra empty item
 		when the result ends in a NL.
@@ -11710,6 +11865,11 @@ systemlist({expr} [, {input}])				*systemlist()*
 			echo system('echo hello')->split('\n', 1)
 <
 		Returns an empty string on error.
+
+		Like |system()|, prepend |:silent| when the command does not
+		need user interaction and is called from a 'statusline'
+		expression, an |autocommand| or a |timer| callback.  See
+		|system()| for details.
 
 		Can also be used as a |method|: >
 			:echo GetCmd()->systemlist()
@@ -11770,6 +11930,38 @@ tabpagewinnr({tabarg} [, {arg}])			*tabpagewinnr()*
 			GetTabpage()->tabpagewinnr()
 <
 		Return type: |Number|
+
+
+tabpanel_getinfo()					*tabpanel_getinfo()*
+		Return a |Dictionary| describing the current state of the
+		tabpanel (see |tabpanel|).  The dictionary has these keys:
+			align		"left" or "right"
+			columns		width in screen columns
+			scrollbar	|TRUE| if a scrollbar is shown
+			offset		current scroll offset in rows
+			total		total number of rows rendered
+			max_offset	largest valid value for "offset"
+
+		The "total" and "max_offset" values are only accurate after
+		the tabpanel has been drawn at least once.
+
+		Return type: dict<any>
+
+
+tabpanel_scroll({n} [, {opts}])				*tabpanel_scroll()*
+		Scroll the tabpanel by {n} rows.  Positive values scroll down
+		(later tab pages become visible), negative values scroll up.
+		The new offset is clamped to the valid range.
+
+		When {opts} is a |Dictionary| and its "absolute" entry is
+		|TRUE|, {n} is used as the new absolute scroll offset instead
+		of a delta.
+
+		Returns |TRUE| if the scroll offset changed, |FALSE| otherwise
+		(for example when the tabpanel is not shown, or the offset is
+		already at the requested value).
+
+		Return type: |vim9-boolean|
 
 
 tagfiles()						*tagfiles()*
@@ -11891,6 +12083,7 @@ terminalprops()						*terminalprops()*
 		   underline_rgb	whether |t_8u| works **
 		   mouse		mouse type supported
 		   kitty		whether Kitty terminal was detected
+		   decrqm		whether sending DECRQM sequences work
 
 		** value 'u' for unknown, 'y' for yes, 'n' for no
 
@@ -11909,6 +12102,9 @@ terminalprops()						*terminalprops()*
 		This avoids sending it to xterm, which would clear the colors.
 
 		For "mouse" the value 'u' is unknown
+
+		If "decrqm" is 'y', then Vim will query support for the
+		'termsync' and 'termresize' ("inband") options.
 
 		Also see:
 		- 'ambiwidth' - detected by using |t_u7|.
@@ -11962,7 +12158,7 @@ timer_pause({timer}, {paused})				*timer_pause()*
 		Can also be used as a |method|: >
 			GetTimer()->timer_pause(1)
 <
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+timers| feature}
 
@@ -12022,7 +12218,7 @@ timer_stop({timer})					*timer_stop()*
 		Can also be used as a |method|: >
 			GetTimer()->timer_stop()
 <
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+timers| feature}
 
@@ -12032,7 +12228,7 @@ timer_stopall()						*timer_stopall()*
 		invoked.  Useful if a timer is misbehaving.  If there are no
 		timers there is no error.
 
-		Return type: |Number|
+		Return type: void
 
 		{only available when compiled with the |+timers| feature}
 
@@ -12522,7 +12718,7 @@ wildtrigger()						*wildtrigger()*
 
 		Return value is always 0.
 
-		Return type: |Number|
+		Return type: void
 
 
 win_execute({id}, {command} [, {silent}])		*win_execute()*
@@ -12554,8 +12750,7 @@ win_findbuf({bufnr})					*win_findbuf()*
 		Can also be used as a |method|: >
 			GetBufnr()->win_findbuf()
 <
-		Return type: list<number> or list<any>
-
+		Return type: list<number>
 
 win_getid([{win} [, {tab}]])				*win_getid()*
 		Get the |window-ID| for the specified window.
@@ -12601,7 +12796,8 @@ win_gettype([{nr}])					*win_gettype()*
 win_gotoid({expr})					*win_gotoid()*
 		Go to window with ID {expr}.  This may also change the current
 		tabpage.
-		Return TRUE if successful, FALSE if the window cannot be found.
+		Return TRUE if successful, FALSE if the window cannot be
+		found.
 
 		Can also be used as a |method|: >
 			GetWinid()->win_gotoid()
@@ -12874,7 +13070,7 @@ winrestview({dict})					*winrestview()*
 		Can also be used as a |method|: >
 			GetView()->winrestview()
 <
-		Return type: |Number|
+		Return type: void
 
 
 winsaveview()						*winsaveview()*
@@ -13046,6 +13242,7 @@ acl			Compiled with |ACL| support.
 all_builtin_terms	Compiled with all builtin terminals enabled. (always
 			true)
 amiga			Amiga version of Vim.
+android			Android version of Vim. *android*
 arabic			Compiled with Arabic support |Arabic|.
 arp			Compiled with ARP support (Amiga).
 autocmd			Compiled with autocommand support. (always true)
@@ -13121,6 +13318,14 @@ hangul_input		Compiled with Hangul input support. |hangul|
 hpux			HP-UX version of Vim.
 hurd			GNU/Hurd version of Vim
 iconv			Can use iconv() for conversion.
+image			Compiled with the popup window "image" attribute.
+			See |popup-image|.
+image_cairo		Compiled with the Cairo image backend (GTK2 and GTK3 GUI).
+image_gdi		Compiled with the GDI image backend (Windows GUI).
+image_gdk		Compiled with the GDK image backend (GTK4 GUI).
+image_kitty		Compiled with the kitty graphics protocol image backend
+			(terminal).
+image_sixel		Compiled with the DEC sixel image backend (terminal).
 insert_expand		Compiled with support for CTRL-X expansion commands in
 			Insert mode. (always true)
 job			Compiled with support for |channel| and |job|
@@ -13201,6 +13406,7 @@ spell			Compiled with spell checking support |spell|.
 startuptime		Compiled with |--startuptime| support.
 statusline		Compiled with support for 'statusline', 'rulerformat'
 			and special formats of 'titlestring' and 'iconstring'.
+statusline_click	Click handlers in 'statusline' |stl-%[FuncName]|
 sun			SunOS version of Vim.
 sun_workshop		Support for Sun |workshop| has been removed.
 syntax			Compiled with syntax highlighting support |syntax|.
@@ -13216,6 +13422,7 @@ termguicolors		Compiled with true color in terminal support.
 terminal		Compiled with |terminal| support.
 terminfo		Compiled with terminfo instead of termcap.
 termresponse		Compiled with support for |t_RV| and |v:termresponse|.
+termux			Termux version of Vim. *termux*
 textobjects		Compiled with support for |text-objects|.
 textprop		Compiled with support for |text-properties|.
 tgetent			Compiled with tgetent support, able to use a termcap
@@ -13252,8 +13459,6 @@ vtp			Compiled for vcon support |+vtp| (check vcon to find
 			out if it works in the current console).
 wayland			Compiled with Wayland protocol support.
 wayland_clipboard	Compiled with support for Wayland clipboard.
-wayland_focus_steal	Compiled with support for Wayland clipboard focus
-			stealing.
 wildignore		Compiled with 'wildignore' option.
 wildmenu		Compiled with 'wildmenu' option.
 win16			old version for MS-Windows 3.1 (always false)

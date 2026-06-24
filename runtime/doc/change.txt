@@ -1,4 +1,4 @@
-*change.txt*	For Vim version 9.1.  Last change: 2025 Nov 09
+*change.txt*	For Vim version 9.2.  Last change: 2026 Jun 22
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -75,18 +75,21 @@ For inserting text see |insert.txt|.
 					*:d* *:de* *:del* *:delete* *:dl* *:dp*
 :[range]d[elete] [x]	Delete [range] lines (default: current line) [into
 			register x].
-			Note these weird abbreviations:
-			   :dl		delete and list
-			   :dell	idem
-			   :delel	idem
-			   :deletl	idem
-			   :deletel	idem
-			   :dp		delete and print
-			   :dep		idem
-			   :delp	idem
-			   :delep	idem
-			   :deletp	idem
-			   :deletep	idem
+			Note these weird abbreviations applicable only to
+			legacy Vim script:
+			  :dl		delete and list
+			  :dell		idem
+			  :delel	idem
+			  :deletl	idem
+			  :deletel	idem
+			  :dp		delete and print
+			  :dep		idem
+			  :delp		idem
+			  :delep	idem
+			  :deletp	idem
+			  :deletep	idem
+			Warning: These give |E492| in |Vim9| script and `:dl`
+			executes as `:dlist`.
 
 :[range]d[elete] [x] {count}
 			Delete {count} lines, starting with [range]
@@ -798,7 +801,8 @@ out then.  Example: >
 	:%s/TESTING
 This deletes "TESTING" from all lines, but only one per line.
 								*E1270*
-For compatibility with Vi these two exceptions are allowed in legacy script:
+For compatibility with Vi these two exceptions are allowed in legacy Vim
+script:
 "\/{string}/" and "\?{string}?" do the same as "//{string}/r".
 "\&{string}&" does the same as "//{string}/".
 				*pattern-delimiter* *E146* *E1241* *E1242*
@@ -1094,7 +1098,8 @@ inside of strings can change!  Also see 'softtabstop' option. >
 							*:y* *:yank* *E850*
 :[range]y[ank] [x]	Yank [range] lines [into register x].  Yanking to the
 			"* or "+ registers is possible only when the
-			|+clipboard| feature is included.
+			|+clipboard| or |+clipboard_provider| features are
+			included.
 
 :[range]y[ank] [x] {count}
 			Yank {count} lines, starting with last line number
@@ -1156,9 +1161,9 @@ inside of strings can change!  Also see 'softtabstop' option. >
 			current line).
 
 							*:ip* *:iput*
-:[line]ip[ut] [x]	like |:put|, but adjust indent to the current line
+:[line]ip[ut] [x]	Like |:put|, but adjust indent to the current line.
 
-:[line]ip[ut]! [x]	like |:put|!, but adjust indent to the current line
+:[line]ip[ut]! [x]	Like |:put|!, but adjust indent to the current line.
 
 ["x]]p		    or					*]p* *]<MiddleMouse>*
 ["x]]<MiddleMouse>	Like "p", but adjust the indent to the current line.
@@ -1327,21 +1332,22 @@ and ":put" commands and with CTRL-R.
 		the command was executed completely from a mapping.
 		{not available when compiled without the |+cmdline_hist|
 		feature}
-							*quote_#* *quote#*
-6. Alternate file register "#
-Contains the name of the alternate file for the current window.  It will
-change how the |CTRL-^| command works.
-This register is writable, mainly to allow for restoring it after a plugin has
-changed it.  It accepts buffer number: >
-    let altbuf = bufnr(@#)
-    ...
-    let @# = altbuf
-It will give error |E86| if you pass buffer number and this buffer does not
-exist.
-It can also accept a match with an existing buffer name: >
+
+6. Alternate file register "#			*quote_#* *quote#* *@#*
+Contains the |alternate-file| name for current window
+This register is writable with `:let` and |setreg()|.  This changes which buffer
+CTRL-^ enters.  You can't yank or delete into this register.
+A String is matched against existing buffer names, like |:buffer|: >
     let @# = 'buffer_name'
-Error |E93| if there is more than one buffer matching the given name or |E94|
-if none of buffers matches the given name.
+Also supports using buffer number and |file-pattern|.
+
+Throws
+  |E86| when the buffer number does not exist
+  |E93| when more than one buffer matches
+  |E94| when none match
+
+Clear the register with empty String: >
+    let @# = ''
 
 7. Expression register "=			*quote_=* *quote=* *@=*
 This is not really a register that stores text, but is a way to use an
@@ -1393,11 +1399,12 @@ When writing to this register, nothing happens.  This can be used to delete
 text without affecting the normal registers.  When reading from this register,
 nothing is returned.
 
-10. Last search pattern register	"/		*quote_/* *quote/*
+10. Last search pattern register "/			*quote_/* *quote/*
 Contains the most recent search-pattern.  This is used for "n" and 'hlsearch'.
-It is writable with `:let`, you can change it to have 'hlsearch' highlight
-other matches without actually searching.  You can't yank or delete into this
-register.  The search direction is available in |v:searchforward|.
+This register is writable with `:let` and |setreg()|.  You can change it to have
+'hlsearch' highlight other matches without actually searching.  You can't yank
+or delete into this register.  The search direction is available in
+|v:searchforward|.
 Note that the value is restored when returning from a function
 |function-search-undo|.
 
@@ -1776,7 +1783,9 @@ l	Long lines are not broken in insert mode: When a line was longer than
 	automatically format it.
 							*fo-m*
 m	Also break at a multibyte character above 255.  This is useful for
-	Asian text where every character is a word on its own.
+	Asian text where every character is a word on its own.  Note that
+	line breaks may also be added after punctuation characters such as
+	colons to match the CJK linebreaking rules.
 							*fo-M*
 M	When joining lines, don't insert a space before or after a multibyte
 	character.  Overrules the 'B' flag.

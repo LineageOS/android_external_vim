@@ -23,11 +23,17 @@
 # define HAVE_MATH_H
 #endif
 #ifndef __GNUC__
-#define HAVE_STRICMP
-#define HAVE_STRNICMP
+# define HAVE_STRICMP
+# define HAVE_STRNICMP
 #endif
 #ifndef HAVE_STRFTIME
 # define HAVE_STRFTIME		// guessed
+#endif
+#ifndef HAVE_STRPTIME
+# define HAVE_STRPTIME		// provided by src/strptime.c
+#endif
+#ifndef HAVE_TZSET
+# define HAVE_TZSET		// CRT has tzset() / _tzset()
 #endif
 #define HAVE_MEMSET
 #ifndef HAVE_LOCALE_H
@@ -224,3 +230,10 @@ Trace(char *pszFormat, ...);
 #endif
 #define mch_getenv(x) (char_u *)getenv((char *)(x))
 #define vim_mkdir(x, y) mch_mkdir(x)
+
+// Windows Version
+#define MAKE_VER(major, minor, build) \
+    (((major) << 24) | ((minor) << 16) | (build))
+
+// The Windows CRT does not declare strptime(); Vim provides it in strptime.c.
+char *strptime(const char *buf, const char *fmt, struct tm *tm);

@@ -113,7 +113,39 @@ func Test_window_cmd_wincmd_gf()
   call assert_notequal(fname, bufname("%"))
   new | only!
 
+  au! test_window_cmd_wincmd_gf
   augroup! test_window_cmd_wincmd_gf
+  delfunc s:swap_exists
+  bw!
+endfunc
+
+func Test_abort_in_wincmd_f()
+  let fname = 'test_f.txt'
+  let swp_fname = $'.{fname}.swp'
+  call writefile([], fname, 'D')
+  call writefile([], swp_fname, 'D')
+  " Remove the catch-all that runtest.vim adds
+  au! SwapExists
+  augroup test_window_cmd_wincmd_f
+    autocmd!
+    " (A)bort
+    autocmd SwapExists test_f.txt let v:swapchoice = 'a'
+  augroup END
+
+  call setline(1, fname)
+  call assert_equal(1, winnr('$'))
+  try
+    wincmd f
+  catch /^Vim:Interrupt$/
+    " expected interrupt by abort
+  endtry
+  call assert_equal(1, winnr('$'))
+  new | only!
+
+  " See :h W19 for the background of this au!. Ideally other tests
+  " should also follow this.
+  au! test_window_cmd_wincmd_f
+  augroup! test_window_cmd_wincmd_f
   bw!
 endfunc
 
@@ -1913,7 +1945,7 @@ func Test_splitkeep_cmdwin_cursor_position()
   set splitkeep=screen
   call setline(1, range(&lines))
 
-  " No scroll when cursor is at near bottom of window and cusor position
+  " No scroll when cursor is at near bottom of window and cursor position
   " recompution (done by line('w0') in this test) happens while in cmdwin.
   normal! G
   let firstline = line('w0')
@@ -1990,6 +2022,16 @@ func Test_splitkeep_screen_cursor_pos()
   call assert_equal([0, 1, 20, 0], getpos('.'))
   %bwipeout!
   set splitkeep&
+endfunc
+
+func Test_splitkeep_cmdheight()
+  set splitkeep=screen
+  call setline(1, range(&lines))
+  norm! G
+  set cmdheight=2
+  call assert_equal(&lines - 1, line('.'))
+  %bwipeout!
+  set splitkeep& cmdheight&
 endfunc
 
 func Test_splitkeep_cursor()
@@ -2372,6 +2414,153 @@ func Test_resize_from_another_tabpage()
   call VerifyScreenDump(buf, 'Test_resize_from_another_tabpage_1', {})
 
   call StopVimInTerminal(buf)
+endfunc
+
+" When shrinking a window and the only other window has 'winfixheight'
+" with 'winminheight'=0, freed rows must go to the wfh window.
+func Test_winfixheight_resize_wmh_zero()
+  CheckFeature quickfix
+
+  set winminheight=0 laststatus=0
+  let id1 = win_getid()
+  copen
+  let id2 = win_getid()
+  wincmd w
+  wincmd _
+  let wi1 = getwininfo(id1)[0]
+  let wi2 = getwininfo(id2)[0]
+  let exp = &lines - wi1.status_height - wi2.height - wi2.status_height - &ch
+  call assert_equal([exp, 1], [wi1.height, wi1.status_height])
+  call assert_equal([0, 0], [wi2.height, wi2.status_height])
+
+  wincmd w  " enter qf (height 0 -> 1)
+  let wi1 = getwininfo(id1)[0]
+  let wi2 = getwininfo(id2)[0]
+  let exp = &lines - wi1.status_height - wi2.height - wi2.status_height - &ch
+  call assert_equal(exp, wi1.height)
+  call assert_equal(1, wi2.height)
+
+  wincmd w
+  " Freed rows must go to qf (wfh, only other window).
+  " Before the fix, the rows were lost (fr_height sum < topframe fr_height),
+  " resulting in wrong window heights in subsequent operations.
+  1wincmd _
+  let wi1 = getwininfo(id1)[0]
+  let wi2 = getwininfo(id2)[0]
+  call assert_equal(1, wi1.height)
+  let exp = &lines - wi1.height - wi1.status_height - &ch
+  call assert_equal(exp, wi2.height)
+
+  wincmd w
+  99wincmd +
+  let wi1 = getwininfo(id1)[0]
+  let wi2 = getwininfo(id2)[0]
+  call assert_equal(0, wi1.height)
+  let exp = &lines - wi1.height - wi1.status_height - &ch
+  call assert_equal(exp, wi2.height)
+
+  99wincmd -
+  let wi1 = getwininfo(id1)[0]
+  let wi2 = getwininfo(id2)[0]
+  let exp = &lines - wi1.status_height - wi2.height - &ch
+  call assert_equal(exp, wi1.height)
+  call assert_equal(1, wi2.height)
+
+  " The original bug caused a crash here, but could not be reproduced in the
+  " test.  Kept as-is, though it has no particular significance.
+  wincmd w
+  call feedkeys("999i\<CR>\<Esc>", 'tx')
+  call feedkeys("ggMi" .. repeat("\<CR>", 99) .. "\<Esc>", 'tx')
+  let wi1 = getwininfo(id1)[0]
+  let wi2 = getwininfo(id2)[0]
+  let exp = &lines - wi1.status_height - wi2.height - &ch
+  call assert_equal(exp, wi1.height)
+  call assert_equal(1, wi2.height)
+
+  cclose
+  set winminheight& laststatus&
+endfunc
+
+" Test that setting 'laststatus' from 0 to 2 gives all windows in a vertical
+" split (FR_ROW) the same height and correct status line position.
+func Test_laststatus_vsplit_row_height()
+  CheckScreendump
+
+  let lines =<< trim END
+    set ls=0
+    vsplit
+    topleft new
+    wincmd _
+    set ls=2
+  END
+  call writefile(lines, 'XTestLaststatusVsplitRowHeight', 'D')
+  let buf = RunVimInTerminal('-S XTestLaststatusVsplitRowHeight', #{rows: 8})
+  call VerifyScreenDump(buf, 'Test_laststatus_vsplit_row_height_1', {})
+  call StopVimInTerminal(buf)
+endfunc
+
+" Test that when FR_ROW windows have different status line heights (due to
+" window-local 'statuslineopt'), content heights compensate so that total
+" rows are equal across the row.
+func Test_laststatus_vsplit_row_height_mixed_stlo()
+  CheckScreendump
+
+  let lines =<< trim END
+    set ls=0
+    setlocal stlo=fixedheight,maxheight:2
+    rightbelow vnew
+    topleft new
+    wincmd _
+    set ls=2
+  END
+  call writefile(lines, 'XTestLaststatusVsplitRowHeight2', 'D')
+  let buf = RunVimInTerminal('-S XTestLaststatusVsplitRowHeight2', #{rows: 8})
+  call VerifyScreenDump(buf, 'Test_laststatus_vsplit_row_height2_1', {})
+  call StopVimInTerminal(buf)
+endfunc
+
+" Same as above but with the stlo window on the right (second leaf in FR_ROW).
+func Test_laststatus_vsplit_row_height_mixed_stlo_reversed()
+  CheckScreendump
+
+  let lines =<< trim END
+    set ls=0
+    leftabove vnew
+    wincmd p
+    setlocal stlo=fixedheight,maxheight:2
+    topleft new
+    wincmd _
+    set ls=2
+  END
+  call writefile(lines, 'XTestLaststatusVsplitRowHeight3', 'D')
+  let buf = RunVimInTerminal('-S XTestLaststatusVsplitRowHeight3', #{rows: 8})
+  call VerifyScreenDump(buf, 'Test_laststatus_vsplit_row_height3_1', {})
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_window_w_locked_bypass()
+  split Xfoo
+  let s:win = win_getid()
+
+  augroup TestBypass
+    " :quit fired this with w_locked set.  Shouldn't be able to unset w_locked
+    " and close s:win if we do other stuff that also sets it.
+    au WinLeave * ++once call assert_equal(s:win, win_getid())
+                      \| quit | call assert_notequal(0, win_id2win(s:win))
+                      \| args Xbar
+                      \| argadd Xbaz
+                      \| edit Xbaz-but-cooler
+                      \| quit | call assert_notequal(0, win_id2win(s:win))
+  augroup END
+  quit
+  call assert_equal(1, bufexists('Xbaz-but-cooler')) " check WinLeave ran
+
+  unlet! s:win
+  augroup TestBypass
+    au!
+  augroup END
+  %argd!
+  %bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

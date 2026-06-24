@@ -73,6 +73,11 @@
 #  define rb_num2int	rb_num2int_stub
 # endif
 
+# if RUBY_VERSION >= 20
+// USE_TYPEDDATA is not defined yet. We just check for 2.0.
+#  define rb_check_typeddata		rb_check_typeddata_stub
+# endif
+
 # if RUBY_VERSION == 21
 // Ruby 2.1 adds new GC called RGenGC and RARRAY_PTR uses
 // rb_gc_writebarrier_unprotect_promoted if USE_RGENGC
@@ -174,6 +179,9 @@
 #ifdef HAVE_DUP
 # undef HAVE_DUP
 #endif
+#ifdef HAVE_FSYNC
+# undef HAVE_FSYNC
+#endif
 
 // Avoid redefining TRUE/FALSE in vterm.h.
 #ifdef TRUE
@@ -242,9 +250,6 @@ static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 # define rb_class_new_instance		dll_rb_class_new_instance
 # if RUBY_VERSION < 30
 #  define rb_check_type			dll_rb_check_type
-# endif
-# ifdef USE_TYPEDDATA
-#  define rb_check_typeddata		dll_rb_check_typeddata
 # endif
 # define rb_class_path			dll_rb_class_path
 # ifdef USE_TYPEDDATA
@@ -599,6 +604,12 @@ rb_debug_rstring_null_ptr_stub(const char *func)
 rb_unexpected_type_stub(VALUE self, int t)
 {
     dll_rb_unexpected_type(self, t);
+}
+#  endif
+#  ifdef USE_TYPEDDATA
+void *rb_check_typeddata_stub(VALUE obj, const rb_data_type_t *data_type)
+{
+    return dll_rb_check_typeddata(obj, data_type);
 }
 #  endif
 # endif // ifndef PROTO
@@ -1681,7 +1692,7 @@ window_set_cursor(VALUE self, VALUE pos)
     col = RARRAY_PTR(pos)[1];
     win->w_cursor.lnum = NUM2LONG(lnum);
     win->w_cursor.col = NUM2UINT(col);
-    win->w_set_curswant = TRUE;
+    win->w_set_curswant = true;
     check_cursor();		    // put cursor on an existing line
     update_screen(UPD_NOT_VALID);
     return Qnil;

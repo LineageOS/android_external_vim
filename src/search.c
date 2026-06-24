@@ -94,10 +94,10 @@ static int	lastc_bytelen = 1;	// >1 for multi-byte char
 static spat_T	    saved_spats[ARRAY_LENGTH(spats)];
 static char_u	    *saved_mr_pattern = NULL;
 static size_t	    saved_mr_patternlen = 0;
-# ifdef FEAT_SEARCH_EXTRA
+#ifdef FEAT_SEARCH_EXTRA
 static int	    saved_spats_last_idx = 0;
 static int	    saved_spats_no_hlsearch = 0;
-# endif
+#endif
 
 // allocated copy of pattern used by search_regcomp()
 static char_u	    *mr_pattern = NULL;
@@ -579,9 +579,9 @@ set_last_search_pat(
     spats[idx].magic = magic;
     spats[idx].no_scs = FALSE;
     spats[idx].off.dir = '/';
-#if defined(FEAT_EVAL)
+# if defined(FEAT_EVAL)
     set_vv_searchforward();
-#endif
+# endif
     spats[idx].off.line = FALSE;
     spats[idx].off.end = FALSE;
     spats[idx].off.off = 0;
@@ -899,9 +899,9 @@ searchit(
 				break;
 			    matchpos = regmatch.startpos[0];
 			    endpos = regmatch.endpos[0];
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 			    submatch = first_submatch(&regmatch);
-# endif
+#endif
 
 			    // Need to get the line pointer again, a
 			    // multi-line search may have made it invalid.
@@ -946,9 +946,9 @@ searchit(
 				match_ok = TRUE;
 				matchpos = regmatch.startpos[0];
 				endpos = regmatch.endpos[0];
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 				submatch = first_submatch(&regmatch);
-# endif
+#endif
 			    }
 			    else
 				break;
@@ -1216,6 +1216,109 @@ first_submatch(regmmatch_T *rp)
 #endif
 
 /*
+ * Parse a search pattern followed by an optional offset (e.g. "pat/e+1").
+ * On entry "*pat" points at the start of the pattern and "*patlen" is its
+ * length.  Updates the in/out parameters:
+ *    *pat / *patlen	   - moved past the pattern and offset
+ *    *strcopy		   - allocated copy if "\?" or "\/" was unescaped
+ *			     (caller must vim_free() it)
+ *    *searchstr and *searchstrlen - pointer/length of the search pattern only
+ *    *dircp		   - location of the trailing delimiter that was
+ *			     replaced with NUL (or NULL); caller may restore
+ *			     it
+ *    *offset		   - parsed offset (line/end/off)
+ *
+ * Returns the length of the parsed pattern + offset (used by get_address()
+ * to know how much of the command line was consumed).
+ */
+    int
+parse_search_pattern_offset(
+    char_u	**pat,
+    size_t	*patlen,
+    int		search_delim,
+    int		options,
+    char_u	**strcopy,
+    char_u	**searchstr,
+    size_t	*searchstrlen,
+    char_u	**dircp,
+    soffset_T	*offset)
+{
+    int		cmdlen = 0;
+    char_u	*p;
+    char_u	*ps;
+
+    if (*pat == NULL || **pat == NUL)
+	return 0;
+
+    ps = *strcopy;
+    *searchstr = *pat;
+    *searchstrlen = *patlen;
+    *dircp = NULL;
+
+    /*
+     * Find end of regular expression.
+     * If there is a matching '/' or '?', toss it.
+     */
+    p = skip_regexp_ex(*pat, search_delim, magic_isset(),
+						    strcopy, NULL, NULL);
+    if (*strcopy != ps)
+    {
+	size_t len = STRLEN(*strcopy);
+	// made a copy of "pat" to change "\?" to "?"
+	cmdlen += (int)(*patlen - len);
+	*pat = *strcopy;
+	*patlen = len;
+	*searchstr = *strcopy;
+	*searchstrlen = len;
+    }
+    if (*p == search_delim)
+    {
+	*searchstrlen = p - *pat;
+	*dircp = p;	// remember where we put the NUL
+	*p++ = NUL;
+    }
+
+    offset->line = FALSE;
+    offset->end = FALSE;
+    offset->off = 0;
+    /*
+     * Check for a line offset or a character offset.
+     * For get_address (echo off) we don't check for a character
+     * offset, because it is meaningless and the 's' could be a
+     * substitute command.
+     */
+    if (*p == '+' || *p == '-' || VIM_ISDIGIT(*p))
+	offset->line = TRUE;
+    else if ((options & SEARCH_OPT)
+				  && (*p == 'e' || *p == 's' || *p == 'b'))
+    {
+	if (*p == 'e')		// end
+	    offset->end = SEARCH_END;
+	++p;
+    }
+    if (VIM_ISDIGIT(*p) || *p == '+' || *p == '-')  // got an offset
+    {
+				    // 'nr' or '+nr' or '-nr'
+	if (VIM_ISDIGIT(*p) || VIM_ISDIGIT(*(p + 1)))
+	    offset->off = atol((char *)p);
+	else if (*p == '-')	    // single '-'
+	    offset->off = -1;
+	else			    // single '+'
+	    offset->off = 1;
+	++p;
+	while (VIM_ISDIGIT(*p))	    // skip number
+	    ++p;
+    }
+
+    // compute length of search command for get_address()
+    cmdlen += (int)(p - *pat);
+    *patlen -= p - *pat;
+    *pat = p;			    // put pat after search command
+
+    return cmdlen;
+}
+
+/*
  * Highest level string search function.
  * Search for the 'count'th occurrence of pattern 'pat' in direction 'dirc'
  *		  If 'dirc' is 0: use previous dir.
@@ -1257,7 +1360,6 @@ do_search(
     long	    c;
     char_u	    *dircp;
     char_u	    *strcopy = NULL;
-    char_u	    *ps;
     int		    show_search_stats;
     char_u	    *msgbuf = NULL;
     size_t	    msgbuflen = 0;
@@ -1369,66 +1471,9 @@ do_search(
 
 	if (pat != NULL && *pat != NUL)	// look for (new) offset
 	{
-	    /*
-	     * Find end of regular expression.
-	     * If there is a matching '/' or '?', toss it.
-	     */
-	    ps = strcopy;
-	    p = skip_regexp_ex(pat, search_delim, magic_isset(),
-							&strcopy, NULL, NULL);
-	    if (strcopy != ps)
-	    {
-		size_t len = STRLEN(strcopy);
-		// made a copy of "pat" to change "\?" to "?"
-		searchcmdlen += (int)(patlen - len);
-		pat = strcopy;
-		patlen = len;
-		searchstr = strcopy;
-		searchstrlen = len;
-	    }
-	    if (*p == search_delim)
-	    {
-		searchstrlen = p - pat;
-		dircp = p;	// remember where we put the NUL
-		*p++ = NUL;
-	    }
-	    spats[0].off.line = FALSE;
-	    spats[0].off.end = FALSE;
-	    spats[0].off.off = 0;
-	    /*
-	     * Check for a line offset or a character offset.
-	     * For get_address (echo off) we don't check for a character
-	     * offset, because it is meaningless and the 's' could be a
-	     * substitute command.
-	     */
-	    if (*p == '+' || *p == '-' || VIM_ISDIGIT(*p))
-		spats[0].off.line = TRUE;
-	    else if ((options & SEARCH_OPT)
-				      && (*p == 'e' || *p == 's' || *p == 'b'))
-	    {
-		if (*p == 'e')		// end
-		    spats[0].off.end = SEARCH_END;
-		++p;
-	    }
-	    if (VIM_ISDIGIT(*p) || *p == '+' || *p == '-')  // got an offset
-	    {
-					    // 'nr' or '+nr' or '-nr'
-		if (VIM_ISDIGIT(*p) || VIM_ISDIGIT(*(p + 1)))
-		    spats[0].off.off = atol((char *)p);
-		else if (*p == '-')	    // single '-'
-		    spats[0].off.off = -1;
-		else			    // single '+'
-		    spats[0].off.off = 1;
-		++p;
-		while (VIM_ISDIGIT(*p))	    // skip number
-		    ++p;
-	    }
-
-	    // compute length of search command for get_address()
-	    searchcmdlen += (int)(p - pat);
-
-	    patlen -= p - pat;
-	    pat = p;			    // put pat after search command
+	    searchcmdlen += parse_search_pattern_offset(&pat, &patlen,
+				search_delim, options, &strcopy, &searchstr,
+				&searchstrlen, &dircp, &spats[0].off);
 	}
 
 	show_search_stats = FALSE;
@@ -1618,9 +1663,7 @@ do_search(
 	if (dircp != NULL)
 	    *dircp = search_delim; // restore second '/' or '?' for normal_cmd()
 
-	if (!shortmess(SHM_SEARCH)
-		&& ((dirc == '/' && LT_POS(pos, curwin->w_cursor))
-			    || (dirc == '?' && LT_POS(curwin->w_cursor, pos))))
+	if (!shortmess(SHM_SEARCH) && sia && sia->sa_wrapped)
 	    show_top_bot_msg = TRUE;
 
 	if (c == FAIL)
@@ -1715,7 +1758,7 @@ do_search(
     if (options & SEARCH_MARK)
 	setpcmark();
     curwin->w_cursor = pos;
-    curwin->w_set_curswant = TRUE;
+    curwin->w_set_curswant = true;
 
 end_do_search:
     if ((options & SEARCH_KEEP) || (cmdmod.cmod_flags & CMOD_KEEPPATTERNS))
@@ -2122,7 +2165,7 @@ find_mps_values(
  * flags: FM_BACKWARD	search backwards (when initc is '/', '*' or '#')
  *	  FM_FORWARD	search forwards (when initc is '/', '*' or '#')
  *	  FM_BLOCKSTOP	stop at start/end of block ({ or } in column 0)
- *	  FM_SKIPCOMM	skip comments (not implemented yet!)
+ *	  FM_SKIPCOMM	skip over comments (cursor must start outside a block comment)
  *
  * "oap" is only used to set oap->motion_type for a linewise motion, it can be
  * NULL
@@ -2158,6 +2201,8 @@ findmatchlimit(
     int		comment_col = MAXCOL;   // start of / / comment
     int		lispcomm = FALSE;	// inside of Lisp-style comment
     int		lisp = curbuf->b_p_lisp; // engage Lisp-specific hacks ;)
+    int		skip_comments = (flags & FM_SKIPCOMM) != 0;
+    int		in_block_comment = FALSE; // inside /* */ block comment
 
     pos = curwin->w_cursor;
     pos.coladd = 0;
@@ -2386,10 +2431,14 @@ findmatchlimit(
     CLEAR_POS(&match_pos);
 
     // backward search: Check if this line contains a single-line comment
-    if ((backwards && comment_dir) || lisp)
+    if ((backwards && comment_dir) || lisp || skip_comments)
 	comment_col = check_linecomment(linep);
     if (lisp && comment_col != MAXCOL && pos.col > (colnr_T)comment_col)
 	lispcomm = TRUE;    // find match inside this comment
+    // skip // comment portion at starting position
+    if (skip_comments && !in_block_comment && comment_col != MAXCOL
+	    && backwards && pos.col > (colnr_T)comment_col)
+	pos.col = comment_col;
 
     while (!got_int)
     {
@@ -2417,10 +2466,14 @@ findmatchlimit(
 		line_breakcheck();
 
 		// Check if this line contains a single-line comment
-		if (comment_dir || lisp)
+		if (comment_dir || lisp || skip_comments)
 		    comment_col = check_linecomment(linep);
 		// skip comment
 		if (lisp && comment_col != MAXCOL)
+		    pos.col = comment_col;
+		else if (skip_comments && !in_block_comment
+			&& comment_col != MAXCOL
+			&& pos.col > (colnr_T)comment_col)
 		    pos.col = comment_col;
 	    }
 	    else
@@ -2452,7 +2505,7 @@ findmatchlimit(
 		pos.col = 0;
 		do_quotes = -1;
 		line_breakcheck();
-		if (lisp)   // find comment pos in new line
+		if (lisp || skip_comments)   // find comment pos in new line
 		    comment_col = check_linecomment(linep);
 	    }
 	    else
@@ -2461,6 +2514,38 @@ findmatchlimit(
 		    pos.col += (*mb_ptr2len)(linep + pos.col);
 		else
 		    ++pos.col;
+	    }
+	}
+
+	// Track block comment state when FM_SKIPCOMM is set.  Markers inside a
+	// string are not comments, so skip them while "inquote" is set.
+	// Backward: '/' of end-marker enters comment; '*' of start-marker exits.
+	// Forward:  '/' of start-marker enters comment; '/' of end-marker exits.
+	if (skip_comments && !comment_dir && !inquote)
+	{
+	    if (backwards)
+	    {
+		// Guard pos.col < comment_col: don't misread '*/' at the '//'
+		// position as a block-comment end-marker.
+		if (!in_block_comment && pos.col > 0
+			&& linep[pos.col - 1] == '*' && linep[pos.col] == '/'
+			&& (comment_col == MAXCOL || (int)pos.col < comment_col))
+		    in_block_comment = TRUE;
+		else if (in_block_comment && pos.col > 0
+			&& linep[pos.col - 1] == '/' && linep[pos.col] == '*')
+		    in_block_comment = FALSE;
+	    }
+	    else
+	    {
+		// Guard pos.col < comment_col: don't treat '/*' inside a '//'
+		// comment as a block-comment start-marker.
+		if (!in_block_comment && linep[pos.col] == '/'
+			&& linep[pos.col + 1] == '*'
+			&& (comment_col == MAXCOL || (int)pos.col < comment_col))
+		    in_block_comment = TRUE;
+		else if (in_block_comment && pos.col > 0
+			&& linep[pos.col - 1] == '*' && linep[pos.col] == '/')
+		    in_block_comment = FALSE;
 	    }
 	}
 
@@ -2707,6 +2792,11 @@ findmatchlimit(
 		    && check_prevcol(linep, pos.col - 1, '#', NULL))
 		break;
 
+	    // Skip matches inside comments when FM_SKIPCOMM is set.
+	    if (skip_comments && (in_block_comment
+		    || (comment_col != MAXCOL && (int)pos.col >= comment_col)))
+		break;
+
 	    // Check for match outside of quotes, and inside of
 	    // quotes when the start is also inside of quotes.
 	    if ((!inquote || start_in_quotes == TRUE)
@@ -2742,65 +2832,6 @@ findmatchlimit(
 	return &pos;
     }
     return (pos_T *)NULL;	// never found it
-}
-
-/*
- * Check if line[] contains a / / comment.
- * Return MAXCOL if not, otherwise return the column.
- */
-    int
-check_linecomment(char_u *line)
-{
-    char_u  *p;
-
-    p = line;
-    // skip Lispish one-line comments
-    if (curbuf->b_p_lisp)
-    {
-	if (vim_strchr(p, ';') != NULL) // there may be comments
-	{
-	    int in_str = FALSE;	// inside of string
-
-	    p = line;		// scan from start
-	    while ((p = vim_strpbrk(p, (char_u *)"\";")) != NULL)
-	    {
-		if (*p == '"')
-		{
-		    if (in_str)
-		    {
-			if (*(p - 1) != '\\') // skip escaped quote
-			    in_str = FALSE;
-		    }
-		    else if (p == line || ((p - line) >= 2
-				      // skip #\" form
-				      && *(p - 1) != '\\' && *(p - 2) != '#'))
-			in_str = TRUE;
-		}
-		else if (!in_str && ((p - line) < 2
-				    || (*(p - 1) != '\\' && *(p - 2) != '#'))
-			       && !is_pos_in_string(line, (colnr_T)(p - line)))
-		    break;	// found!
-		++p;
-	    }
-	}
-	else
-	    p = NULL;
-    }
-    else
-	while ((p = vim_strchr(p, '/')) != NULL)
-	{
-	    // Accept a double /, unless it's preceded with * and followed by
-	    // *, because * / / * is an end and start of a C comment.  Only
-	    // accept the position if it is not inside a string.
-	    if (p[1] == '/' && (p == line || p[-1] != '*' || p[2] != '*')
-			       && !is_pos_in_string(line, (colnr_T)(p - line)))
-		break;
-	    ++p;
-	}
-
-    if (p == NULL)
-	return MAXCOL;
-    return (int)(p - line);
 }
 
 /*
@@ -2860,7 +2891,7 @@ showmatch(
 	return;
 
     if (!curwin->w_p_wrap)
-	getvcol(curwin, lpos, NULL, &vcol, NULL);
+	getvcol(curwin, lpos, NULL, &vcol, NULL, 0);
 
     int col_visible = (curwin->w_p_wrap
 	    || (vcol >= curwin->w_leftcol
@@ -3432,9 +3463,9 @@ find_pattern_in_path(
     char_u	*already = NULL;
     char_u	*startp = NULL;
     char_u	*inc_opt = NULL;
-#if defined(FEAT_QUICKFIX)
+# if defined(FEAT_QUICKFIX)
     win_T	*curwin_save = NULL;
-#endif
+# endif
 
     regmatch.regprog = NULL;
     incl_regmatch.regprog = NULL;
@@ -3498,7 +3529,7 @@ find_pattern_in_path(
 	    char_u *p_fname = (curr_fname == curbuf->b_fname)
 					      ? curbuf->b_ffname : curr_fname;
 
-	    if (inc_opt != NULL && strstr((char *)inc_opt, "\\zs") != NULL)
+	    if (strstr((char *)inc_opt, "\\zs") != NULL)
 		// Use text from '\zs' to '\ze' (or end) of 'include'.
 		new_fname = find_file_name_in_path(incl_regmatch.startp[0],
 		       (int)(incl_regmatch.endp[0] - incl_regmatch.startp[0]),
@@ -3580,8 +3611,7 @@ find_pattern_in_path(
 			 * Isolate the file name.
 			 * Include the surrounding "" or <> if present.
 			 */
-			if (inc_opt != NULL
-				   && strstr((char *)inc_opt, "\\zs") != NULL)
+			if (strstr((char *)inc_opt, "\\zs") != NULL)
 			{
 			    // pattern contains \zs, use the match
 			    p = incl_regmatch.startp[0];
@@ -3728,9 +3758,9 @@ search_line:
 		    // compare the first "len" chars from "ptr"
 		    startp = skipwhite(p);
 		    if (p_ic)
-			matched = !MB_STRNICMP(startp, ptr, len);
+			matched = MB_STRNICMP(startp, ptr, len) == 0;
 		    else
-			matched = !STRNCMP(startp, ptr, len);
+			matched = STRNCMP(startp, ptr, len) == 0;
 		    if (matched && define_matched && whole
 						  && vim_iswordc(startp[len]))
 			matched = FALSE;
@@ -3897,9 +3927,9 @@ search_line:
 	    {
 		found = TRUE;
 		if (depth == -1 && lnum == curwin->w_cursor.lnum
-#if defined(FEAT_QUICKFIX)
+# if defined(FEAT_QUICKFIX)
 						      && g_do_tagpreview == 0
-#endif
+# endif
 						      )
 		    emsg(_(e_match_is_on_current_line));
 		else if (action == ACTION_SHOW)
@@ -3911,17 +3941,17 @@ search_line:
 		}
 		else
 		{
-#ifdef FEAT_GUI
+# ifdef FEAT_GUI
 		    need_mouse_correct = TRUE;
-#endif
-#if defined(FEAT_QUICKFIX)
+# endif
+# if defined(FEAT_QUICKFIX)
 		    // ":psearch" uses the preview window
 		    if (g_do_tagpreview != 0)
 		    {
 			curwin_save = curwin;
 			prepare_tagpreview(TRUE, TRUE, FALSE);
 		    }
-#endif
+# endif
 		    if (action == ACTION_SPLIT)
 		    {
 			if (win_split(0, 0) == FAIL)
@@ -3931,7 +3961,7 @@ search_line:
 		    if (depth == -1)
 		    {
 			// match in current file
-#if defined(FEAT_QUICKFIX)
+# if defined(FEAT_QUICKFIX)
 			if (g_do_tagpreview != 0)
 			{
 			    if (!win_valid(curwin_save))
@@ -3942,7 +3972,7 @@ search_line:
 				break;	// failed to jump to file
 			}
 			else
-#endif
+# endif
 			    setpcmark();
 			curwin->w_cursor.lnum = lnum;
 			check_cursor();
@@ -3961,10 +3991,10 @@ search_line:
 		if (action != ACTION_SHOW)
 		{
 		    curwin->w_cursor.col = (colnr_T)(startp - line);
-		    curwin->w_set_curswant = TRUE;
+		    curwin->w_set_curswant = true;
 		}
 
-#if defined(FEAT_QUICKFIX)
+# if defined(FEAT_QUICKFIX)
 		if (g_do_tagpreview != 0
 			   && curwin != curwin_save && win_valid(curwin_save))
 		{
@@ -3973,12 +4003,12 @@ search_line:
 		    redraw_later(UPD_VALID);
 		    win_enter(curwin_save, TRUE);
 		}
-# ifdef FEAT_PROP_POPUP
+#  ifdef FEAT_PROP_POPUP
 		else if (WIN_IS_POPUP(curwin))
 		    // can't keep focus in popup window
 		    win_enter(firstwin, TRUE);
+#  endif
 # endif
-#endif
 		break;
 	    }
 exit_matched:
@@ -4255,9 +4285,9 @@ f_searchcount(typval_T *argvars, typval_T *rettv)
     }
 
     save_last_search_pattern();
-#ifdef FEAT_SEARCH_EXTRA
+# ifdef FEAT_SEARCH_EXTRA
     save_incsearch_state();
-#endif
+# endif
     if (pattern != NULL)
     {
 	if (*pattern == NUL)
@@ -4281,8 +4311,8 @@ f_searchcount(typval_T *argvars, typval_T *rettv)
 
 the_end:
     restore_last_search_pattern();
-#ifdef FEAT_SEARCH_EXTRA
+# ifdef FEAT_SEARCH_EXTRA
     restore_incsearch_state();
-#endif
+# endif
 }
 #endif

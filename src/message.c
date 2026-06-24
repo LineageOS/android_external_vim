@@ -174,7 +174,7 @@ msg_attr_keep(
 	    || (*s != '<'
 		&& last_msg_hist != NULL
 		&& last_msg_hist->msg != NULL
-		&& STRCMP(s, last_msg_hist->msg)))
+		&& STRCMP(s, last_msg_hist->msg) != 0))
 	add_msg_hist((char_u *)s, -1, attr);
 
 #ifdef FEAT_EVAL
@@ -1287,6 +1287,11 @@ wait_return(int redraw)
 	c = CAR;		// no need for a return in ex mode
 	got_int = FALSE;
     }
+    else if (!stuff_empty())
+	// When there are stuffed characters, the next stuffed character will
+	// dismiss the hit-enter prompt immediately and have to be put back, so
+	// instead just don't show the hit-enter prompt at all.
+	c = CAR;
     else
     {
 	// Make sure the hit-return prompt is on screen when 'guioptions' was
@@ -1414,7 +1419,8 @@ wait_return(int redraw)
 	    if (c == K_LEFTMOUSE || c == K_MIDDLEMOUSE || c == K_RIGHTMOUSE
 					|| c == K_X1MOUSE || c == K_X2MOUSE)
 		(void)jump_to_mouse(MOUSE_SETPOS, NULL, 0);
-	    else if (vim_strchr((char_u *)"\r\n ", c) == NULL && c != Ctrl_C)
+	    else if (vim_strchr((char_u *)"\r\n ", c) == NULL && c != Ctrl_C
+		    && c != 'q')
 	    {
 		// Put the character back in the typeahead buffer.  Don't use
 		// the stuff buffer, because lmaps wouldn't work.
@@ -1901,14 +1907,15 @@ str2special_save(
     char_u  *str,
     int	    replace_spaces,	// TRUE to replace " " with "<Space>".
 				// used for the lhs of mapping and keytrans().
-    int	    replace_lt)		// TRUE to replace "<" with "<lt>".
+    int	    replace_others)	// TRUE to replace "<" with "<lt>",
+				// "|" with "<Bar>", "\" with "<Bslash>".
 {
     garray_T	ga;
     char_u	*p = str;
 
     ga_init2(&ga, 1, 40);
     while (*p != NUL)
-	ga_concat(&ga, str2special(&p, replace_spaces, replace_lt));
+	ga_concat(&ga, str2special(&p, replace_spaces, replace_others));
     ga_append(&ga, NUL);
     return (char_u *)ga.ga_data;
 }
@@ -1925,7 +1932,8 @@ str2special(
     char_u	**sp,
     int		replace_spaces,	// TRUE to replace " " with "<Space>".
 				// used for the lhs of mapping and keytrans().
-    int		replace_lt)	// TRUE to replace "<" with "<lt>".
+    int		replace_others)	// TRUE to replace "<" with "<lt>",
+				// "|" with "<Bar>", "\" with "<Bslash>".
 {
     int			c;
     static char_u	buf[7];
@@ -1993,7 +2001,7 @@ str2special(
     if (special
 	|| c < ' '
 	|| (replace_spaces && c == ' ')
-	|| (replace_lt && c == '<'))
+	|| (replace_others && (c == '<' || c == '|' || c == '\\')))
 	return get_special_key_name(c, modifiers);
     buf[0] = c;
     buf[1] = NUL;
@@ -2006,14 +2014,22 @@ str2special(
     void
 str2specialbuf(char_u *sp, char_u *buf, int len)
 {
-    char_u	*s;
+    char_u     *s;
+    size_t     buf_len = 0;
+    size_t     s_len;
 
     *buf = NUL;
     while (*sp)
     {
 	s = str2special(&sp, FALSE, FALSE);
-	if ((int)(STRLEN(s) + STRLEN(buf)) < len)
-	    STRCAT(buf, s);
+	s_len = STRLEN(s);
+	if (buf_len + s_len < (size_t)len)
+	{
+	    STRCPY(buf + buf_len, s);
+	    buf_len += s_len;
+	}
+	else
+	    break;
     }
 }
 
@@ -2052,7 +2068,8 @@ msg_prt_line(char_u *s, int list)
 	}
 	// find end of leading whitespace
 	if (curwin->w_lcs_chars.lead
-				 || curwin->w_lcs_chars.leadmultispace != NULL)
+				 || curwin->w_lcs_chars.leadmultispace != NULL
+				 || curwin->w_lcs_chars.leadtab1 != NUL)
 	{
 	    lead = s;
 	    while (VIM_ISWHITE(lead[0]))
@@ -2132,11 +2149,22 @@ msg_prt_line(char_u *s, int list)
 		}
 		else
 		{
-		    c = (n_extra == 0 && curwin->w_lcs_chars.tab3)
-						? curwin->w_lcs_chars.tab3
-						: curwin->w_lcs_chars.tab1;
-		    c_extra = curwin->w_lcs_chars.tab2;
-		    c_final = curwin->w_lcs_chars.tab3;
+		    int lcs_tab1 = curwin->w_lcs_chars.tab1;
+		    int lcs_tab2 = curwin->w_lcs_chars.tab2;
+		    int lcs_tab3 = curwin->w_lcs_chars.tab3;
+
+		    // check if leadtab is set in 'listchars'
+		    if (lead != NULL && s <= lead
+					&& curwin->w_lcs_chars.leadtab1 != NUL)
+		    {
+			lcs_tab1 = curwin->w_lcs_chars.leadtab1;
+			lcs_tab2 = curwin->w_lcs_chars.leadtab2;
+			lcs_tab3 = curwin->w_lcs_chars.leadtab3;
+		    }
+
+		    c = (n_extra == 0 && lcs_tab3) ? lcs_tab3 : lcs_tab1;
+		    c_extra = lcs_tab2;
+		    c_final = lcs_tab3;
 		    attr = HL_ATTR(HLF_8);
 		}
 	    }
@@ -2483,6 +2511,13 @@ msg_puts_display(
     did_wait_return = FALSE;
     while ((maxlen < 0 || (int)(s - str) < maxlen) && *s != NUL)
     {
+#ifdef HAS_MESSAGE_WINDOW
+	// For echowindow, use full width; for regular messages, leave last column
+	int wrap_col = msg_win != NULL ? cmdline_width : cmdline_width - 1;
+#else
+	int wrap_col = cmdline_width - 1;
+#endif
+
 	/*
 	 * We are at the end of the screen line when:
 	 * - When outputting a newline.
@@ -2497,11 +2532,11 @@ msg_puts_display(
 		      || (has_mbyte && (*mb_ptr2cells)(s) > 1 && msg_col <= 2))
 		    :
 #endif
-		      ((*s != '\r' && msg_col + t_col >= cmdline_width - 1)
+		      ((*s != '\r' && msg_col + t_col >= wrap_col)
 		       || (*s == TAB && msg_col + t_col
-			   >= ((cmdline_width - 1) & ~7))
+			   >= (wrap_col & ~7))
 		       || (has_mbyte && (*mb_ptr2cells)(s) > 1
-			   && msg_col + t_col >= cmdline_width - 2)))))
+			   && msg_col + t_col >= wrap_col - 1)))))
 	{
 	    /*
 	     * The screen is scrolled up when at the last row (some terminals
@@ -2515,6 +2550,8 @@ msg_puts_display(
 		if (msg_win != NULL)
 		{
 		    put_msg_win(msg_win, where, t_s, s, lnum);
+		    if (where == PUT_BELOW)
+			++lnum;
 		    t_col = 0;
 		    where = PUT_BELOW;
 		}
@@ -2533,9 +2570,16 @@ msg_puts_display(
 		// Scroll the screen up one line.
 		msg_scroll_up();
 
-	    msg_row = Rows - 2;
-	    if (msg_col >= cmdline_width)   // can happen after screen resize
-		msg_col = cmdline_width - 1;
+#ifdef HAS_MESSAGE_WINDOW
+	    if (msg_win == NULL)
+	    {
+#endif
+		msg_row = Rows - 2;
+		if (msg_col >= cmdline_width)  // can happen after screen resize
+		    msg_col = cmdline_width - 1;
+#ifdef HAS_MESSAGE_WINDOW
+	    }
+#endif
 
 	    // Display char in last column before showing more-prompt.
 	    if (*s >= ' '
@@ -2603,9 +2647,9 @@ msg_puts_display(
 	}
 
 	wrap = *s == '\n'
-		    || msg_col + t_col >= cmdline_width
+		    || msg_col + t_col >= wrap_col
 		    || (has_mbyte && (*mb_ptr2cells)(s) > 1
-			    && msg_col + t_col >= cmdline_width - 1);
+			    && msg_col + t_col >= wrap_col - 1);
 	if (t_col > 0 && (wrap || *s == '\r' || *s == '\b'
 						 || *s == '\t' || *s == BELL))
 	{
@@ -2614,8 +2658,13 @@ msg_puts_display(
 	    if (msg_win != NULL)
 	    {
 		put_msg_win(msg_win, where, t_s, s, lnum);
+		if (where == PUT_BELOW)
+		    ++lnum;
 		t_col = 0;
 		where = PUT_BELOW;
+		// Reset msg_col after outputting to new line in echowindow
+		if (wrap)
+		    msg_col = 0;
 	    }
 	    else
 #endif
@@ -2638,6 +2687,7 @@ msg_puts_display(
 		    put_msg_win(msg_win, PUT_BELOW, t_s, t_s, lnum);
 		    ++lnum;
 		}
+		msg_col = 0;  // Reset column for new line
 	    }
 	    else
 #endif
@@ -2697,10 +2747,10 @@ msg_puts_display(
 	    // doesn't fit, draw a single character here.  Otherwise collect
 	    // characters and draw them all at once later.
 	    if (
-# ifdef FEAT_RIGHTLEFT
+#ifdef FEAT_RIGHTLEFT
 		    cmdmsg_rl ||
-# endif
-		    (cw > 1 && msg_col + t_col >= cmdline_width - 1))
+#endif
+		    (cw > 1 && msg_col + t_col >= wrap_col))
 	    {
 		if (l > 1)
 		    s = screen_puts_mbyte(s, l, attr) - 1;
@@ -2803,26 +2853,30 @@ inc_msg_scrolled(void)
 #ifdef FEAT_EVAL
     if (*get_vim_var_str(VV_SCROLLSTART) == NUL)
     {
-	char_u	    *p = SOURCING_NAME;
+	string_T    p = {SOURCING_NAME, 0};
 	char_u	    *tofree = NULL;
-	int	    len;
 
 	// v:scrollstart is empty, set it to the script/function name and line
 	// number
-	if (p == NULL)
-	    p = (char_u *)_("Unknown");
+	if (p.string == NULL)
+	{
+	    p.string = (char_u *)_("Unknown");
+	    p.length = STRLEN(p.string);
+	}
 	else
 	{
-	    len = (int)STRLEN(p) + 40;
-	    tofree = alloc(len);
+	    size_t  tofreesize;
+
+	    tofreesize = (int)STRLEN(p.string) + 40;
+	    tofree = alloc(tofreesize);
 	    if (tofree != NULL)
 	    {
-		vim_snprintf((char *)tofree, len, _("%s line %ld"),
-						      p, (long)SOURCING_LNUM);
-		p = tofree;
+		p.length = vim_snprintf_safelen((char *)tofree, tofreesize,
+		    _("%s line %ld"), p.string, (long)SOURCING_LNUM);
+		p.string = tofree;
 	    }
 	}
-	set_vim_var_string(VV_SCROLLSTART, p, -1);
+	set_vim_var_string(VV_SCROLLSTART, p.string, (int)p.length);
 	vim_free(tofree);
     }
 #endif
@@ -3503,14 +3557,14 @@ do_more_prompt(int typed_char)
 
 #if defined(USE_MCH_ERRMSG)
 
-#ifdef mch_errmsg
-# undef mch_errmsg
-#endif
-#ifdef mch_msg
-# undef mch_msg
-#endif
+# ifdef mch_errmsg
+#  undef mch_errmsg
+# endif
+# ifdef mch_msg
+#  undef mch_msg
+# endif
 
-#if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
+# if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
     static void
 mch_errmsg_c(char *str)
 {
@@ -3535,7 +3589,7 @@ mch_errmsg_c(char *str)
 	fprintf(stderr, "%s", str);
     }
 }
-#endif
+# endif
 
 /*
  * Give an error message.  To be used when the screen hasn't been initialized
@@ -3545,46 +3599,46 @@ mch_errmsg_c(char *str)
     void
 mch_errmsg(char *str)
 {
-#if !defined(MSWIN) || defined(FEAT_GUI_MSWIN)
+# if !defined(MSWIN) || defined(FEAT_GUI_MSWIN)
     int		len;
-#endif
+# endif
 
-#if (defined(UNIX) || defined(FEAT_GUI)) && !defined(ALWAYS_USE_GUI) && !defined(VIMDLL)
+# if (defined(UNIX) || defined(FEAT_GUI)) && !defined(ALWAYS_USE_GUI) && !defined(VIMDLL)
     // On Unix use stderr if it's a tty.
     // When not going to start the GUI also use stderr.
     // On Mac, when started from Finder, stderr is the console.
     if (
-# ifdef UNIX
-#  ifdef MACOS_X
+#  ifdef UNIX
+#   ifdef MACOS_X
 	    (isatty(2) && strcmp("/dev/console", ttyname(2)) != 0)
-#  else
+#   else
 	    isatty(2)
+#   endif
+#   ifdef FEAT_GUI
+	    ||
+#   endif
 #  endif
 #  ifdef FEAT_GUI
-	    ||
-#  endif
-# endif
-# ifdef FEAT_GUI
 	    !(gui.in_use || gui.starting)
-# endif
+#  endif
 	    )
     {
 	fprintf(stderr, "%s", str);
 	return;
     }
-#endif
-
-#if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
-# ifdef VIMDLL
-    if (!(gui.in_use || gui.starting))
 # endif
+
+# if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
+#  ifdef VIMDLL
+    if (!(gui.in_use || gui.starting))
+#  endif
     {
 	mch_errmsg_c(str);
 	return;
     }
-#endif
+# endif
 
-#if !defined(MSWIN) || defined(FEAT_GUI_MSWIN)
+# if !defined(MSWIN) || defined(FEAT_GUI_MSWIN)
     // avoid a delay for a message that isn't there
     emsg_on_display = FALSE;
 
@@ -3598,7 +3652,7 @@ mch_errmsg(char *str)
     {
 	mch_memmove((char_u *)error_ga.ga_data + error_ga.ga_len,
 							  (char_u *)str, len);
-# ifdef UNIX
+#  ifdef UNIX
 	// remove CR characters, they are displayed
 	{
 	    char_u	*p;
@@ -3612,14 +3666,14 @@ mch_errmsg(char *str)
 		*p = ' ';
 	    }
 	}
-# endif
+#  endif
 	--len;		// don't count the NUL at the end
 	error_ga.ga_len += len;
     }
-#endif
+# endif
 }
 
-#if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
+# if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
     static void
 mch_msg_c(char *str)
 {
@@ -3644,7 +3698,7 @@ mch_msg_c(char *str)
 	printf("%s", str);
     }
 }
-#endif
+# endif
 
 /*
  * Give a message.  To be used when the screen hasn't been initialized yet.
@@ -3654,44 +3708,44 @@ mch_msg_c(char *str)
     void
 mch_msg(char *str)
 {
-#if (defined(UNIX) || defined(FEAT_GUI)) && !defined(ALWAYS_USE_GUI) && !defined(VIMDLL)
+# if (defined(UNIX) || defined(FEAT_GUI)) && !defined(ALWAYS_USE_GUI) && !defined(VIMDLL)
     // On Unix use stdout if we have a tty.  This allows "vim -h | more" and
     // uses mch_errmsg() when started from the desktop.
     // When not going to start the GUI also use stdout.
     // On Mac, when started from Finder, stderr is the console.
     if (
-# ifdef UNIX
-#  ifdef MACOS_X
+#  ifdef UNIX
+#   ifdef MACOS_X
 	    (isatty(2) && strcmp("/dev/console", ttyname(2)) != 0)
-#  else
+#   else
 	    isatty(2)
+#   endif
+#   ifdef FEAT_GUI
+	    ||
+#   endif
 #  endif
 #  ifdef FEAT_GUI
-	    ||
-#  endif
-# endif
-# ifdef FEAT_GUI
 	    !(gui.in_use || gui.starting)
-# endif
+#  endif
 	    )
     {
 	printf("%s", str);
 	return;
     }
-#endif
-
-#if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
-# ifdef VIMDLL
-    if (!(gui.in_use || gui.starting))
 # endif
+
+# if defined(MSWIN) && (!defined(FEAT_GUI_MSWIN) || defined(VIMDLL))
+#  ifdef VIMDLL
+    if (!(gui.in_use || gui.starting))
+#  endif
     {
 	mch_msg_c(str);
 	return;
     }
-#endif
-#if !defined(MSWIN) || defined(FEAT_GUI_MSWIN)
+# endif
+# if !defined(MSWIN) || defined(FEAT_GUI_MSWIN)
     mch_errmsg(str);
-#endif
+# endif
 }
 #endif // USE_MCH_ERRMSG
 
@@ -4177,37 +4231,17 @@ msg_advance(int col)
  * Warn about missing Clipboard Support
  */
     void
-msg_warn_missing_clipboard(bool plus UNUSED, bool star UNUSED)
+msg_warn_missing_clipboard(void)
 {
-#ifndef FEAT_CLIPBOARD
-    static bool did_warn;
-
-    if (!global_busy && !did_warn)
+    if (!global_busy && !did_warn_clipboard && silence_w23_w24_msg == 0)
     {
-	msg(_("W24: Clipboard register not available. See :h W24"));
-	did_warn = true;
-    }
+#ifdef FEAT_CLIPBOARD
+	msg(_("W23: Clipboard register not available, using register 0"));
 #else
-    if (!global_busy)
-    {
-	if (plus && star && !clip_plus.did_warn && !clip_star.did_warn)
-	{
-	    msg(_("W23: Clipboard register not available, using register 0"));
-	    clip_plus.did_warn = true;
-	    clip_star.did_warn = true;
-	}
-	else if (plus && !clip_plus.did_warn)
-	{
-	    msg(_("W23: Clipboard register + not available, using register 0"));
-	    clip_plus.did_warn = true;
-	}
-	else if (star && !clip_star.did_warn)
-	{
-	    msg(_("W23: Clipboard register * not available, using register 0"));
-	    clip_star.did_warn = true;
-	}
-    }
+	msg(_("W24: Clipboard register not available. See :h W24"));
 #endif
+	did_warn_clipboard = TRUE;
+    }
 }
 
 #if defined(FEAT_CON_DIALOG)
@@ -4250,13 +4284,13 @@ do_dialog(
     int		i;
     tmode_T	save_tmode;
 
-#ifndef NO_CONSOLE
+# ifndef NO_CONSOLE
     // Don't output anything in silent mode ("ex -s")
     if (silent_mode)
 	return dfltbutton;   // return default option
-#endif
+# endif
 
-#ifdef FEAT_GUI_DIALOG
+# ifdef FEAT_GUI_DIALOG
     // When GUI is running and 'c' not in 'guioptions', use the GUI dialog
     if (gui.in_use && vim_strchr(p_go, GO_CONDIALOG) == NULL)
     {
@@ -4278,7 +4312,7 @@ do_dialog(
 
 	return c;
     }
-#endif
+# endif
 
     oldState = State;
     State = MODE_CONFIRM;
@@ -4410,14 +4444,14 @@ msg_show_console_dialog(
     int		dfltbutton)
 {
     int		len = 0;
-#define HOTK_LEN (has_mbyte ? MB_MAXBYTES : 1)
+# define HOTK_LEN (has_mbyte ? MB_MAXBYTES : 1)
     int		lenhotkey = HOTK_LEN;	// count first button
     char_u	*hotk = NULL;
     char_u	*msgp = NULL;
     char_u	*hotkp = NULL;
     char_u	*r;
     int		copy;
-#define HAS_HOTKEY_LEN 30
+# define HAS_HOTKEY_LEN 30
     char_u	has_hotkey[HAS_HOTKEY_LEN];
     int		first_hotkey = FALSE;	// first char of button is hotkey
     int		idx;

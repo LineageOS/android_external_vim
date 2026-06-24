@@ -2100,9 +2100,8 @@ parse_spelllang(win_T *wp)
     for (splp = spl_copy; *splp != NUL; )
     {
 	// Get one language name.
-	copy_option_part(&splp, lang, MAXWLEN, ",");
+	len = copy_option_part(&splp, lang, MAXWLEN, ",");
 	region = NULL;
-	len = (int)STRLEN(lang);
 
 	if (!valid_spelllang(lang))
 	    continue;
@@ -2248,8 +2247,8 @@ parse_spelllang(win_T *wp)
 	else
 	{
 	    // One entry in 'spellfile'.
-	    copy_option_part(&spf, spf_name, MAXPATHL - 4, ",");
-	    STRCAT(spf_name, ".spl");
+	    len = copy_option_part(&spf, spf_name, MAXPATHL - 4, ",");
+	    STRCPY(spf_name + len, ".spl");
 
 	    // If it was already found above then skip it.
 	    for (c = 0; c < ga.ga_len; ++c)
@@ -2590,7 +2589,7 @@ open_spellbuf(void)
     if (buf == NULL)
 	return NULL;
 
-    buf->b_spell = TRUE;
+    buf->b_spell = true;
     buf->b_p_swf = TRUE;	// may create a swap file
 #ifdef FEAT_CRYPT
     buf->b_p_key = empty_option;
@@ -2966,7 +2965,7 @@ ex_spellrepall(exarg_T *eap UNUSED)
     }
     size_t	repl_from_len = STRLEN(repl_from);
     size_t	repl_to_len = STRLEN(repl_to);
-    int		addlen = (int)(repl_to_len - repl_from_len);
+    long	addlen = (long)repl_to_len - (long)repl_from_len;
 
     frompat = alloc(repl_from_len + 7);
     if (frompat == NULL)
@@ -3000,7 +2999,7 @@ ex_spellrepall(exarg_T *eap UNUSED)
 #if defined(FEAT_PROP_POPUP)
 	    if (curbuf->b_has_textprop && addlen != 0)
 		adjust_prop_columns(curwin->w_cursor.lnum,
-				 curwin->w_cursor.col, addlen, APC_SUBSTITUTE);
+				 curwin->w_cursor.col, (int)addlen, APC_SUBSTITUTE);
 #endif
 
 	    if (curwin->w_cursor.lnum != prev_lnum)
@@ -3271,7 +3270,7 @@ spell_soundfold_sofo(slang_T *slang, char_u *inword, char_u *res)
     else
     {
 	// The sl_sal_first[] table contains the translation.
-	for (s = inword; (c = *s) != NUL; ++s)
+	for (s = inword; (c = *s) != NUL && ri < MAXWLEN - 1; ++s)
 	{
 	    if (VIM_ISWHITE(c))
 		c = ' ';
@@ -4326,7 +4325,7 @@ dump_prefixes(
 			}
 		    }
 		}
-		else
+		else if (depth < MAXWLEN - 1)
 		{
 		    // Normal char, go one level deeper.
 		    prefix[depth++] = c;

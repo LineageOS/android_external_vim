@@ -2,16 +2,16 @@
 #
 # Do ":help uganda"  in Vim to read copying and usage conditions.
 # Do ":help credits" in Vim to see a list of people who contributed.
-# Copyright (C) 2025
+# Copyright (C) 2026
 # This file is distributed under the same license as the Vim package.
 # FIRST AUTHOR Ivan Pešić <ivan.pesic@gmail.com>, 2017.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: Vim(Serbian)\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-09-23 10:00+0400\n"
-"PO-Revision-Date: 2025-09-23 13:02+0400\n"
+"Report-Msgid-Bugs-To: vim-dev@vim.org\n"
+"POT-Creation-Date: 2026-04-29 19:49+0000\n"
+"PO-Revision-Date: 2026-05-01 10:09+0400\n"
 "Last-Translator: Ivan Pešić <ivan.pesic@gmail.com>\n"
 "Language-Team: Serbian\n"
 "Language: sr\n"
@@ -165,8 +165,8 @@ msgid "%d%%"
 msgstr "%d%%"
 
 #, c-format
-msgid "%2s"
-msgstr "%2s"
+msgid "%3s"
+msgstr "%3s"
 
 #, c-format
 msgid " (%d of %d)"
@@ -1284,15 +1284,6 @@ msgstr "linenr је ван опсега"
 msgid "not allowed in the Vim sandbox"
 msgstr "није дозвољено унутар Vim sandbox"
 
-#, c-format
-msgid "E370: Could not load library %s"
-msgstr "E370: Библиотека %s није могла да се учита"
-
-msgid "Sorry, this command is disabled: the Perl library could not be loaded."
-msgstr ""
-"Жао нам је, ова команда је онемогућена: Perl библиотека није могла да се "
-"учита."
-
 msgid "invalid buffer number"
 msgstr "неисправан број бафера"
 
@@ -1770,7 +1761,8 @@ msgid "-Y\t\t\tDo not connect to Wayland compositor"
 msgstr "-X\t\t\tНе повезуј се на Wayland композитор"
 
 msgid "--clientserver <socket|x11> Backend for clientserver communication"
-msgstr "--clientserver <socket|x11> Позадински механизам за clientserver комуникацију"
+msgstr ""
+"--clientserver <socket|x11> Позадински механизам за clientserver комуникацију"
 
 msgid "--remote <files>\tEdit <files> in a Vim server if possible"
 msgstr "--remote <фајлови>\tУређуј <фајлови> у Vim серверу ако је могуће"
@@ -2045,6 +2037,9 @@ msgstr "???ПРАЗАН БЛОК"
 
 msgid "???LINES MISSING"
 msgstr "???НЕДОСТАЈУ ЛИНИЈЕ"
+
+msgid "???ILLEGAL BLOCK NUMBER"
+msgstr "???НЕИСПРАВАН БРОЈ БЛОКА"
 
 msgid "???BLOCK MISSING"
 msgstr "???НЕДОСТАЈЕ БЛОК"
@@ -2339,17 +2334,11 @@ msgstr "-- Још --"
 msgid " SPACE/d/j: screen/page/line down, b/u/k: up, q: quit "
 msgstr " РАЗМАКНИЦА/d/j: екран/страна/линија наниже, b/u/k: навише, q: излаз "
 
-msgid "W24: Clipboard register not available. See :h W24"
-msgstr "W24: Клипборд регистар није доступан. Погледајте :h W24"
-
 msgid "W23: Clipboard register not available, using register 0"
 msgstr "W23: Клипборд регистар није доступан, користи се регистар 0"
 
-msgid "W23: Clipboard register + not available, using register 0"
-msgstr "W23: Клипборд регистар + није доступан, користи се регистар 0"
-
-msgid "W23: Clipboard register * not available, using register 0"
-msgstr "W23: Клипборд регистар * није доступан, користи се регистар 0"
+msgid "W24: Clipboard register not available. See :h W24"
+msgstr "W24: Клипборд регистар није доступан. Погледајте :h W24"
 
 msgid "Question"
 msgstr "Питање"
@@ -2399,6 +2388,10 @@ msgstr " (Прекинуто)"
 
 msgid "Beep!"
 msgstr "Биип!"
+
+#, c-format
+msgid "Executing directly: \"%s\""
+msgstr "Директно се извршава: „%s”"
 
 #, c-format
 msgid "Calling shell to execute: \"%s\""
@@ -2614,7 +2607,7 @@ msgid ""
 "Cannot execute shell sh\n"
 msgstr ""
 "\n"
-"Командно окружење sh не може да се изврши\n"
+"Не може да се изврши командно окружење sh\n"
 
 msgid ""
 "\n"
@@ -2628,7 +2621,7 @@ msgid ""
 "Cannot create pipes\n"
 msgstr ""
 "\n"
-"Токови података не могу да се креирају\n"
+"Не могу да се креирају токови података\n"
 
 msgid ""
 "\n"
@@ -2642,7 +2635,7 @@ msgid ""
 "Cannot execute shell "
 msgstr ""
 "\n"
-"Командно окружење не може да се изврши "
+"Не може да се изврши командно окружење "
 
 msgid ""
 "\n"
@@ -2656,14 +2649,14 @@ msgstr "XSMP је изгубио ICE везу"
 
 #, c-format
 msgid "Could not load gpm library: %s"
-msgstr "Библиотека gpm није могла да се учита: %s"
+msgstr "Није могла да се учита gpm библиотека: %s"
 
 #, c-format
 msgid "dlerror = \"%s\""
 msgstr "dlerror = „%s”"
 
 msgid "Opening the X display failed"
-msgstr "Отварање X приказа није успело"
+msgstr "Није успело отварање X приказа"
 
 msgid "XSMP handling save-yourself request"
 msgstr "XSMP опслужује сачувај-се захтев"
@@ -2683,7 +2676,7 @@ msgid "Failed creating socket directory: %s"
 msgstr "Не може да се креира сокет директоријум: %s"
 
 msgid "At line"
-msgstr "Код линије"
+msgstr "На линији"
 
 #, c-format
 msgid "Vim: Caught %s event\n"
@@ -3759,8 +3752,8 @@ msgstr "Vim је отвореног кода и може слободно да �
 msgid "Help poor children in Uganda!"
 msgstr "Помозите сиромашној деци у Уганди!"
 
-msgid "type  :help iccf<Enter>       for information "
-msgstr "откуцајте  :help iccf<Ентер>       за информације   "
+msgid "type  :help Kuwasha<Enter>    for information "
+msgstr "откуцајте  :help Kuwasha<Ентер>    за информације   "
 
 msgid "type  :q<Enter>               to exit         "
 msgstr "откуцајте  :q<Ентер>               за излаз         "
@@ -3801,17 +3794,11 @@ msgstr "                              за Vim подразумевано   "
 msgid "Sponsor Vim development!"
 msgstr "Спонзоришите Vim развој!"
 
-msgid "Become a registered Vim user!"
-msgstr "Постаните регистровани Vim корисник!"
-
 msgid "type  :help sponsor<Enter>    for information "
 msgstr "откуцајте  :help sponsor<Ентер>    за информације   "
 
-msgid "type  :help register<Enter>   for information "
-msgstr "откуцајте  :help register<Ентер>   за информације   "
-
-msgid "menu  Help->Sponsor/Register  for information    "
-msgstr "мени  Помоћ->Спонзор/Региструјте се  за информације    "
+msgid "menu  Help->Sponsor           for information    "
+msgstr "мени  Помоћ->Спонзор  за информације    "
 
 msgid "global"
 msgstr "глобална"
@@ -3972,6 +3959,15 @@ msgstr "враћање није успело, изгубљена веза са W
 
 msgid "Already only one window"
 msgstr "Већ постоји само један прозор"
+
+#, c-format
+msgid "E370: Could not load library %s"
+msgstr "E370: Библиотека %s није могла да се учита"
+
+msgid "Sorry, this command is disabled: the Perl library could not be loaded."
+msgstr ""
+"Жао нам је, ова команда је онемогућена: Perl библиотека није могла да се "
+"учита."
 
 msgid "Edit with Vim using &tabpages"
 msgstr "Уређуј програмом Vim у новој &картици"
@@ -5476,10 +5472,6 @@ msgstr "E456: PostScript resource фајл „%s.ps” не може да се �
 msgid "E457: Can't read PostScript resource file \"%s\""
 msgstr "E457: PostScript resource фајл „%s” не може да се чита"
 
-msgid "E458: Cannot allocate colormap entry, some colors may be incorrect"
-msgstr ""
-"E458: colormap ставка не може да се алоцира, неке боје су можда неисправне"
-
 msgid "E459: Cannot go back to previous directory"
 msgstr "E459: Не може да се оде назад на претходни директоријум"
 
@@ -6133,6 +6125,9 @@ msgstr "E647: Неисправни идентификатор бафера у se
 
 msgid "E648: Invalid buffer identifier in close"
 msgstr "E648: Неисправни идентификатор бафера у close"
+
+msgid "E649: Invalid identifier name in defineAnnoType"
+msgstr "E649: Неисправно име идентификатора у defineAnnoType"
 
 msgid "E650: Invalid buffer identifier in defineAnnoType"
 msgstr "E650: Неисправни идентификатор бафера у defineAnnoType"
@@ -7057,10 +7052,11 @@ msgstr "E910: Посао се користи као Број"
 msgid "E911: Using a Job as a Float"
 msgstr "E911: Посао се користи као Покретни"
 
-msgid "E912: Cannot use ch_evalexpr()/ch_sendexpr() with a raw or nl channel"
+msgid ""
+"E912: Cannot use ch_evalexpr()/ch_sendexpr() with a raw, nl or blob channel"
 msgstr ""
-"E912: Функција ch_evalexpr()/ch_sendexpr() не може да се користи са raw или "
-"nl каналом"
+"E912: Функција ch_evalexpr()/ch_sendexpr() не може да се користи са raw, nl "
+"или blob каналом"
 
 msgid "E913: Using a Channel as a Number"
 msgstr "E913: Канал се користи као Број"
@@ -7816,7 +7812,7 @@ msgid "E1129: Throw with empty string"
 msgstr "E1129: Throw са празним стрингом"
 
 msgid "E1130: Cannot add to null list"
-msgstr "E1130: null не може да се дода листи"
+msgstr "E1130: Не може да се дода у null листу"
 
 msgid "E1131: Cannot add to null blob"
 msgstr "E1131: Не може да се дода на null блоб"
@@ -8146,7 +8142,7 @@ msgstr "E1219: За аргумент %d се захтева Покретни и�
 
 #, c-format
 msgid "E1220: String or Number required for argument %d"
-msgstr "E1220: За аргумент %d се се захтева Стринг или Број"
+msgstr "E1220: За аргумент %d се захтева Стринг или Број"
 
 #, c-format
 msgid "E1221: String or Blob required for argument %d"
@@ -8219,8 +8215,8 @@ msgid "E1238: Blob required for argument %d"
 msgstr "E1238: За аргумент %d је неопходан Блоб"
 
 #, c-format
-msgid "E1239: Invalid value for blob: %d"
-msgstr "E1239: Неважећа вредност за блоб: %d"
+msgid "E1239: Invalid value for blob: 0x%lX"
+msgstr "E1239: Неважећа вредност за блоб: 0x%lX"
 
 msgid "E1240: Resulting text too long"
 msgstr "E1240: Добијени текст је сувише дугачак"
@@ -8422,10 +8418,8 @@ msgstr "E1291: Неважећи аргумент: %ld"
 msgid "E1292: Command-line window is already open"
 msgstr "E1292: Прозор командне линије је већ отворен"
 
-msgid "E1293: Cannot use a negative id after adding a textprop with text"
-msgstr ""
-"E1293: Након додавања текст особине са текстом не може да се употреби "
-"негативан id"
+msgid "E1293: Cannot use a negative id for a text property"
+msgstr "E1293: За текст особину може да се употреби негативан id"
 
 msgid "E1294: Can only use text_align when column is zero"
 msgstr "E1294: Када је колона нула, може да се користи само text_align"
@@ -8545,8 +8539,8 @@ msgid "E1329: Invalid class variable declaration: %s"
 msgstr "E1329: Неисправна декларација променљиве класе: %s"
 
 #, c-format
-msgid "E1330: Invalid type for object variable: %s"
-msgstr "E1330: Неисправан тип променљиве објекта: %s"
+msgid "E1330: Invalid type used in variable declaration: %s"
+msgstr "E1330: Употребљен је неисправан тип у декларацији променљиве: %s"
 
 msgid ""
 "E1331: public must be followed by \"var\" or \"static\" or \"final\" or "
@@ -8569,13 +8563,6 @@ msgstr "E1335: У променљиву „%s” у класи „%s” не мо
 #, c-format
 msgid "E1337: Class variable \"%s\" not found in class \"%s\""
 msgstr "E1337: Променљива класе „%s” није пронађена у класи „%s”"
-
-msgid ""
-"E1339: Cannot add a textprop with text after using a textprop with a "
-"negative id"
-msgstr ""
-"E1339: Текст особина са текстом не може да се дода након употребе текст "
-"особине са негативним id"
 
 #, c-format
 msgid "E1340: Argument already declared in the class: %s"
@@ -8936,6 +8923,9 @@ msgstr "E1435: Набрајање може да се употреби само �
 msgid "E1436: Interface can only be used in a script"
 msgstr "E1436: Интерфејс може да се користи само у скрипти"
 
+msgid "E1437: Can only compare Object with Object"
+msgstr "E1437: Објекат може да се пореди само са Објекат"
+
 #, c-format
 msgid "E1500: Cannot mix positional and non-positional arguments: %s"
 msgstr "E1500: Не могу да се мешају позициони и непозициони аргументи: %s"
@@ -9108,7 +9098,7 @@ msgstr "E1545: Стек Quickfix листе није доступан"
 msgid "E1546: Cannot switch to a closing buffer"
 msgstr "E1546: Не може да се пређе на бафер који се затвара"
 
-msgid "E1547: This version of Vim does support :redrawtabpanel"
+msgid "E1547: This version of Vim does not support :redrawtabpanel"
 msgstr "E1547: Ова верзија Vim едитора не подржава :redrawtabpanel"
 
 msgid "E1548: Wayland connection is unavailable"
@@ -9174,7 +9164,8 @@ msgid "E1564: Socket name cannot have slashes in it without being a path"
 msgstr "E1564: Име сокета не сме да са садржи косе црте осим ако није путања"
 
 msgid "E1565: Socket server is not online, call remote_startserver() first"
-msgstr "E1565: Сокет сервер није на мрежи, најпре позовите remote_startserver()"
+msgstr ""
+"E1565: Сокет сервер није на мрежи, најпре позовите remote_startserver()"
 
 #, c-format
 msgid "E1566: Failed connecting to socket %s: %s"
@@ -9190,26 +9181,33 @@ msgstr "E1568: Истекло је време чекања на одговор O
 msgid "E1569: Cannot use listener_add in a listener callback"
 msgstr "E1569: У listener повратном позиву не може да се користи listener_add"
 
+msgid "E1570: Cannot use redraw_listener_add in a redraw listener callback"
+msgstr ""
+"E1570: У redraw listener повратном позиву не може да се користи "
+"redraw_listener_add"
+
+msgid "E1571: Must specify at least one callback for redraw_listener_add"
+msgstr ""
+"E1571: Мора да се наведе барем једна функција повратног позива за "
+"redraw_listener_add"
+
+msgid "E1572: 'listchars' field \"leadtab\" requires \"tab\" to be specified"
+msgstr "E1572: 'listchars' поље „leadtab” захтева да се наведе „tab”"
+
+msgid "E1573: Cannot listen on port"
+msgstr "E1573: Не може да се слуша на порту"
+
+msgid "E1574: gethostbyname(): cannot resolve hostname in channel_listen()"
+msgstr "E1574: gethostbyname(): не може да се разреши име хоста у channel_listen()"
+
+msgid "E1575: Cannot create pipes"
+msgstr "E1575: Не могу да се креирају токови података"
+
+msgid "E1576: Tag file entry must not be a URL"
+msgstr "E1576: Ставка у фајлу ознака не сме да буде URL"
+
 msgid "--No lines in buffer--"
 msgstr "--У баферу нема линија--"
-
-msgid "int"
-msgstr "целобројни"
-
-msgid "long int"
-msgstr "дуги целобројни"
-
-msgid "long long int"
-msgstr "дуги дуги целобројни"
-
-msgid "unsigned int"
-msgstr "неозначени целобројни"
-
-msgid "unsigned long int"
-msgstr "неозначени дуги целобројни"
-
-msgid "unsigned long long int"
-msgstr "неозначени дуги дуги целобројни"
 
 msgid "pointer"
 msgstr "показивач"
@@ -9217,14 +9215,8 @@ msgstr "показивач"
 msgid "percent"
 msgstr "проценат"
 
-msgid "char"
-msgstr "карактер"
-
 msgid "string"
 msgstr "стринг"
-
-msgid "float"
-msgstr "покретни"
 
 msgid "search hit TOP, continuing at BOTTOM"
 msgstr "претрага је достигла ВРХ, наставља се од ДНА"
@@ -9771,6 +9763,9 @@ msgstr "скроловање по екранској линији"
 msgid "number of screen lines to show around the cursor"
 msgstr "број екранских линија које се приказују око курсора"
 
+msgid "vertically center cursor even at end of file"
+msgstr "центрирај курсор по вертикали чак и на крају фајла"
+
 msgid "long lines wrap"
 msgstr "дуге линије се обавијају"
 
@@ -9805,11 +9800,11 @@ msgstr ""
 "броја"
 
 msgid ""
-"characters to use for the status line, folds, diffs, buffer text, filler "
-"lines and truncation in the completion menu"
+"characters to use for the status line, folds, diffs,\n"
+"buffer text, filler lines and truncation in the completion menu"
 msgstr ""
-"карактери који се користе за статусну линију, свијутке, дифове, текст "
-"бафера, линије испуне и одсецање у менију довршавања "
+"карактери који се користе за статусну линију, свијутке,\n"
+"дифове, текст бафера, линије испуне и одсецање у менију довршавања"
 
 msgid "number of lines used for the command-line"
 msgstr "број линија резервисаних за командну-линију"
@@ -9825,6 +9820,12 @@ msgstr "број линија који скролују CTRL-F и CTRL-B"
 
 msgid "don't redraw while executing macros"
 msgstr "екран се не исцртава током извршавања макроа"
+
+msgid "configure method of receiving terminal size changes"
+msgstr "конфигурисање методе пријема промена величине терминала"
+
+msgid "enable terminal sync mode"
+msgstr "укључивање режима синхронизације терминала"
 
 msgid "timeout for 'hlsearch' and :match highlighting in msec"
 msgstr "тајмаут за 'hlsearch' и :match истицање у милисекундама"
@@ -9887,6 +9888,9 @@ msgstr "истичу се сва подударања последње кори�
 msgid "highlight group to use for the window"
 msgstr "група истицања која се користи за прозор"
 
+msgid "highlight group mappings for the window"
+msgstr "мапирања група истицања за прозор"
+
 msgid "use GUI colors for the terminal"
 msgstr "за терминал се користе ГКИ боје"
 
@@ -9931,6 +9935,9 @@ msgstr "0, 1 или 2; када се користи статусна линиј�
 
 msgid "alternate format to be used for a status line"
 msgstr "алтернативни формат који ће се користити за статусну линију"
+
+msgid "optional settings for the status line"
+msgstr "необавезна подешавања за статусну линију"
 
 msgid "make all windows the same size when adding/removing windows"
 msgstr ""
@@ -10168,8 +10175,12 @@ msgstr "величина икона алатне линије"
 msgid "room (in pixels) left above/below the window"
 msgstr "место (у пикселима) лево изнад/испод прозора"
 
-msgid "list of ASCII characters that can be combined into complex shapes"
-msgstr "листа ASCII карактера који могу да се комбинују у сложене облике"
+msgid ""
+"list of ASCII characters that can be combined into complex\n"
+"shapes"
+msgstr ""
+"листа ASCII карактера који могу да се комбинују у сложене\n"
+"облике"
 
 msgid "options for text rendering"
 msgstr "опције за исцртавање текста"
@@ -10178,8 +10189,8 @@ msgid "use a pseudo-tty for I/O to external commands"
 msgstr "користи се псеудо-tty за У/И у спољне команде"
 
 msgid ""
-"\"last\", \"buffer\" or \"current\": which directory used for the file "
-"browser"
+"\"last\", \"buffer\" or \"current\": which directory used for\n"
+"the file browser"
 msgstr ""
 "„last”, „buffer” или „current”: који директоријум се користи за\n"
 "прегледач фајлова"
@@ -10202,8 +10213,12 @@ msgstr "кашњење у милисекундама пре него што ба
 msgid "use balloon evaluation in the GUI"
 msgstr "у ГКИ се користи израчунавање балона"
 
-msgid "use balloon evaluation in the terminal"
-msgstr "у терминалу се користи израчунавање балона"
+msgid ""
+" \n"
+"use balloon evaluation in the terminal"
+msgstr ""
+" \n"
+"у терминалу се користи израчунавање балона"
 
 msgid "expression to show in balloon eval"
 msgstr "израз који се приказује у балону"
@@ -10328,11 +10343,6 @@ msgstr ""
 msgid "Wayland seat to use"
 msgstr "Wayland седиште које се користи"
 
-msgid ""
-"Enable wayland focus stealing functionality in order to access the clipboard"
-msgstr ""
-"Укључује wayland функционалност крађе фокуса да би се приступило клипборду"
-
 msgid "\"startsel\" and/or \"stopsel\"; what special keys can do"
 msgstr "„startsel” и/или „stopsel”; шта могу да ураде специјални тастери"
 
@@ -10374,6 +10384,9 @@ msgstr "наводи шта у режиму Уметање могу <BS>, CTRL-W
 msgid "definition of what comment lines look like"
 msgstr "дефиниција изгледа линије коментара"
 
+msgid "template for comments; used to put the marker in"
+msgstr "шаблон за коментаре; користи се да се у њега постави маркер"
+
 msgid "list of flags that tell how automatic formatting works"
 msgstr "листа заставица које говоре како ради аутоматско форматирање"
 
@@ -10389,23 +10402,36 @@ msgstr "наводи како ради довршавање у режиму Ум
 msgid "automatic completion in insert mode"
 msgstr "аутоматско довршавање у режиму Уметање"
 
-msgid "initial decay timeout for 'autocomplete' algorithm"
-msgstr "почетни тајмаут опадања за 'autocomplete' алгоритам"
+msgid ""
+" \n"
+"initial decay timeout for 'autocomplete' algorithm"
+msgstr ""
+" \n"
+"почетни тајмаут опадања за 'autocomplete' алгоритам"
 
-msgid "initial decay timeout for CTRL-N and CTRL-P completion"
-msgstr "почетни тајмаут опадања за CTRL-N у CTRL-P довршавање"
+msgid ""
+" \n"
+"initial decay timeout for CTRL-N and CTRL-P completion"
+msgstr ""
+" \n"
+"почетни тајмаут опадања за CTRL-N у CTRL-P довршавање"
 
-msgid "delay in msec before menu appears after typing"
-msgstr "кашњење у милисекундама пре појављивања менија након куцања"
+msgid ""
+" \n"
+"delay in msec before menu appears after typing"
+msgstr ""
+" \n"
+"кашњење у милисекундама пре појављивања менија након куцања"
 
 msgid "whether to use a popup menu for Insert mode completion"
 msgstr "да ли се за довршавање у режиму Уметање користи искачући мени"
 
-msgid "popup menu item align order"
-msgstr "редослед поравнања ставки искачућег менија"
-
-msgid "use fuzzy collection for specific completion modes"
-msgstr "за одређене режиме довршавања се користи фази колекција"
+msgid ""
+" \n"
+"popup menu item align order"
+msgstr ""
+" \n"
+"редослед поравнања ставки искачућег менија"
 
 msgid "options for the Insert mode completion info popup"
 msgstr "опције за искачући мени за довршавање у режиму Уметање"
@@ -10418,6 +10444,12 @@ msgstr "минимална ширина искачућег менија"
 
 msgid "maximum width of the popup menu"
 msgstr "максимална ширина искачућег менија"
+
+msgid "popup border style"
+msgstr "стил оквира искачућег прозора"
+
+msgid "additional options for the popup menu"
+msgstr "додатне опције за искачући мени"
 
 msgid "user defined function for Insert mode completion"
 msgstr "кориснички дефинисана функција за довршавање у режиму Уметање"
@@ -10563,9 +10595,6 @@ msgstr "наводи команде за које ће свијутак бити
 msgid "minimum number of screen lines for a fold to be closed"
 msgstr "минимални број екранских линија да би свијутак био затворен"
 
-msgid "template for comments; used to put the marker in"
-msgstr "шаблон за коментаре; користи се да се у њега постави маркер"
-
 msgid ""
 "folding type: \"manual\", \"indent\", \"expr\", \"marker\",\n"
 "\"syntax\" or \"diff\""
@@ -10636,6 +10665,9 @@ msgstr ""
 
 msgid "allow setting expression options from a modeline"
 msgstr "омогућавање постављања опција израза из режимске линије"
+
+msgid "only allow safe options to be set from a modeline"
+msgstr "из режимске линије могу да се поставе само безбедне опције"
 
 msgid "number of lines to check for modelines"
 msgstr "број линија које се проверавају на постојање режимске линије"
@@ -10858,8 +10890,12 @@ msgstr "листа формата за излаз команде ’grepprg’"
 msgid "encoding of the \":make\" and \":grep\" output"
 msgstr "кодирање излаза команди „:make” и „:grep”"
 
-msgid "function to display text in the quickfix window"
-msgstr "функција за приказивање текста у quickfix прозору"
+msgid ""
+" \n"
+"function to display text in the quickfix window"
+msgstr ""
+" \n"
+"функција за приказивање текста у quickfix прозору"
 
 msgid "system specific"
 msgstr "опције специфичне за систем"
@@ -10878,9 +10914,6 @@ msgstr "наводи карактере у имену фајла"
 
 msgid "specifies the characters in an identifier"
 msgstr "наводи карактере у идентификатору"
-
-msgid "defines trigger strings for complete_match()"
-msgstr "дефинише стрингове који окидају complete_match()"
 
 msgid "specifies the characters in a keyword"
 msgstr "наводи карактере у кључној речи"
@@ -11088,8 +11121,12 @@ msgstr "име Python 2 почетног директоријума"
 msgid "name of the Python 3 dynamic library"
 msgstr "име Python 3 динамичке библиотеке"
 
-msgid "name of the Python 3 home directory"
-msgstr "име Python 3 почетног директоријума"
+msgid ""
+" \n"
+"name of the Python 3 home directory"
+msgstr ""
+" \n"
+"име Python 3 почетног директоријума"
 
 msgid "name of the Ruby dynamic library"
 msgstr "име Ruby динамичке библиотеке"
@@ -11111,6 +11148,45 @@ msgstr "произвољне картице у панелу картица"
 
 msgid "options for using tabpanel"
 msgstr "опције за коришћење панела картица"
+
+msgid "Notice"
+msgstr "Обавештење"
+
+msgid "Quickfix list not found, stopping the job"
+msgstr "Није пронађена quickfix листа, посао се зауставља"
+
+msgid "Success!"
+msgstr "Успешно!"
+
+msgid "Job terminated"
+msgstr "Посао је прекинут"
+
+msgid "There are errors."
+msgstr "Постоје грешке."
+
+msgid "Could not create quickfix list"
+msgstr "Није могла да се креира quickfix листа"
+
+msgid "File not readable:"
+msgstr "Фајл не може да се чита:"
+
+msgid "Failed to start job"
+msgstr "Посао није могао да се покрене"
+
+msgid "Typesetting..."
+msgstr "Словослагање..."
+
+msgid "Jobs still running:"
+msgstr "Послова који се још увек извршавају:"
+
+msgid "Done."
+msgstr "Завршено."
+
+msgid "Typeset"
+msgstr "Словослагање"
+
+msgid "Please save the buffer first."
+msgstr "Молимо вас да најпре сачувате бафер."
 
 msgid "You discovered the command-line window! You can close it with \":q\"."
 msgstr "Открили сте прозор командне линије! Можете да га затворите са „:q”."

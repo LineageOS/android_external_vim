@@ -27,6 +27,10 @@
 // Is there any system that doesn't have access()?
 #define USE_MCH_ACCESS
 
+// Bitmask with 0x80 set in each byte of a long_u word, used to detect
+// non-ASCII bytes (high bit set) in multiple bytes at once.
+#define NONASCII_MASK (((long_u)-1 / 0xFF) * 0x80)
+
 #if defined(__hpux) && !defined(HAVE_DIRFD)
 # define dirfd(x) ((x)->__dd_fd)
 # define HAVE_DIRFD
@@ -232,7 +236,7 @@ readfile(
 #endif
     size_t	fnamelen = 0;
 
-    curbuf->b_au_did_filetype = FALSE; // reset before triggering any autocommands
+    curbuf->b_au_did_filetype = false; // reset before triggering any autocommands
 
     curbuf->b_no_eol_lnum = 0;	// in case it was set by the previous read
 
@@ -585,12 +589,12 @@ readfile(
 		else
 		{
 		    filemess(curbuf, sfname, (char_u *)(
-# ifdef EFBIG
+#ifdef EFBIG
 			    (errno == EFBIG) ? _("[File too big]") :
-# endif
-# ifdef EOVERFLOW
+#endif
+#ifdef EOVERFLOW
 			    (errno == EOVERFLOW) ? _("[File too big]") :
-# endif
+#endif
 						_("[Permission Denied]")), 0);
 		    curbuf->b_p_ro = TRUE;	// must use "w!" now
 		}
@@ -1170,7 +1174,12 @@ retry:
 	}
 
 	// Protect against the argument of lalloc() going negative.
-	if (size < 0 || size + linerest + 1 < 0 || linerest >= MAXCOL)
+	// Also split lines that are too long for colnr_T.  After this check
+	// passes, we read up to 'size' more bytes.  We must ensure that even
+	// after that read, the line length won't exceed MAXCOL - 1 (because
+	// we add 1 for the NUL when casting to colnr_T).  If this check fires,
+	// we insert a synthetic newline immediately, so linerest doesn't grow.
+	if (size < 0 || size + linerest + 1 < 0 || linerest >= MAXCOL - size)
 	{
 	    ++split;
 	    *ptr = NL;		    // split line by inserting a NL
@@ -1427,10 +1436,10 @@ retry:
 				break;
 			    }
 
-			    mch_memmove(new_buffer, buffer, linerest);
+			    mch_memmove(new_buffer, buffer, linerest + conv_restlen);
 			    if (newptr != NULL)
-				mch_memmove(new_buffer + linerest, newptr,
-							      decrypted_size);
+				mch_memmove(new_buffer + linerest + conv_restlen,
+					newptr, decrypted_size);
 			    vim_free(newptr);
 			}
 
@@ -1440,7 +1449,7 @@ retry:
 			    buffer = new_buffer;
 			    new_buffer = NULL;
 			    line_start = buffer;
-			    ptr = buffer + linerest;
+			    ptr = buffer + linerest + conv_restlen;
 			    real_size = size;
 			}
 			size = decrypted_size;
@@ -1695,7 +1704,7 @@ retry:
 		{
 		    found_bad = FALSE;
 
-#  ifdef CP_UTF8	// VC 4.1 doesn't define CP_UTF8
+# ifdef CP_UTF8	// VC 4.1 doesn't define CP_UTF8
 		    if (codepage == CP_UTF8)
 		    {
 			// Handle CP_UTF8 input ourselves to be able to handle
@@ -1725,7 +1734,7 @@ retry:
 			}
 		    }
 		    else
-#  endif
+# endif
 		    {
 			// We don't know how long the byte sequence is, try
 			// from one to three bytes.
@@ -2051,11 +2060,27 @@ retry:
 		int  incomplete_tail = FALSE;
 
 		// Reading UTF-8: Check if the bytes are valid UTF-8.
-		for (p = ptr; ; ++p)
+		for (p = ptr; ; )
 		{
-		    int	 todo = (int)((ptr + size) - p);
+		    int	 todo;
 		    int	 l;
 
+		    // Skip ASCII bytes quickly using word-at-a-time check.
+		    {
+			char_u *ascii_end = ptr + size;
+			while (ascii_end - p >= (long)sizeof(long_u))
+			{
+			    long_u word;
+			    memcpy(&word, p, sizeof(long_u));
+			    if (word & NONASCII_MASK)
+				break;
+			    p += sizeof(long_u);
+			}
+			while (p < ascii_end && *p < 0x80)
+			    ++p;
+		    }
+
+		    todo = (int)((ptr + size) - p);
 		    if (todo <= 0)
 			break;
 		    if (*p >= 0x80)
@@ -2104,14 +2129,17 @@ retry:
 			    if (bad_char_behavior == BAD_DROP)
 			    {
 				mch_memmove(p, p + 1, todo - 1);
-				--p;
 				--size;
 			    }
-			    else if (bad_char_behavior != BAD_KEEP)
-				*p = bad_char_behavior;
+			    else
+			    {
+				if (bad_char_behavior != BAD_KEEP)
+				    *p = bad_char_behavior;
+				++p;
+			    }
 			}
 			else
-			    p += l - 1;
+			    p += l;
 		    }
 		}
 		if (p < ptr + size && !incomplete_tail)
@@ -2250,73 +2278,101 @@ rewind_retry:
 	}
 	else
 	{
-	    --ptr;
-	    while (++ptr, --size >= 0)
+	    // Use memchr() for SIMD-optimized newline scanning instead
+	    // of scanning each byte individually.
+	    char_u *end = ptr + size;
+
+	    while (ptr < end)
 	    {
-		if ((c = *ptr) != NUL && c != NL)  // catch most common case
-		    continue;
-		if (c == NUL)
-		    *ptr = NL;	// NULs are replaced by newlines!
-		else
+		char_u *nl = (char_u *)memchr(ptr, NL, end - ptr);
+		char_u *nul_scan;
+
+		if (nl == NULL)
 		{
-		    if (skip_count == 0)
+		    // No more newlines in buffer.
+		    // Replace any NUL bytes with NL in remaining data.
+		    while ((nul_scan = (char_u *)memchr(ptr, NUL,
+						      end - ptr)) != NULL)
 		    {
-			*ptr = NUL;		// end of line
-			len = (colnr_T)(ptr - line_start + 1);
-			if (fileformat == EOL_DOS)
+			*nul_scan = NL;
+			ptr = nul_scan + 1;
+		    }
+		    ptr = end;
+		    break;
+		}
+
+		// Replace NUL bytes with NL before the newline.
+		{
+		    char_u *scan = ptr;
+		    while ((nul_scan = (char_u *)memchr(scan, NUL,
+						       nl - scan)) != NULL)
+		    {
+			*nul_scan = NL;
+			scan = nul_scan + 1;
+		    }
+		}
+
+		// Process the newline.
+		ptr = nl;
+		if (skip_count == 0)
+		{
+		    *ptr = NUL;		// end of line
+		    len = (colnr_T)(ptr - line_start + 1);
+		    if (fileformat == EOL_DOS)
+		    {
+			if (ptr > line_start && ptr[-1] == CAR)
 			{
-			    if (ptr > line_start && ptr[-1] == CAR)
-			    {
-				// remove CR before NL
-				ptr[-1] = NUL;
-				--len;
-			    }
-			    /*
-			     * Reading in Dos format, but no CR-LF found!
-			     * When 'fileformats' includes "unix", delete all
-			     * the lines read so far and start all over again.
-			     * Otherwise give an error message later.
-			     */
-			    else if (ff_error != EOL_DOS)
-			    {
-				if (   try_unix
-				    && !read_stdin
-				    && (read_buffer
-					|| vim_lseek(fd, (off_T)0L, SEEK_SET)
-									  == 0))
-				{
-				    fileformat = EOL_UNIX;
-				    if (set_options)
-					set_fileformat(EOL_UNIX, OPT_LOCAL);
-				    file_rewind = TRUE;
-				    keep_fileformat = TRUE;
-				    goto retry;
-				}
-				ff_error = EOL_DOS;
-			    }
+			    // remove CR before NL
+			    ptr[-1] = NUL;
+			    --len;
 			}
-			if (ml_append(lnum, line_start, len, newfile) == FAIL)
+			/*
+			 * Reading in Dos format, but no CR-LF found!
+			 * When 'fileformats' includes "unix", delete all
+			 * the lines read so far and start all over again.
+			 * Otherwise give an error message later.
+			 */
+			else if (ff_error != EOL_DOS)
 			{
-			    error = TRUE;
-			    break;
-			}
-#ifdef FEAT_PERSISTENT_UNDO
-			if (read_undo_file)
-			    sha256_update(&sha_ctx, line_start, len);
-#endif
-			++lnum;
-			if (--read_count == 0)
-			{
-			    error = TRUE;	    // break loop
-			    line_start = ptr;	// nothing left to write
-			    break;
+			    if (   try_unix
+				&& !read_stdin
+				&& (read_buffer
+				    || vim_lseek(fd, (off_T)0L, SEEK_SET)
+								      == 0))
+			    {
+				fileformat = EOL_UNIX;
+				if (set_options)
+				    set_fileformat(EOL_UNIX, OPT_LOCAL);
+				file_rewind = TRUE;
+				keep_fileformat = TRUE;
+				goto retry;
+			    }
+			    ff_error = EOL_DOS;
 			}
 		    }
-		    else
-			--skip_count;
-		    line_start = ptr + 1;
+		    if (ml_append(lnum, line_start, len, newfile) == FAIL)
+		    {
+			error = TRUE;
+			break;
+		    }
+#ifdef FEAT_PERSISTENT_UNDO
+		    if (read_undo_file)
+			sha256_update(&sha_ctx, line_start, len);
+#endif
+		    ++lnum;
+		    if (--read_count == 0)
+		    {
+			error = TRUE;	    // break loop
+			line_start = ptr;   // nothing left to write
+			break;
+		    }
 		}
+		else
+		    --skip_count;
+		line_start = ptr + 1;
+		++ptr;
 	    }
+	    size = -1;
 	}
 	linerest = (long)(ptr - line_start);
 	ui_breakcheck();
@@ -2732,10 +2788,10 @@ failed:
 							    FALSE, NULL, eap);
 	if (msg_scrolled == n)
 	    msg_scroll = m;
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 	if (aborting())	    // autocmds may abort script processing
 	    goto theend;
-# endif
+#endif
     }
 
     if (!(recoverymode && error))
@@ -3017,9 +3073,13 @@ check_for_cryptkey(
 	    int header_len;
 
 	    header_len = crypt_get_header_len(method);
-	    if (*sizep <= header_len)
+	    if (*sizep < header_len)
+	    {
 		// invalid header, buffer can't be encrypted
+		if (cryptkey != curbuf->b_p_key)
+		    vim_free(cryptkey);
 		return NULL;
+	    }
 
 	    curbuf->b_cryptstate = crypt_create_from_header(
 							method, cryptkey, ptr);
@@ -3140,11 +3200,13 @@ set_rw_fname(char_u *fname, char_u *sfname)
     void
 msg_add_fname(buf_T *buf, char_u *fname)
 {
+    size_t  IObufflen = 0;
+
     if (fname == NULL)
 	fname = (char_u *)"-stdin-";
-    home_replace(buf, fname, IObuff + 1, IOSIZE - 4, TRUE);
-    IObuff[0] = '"';
-    STRCAT(IObuff, "\" ");
+    IObuff[IObufflen++] = '"';
+    IObufflen += home_replace(buf, fname, IObuff + IObufflen, IOSIZE - 4, TRUE);
+    STRCPY(IObuff + IObufflen, "\" ");
 }
 
 /*
@@ -3323,11 +3385,11 @@ get_win_fio_flags(char_u *ptr)
     cp = encname2codepage(ptr);
     if (cp == 0)
     {
-#  ifdef CP_UTF8	// VC 4.1 doesn't define CP_UTF8
+# ifdef CP_UTF8	// VC 4.1 doesn't define CP_UTF8
 	if (STRCMP(ptr, "utf-8") == 0)
 	    cp = CP_UTF8;
 	else
-#  endif
+# endif
 	    return 0;
     }
     return FIO_PUT_CP(cp) | FIO_CODEPAGE;
@@ -3457,7 +3519,9 @@ shorten_fname(char_u *full_path, char_u *dir_name)
 #endif
 	{
 	    if (vim_ispathsep(*p))
-		++p;
+		do
+		    ++p;
+		while (vim_ispathsep_nocolon(*p));
 #ifndef VMS   // the path separator is always part of the path
 	    else
 		p = NULL;
@@ -3770,6 +3834,14 @@ vim_fgets(char_u *buf, int size, FILE *fp)
     char	*eof;
 #define FGETS_SIZE 200
     char	tbuf[FGETS_SIZE];
+
+    // safety check
+    if (size < 2)
+    {
+	if (size == 1)
+	    buf[0] = NUL;
+	return TRUE;
+    }
 
     buf[size - 2] = NUL;
     eof = fgets((char *)buf, size, fp);
@@ -4456,9 +4528,9 @@ buf_check_timestamp(
 			if (emsg_silent == 0 && !in_assert_fails)
 			{
 			    out_flush();
-    #ifdef FEAT_GUI
+#ifdef FEAT_GUI
 			    if (!focus)
-    #endif
+#endif
 				// give the user some time to think about it
 				ui_delay(1004L, TRUE);
 
@@ -4480,7 +4552,7 @@ buf_check_timestamp(
 	// Reload the buffer.
 	buf_reload(buf, orig_mode, reload == RELOAD_DETECT);
 #ifdef FEAT_PERSISTENT_UNDO
-	if (buf->b_p_udf && buf->b_ffname != NULL)
+	if (bufref_valid(&bufref) && buf->b_p_udf && buf->b_ffname != NULL)
 	{
 	    char_u	    hash[UNDO_HASH_SIZE];
 	    buf_T	    *save_curbuf = curbuf;
@@ -4594,7 +4666,7 @@ buf_reload(buf_T *buf, int orig_mode, int reload_options)
 	    int old_msg_silent = msg_silent;
 
 	    curbuf->b_flags |= BF_CHECK_RO;	// check for RO again
-	    curbuf->b_keep_filetype = TRUE;	// don't detect 'filetype'
+	    curbuf->b_keep_filetype = true;	// don't detect 'filetype'
 
 	    if (shortmess(SHM_FILEINFO))
 		msg_silent = 1;
@@ -4651,7 +4723,7 @@ buf_reload(buf_T *buf, int orig_mode, int reload_options)
 	curwin->w_cursor = old_cursor;
 	check_cursor();
 	update_topline();
-	curbuf->b_keep_filetype = FALSE;
+	curbuf->b_keep_filetype = false;
 #ifdef FEAT_FOLDING
 	{
 	    win_T	*wp;
@@ -4741,8 +4813,8 @@ getfpermwfd(WIN32_FIND_DATAW *wfd, char_u *perm)
     return getfpermst(&st, perm);
 }
 
-    static char_u *
-getftypewfd(WIN32_FIND_DATAW *wfd)
+    static void
+getftypewfd(WIN32_FIND_DATAW *wfd, string_T *ret)
 {
     DWORD flag = wfd->dwFileAttributes;
     DWORD tag = wfd->dwReserved0;
@@ -4750,20 +4822,40 @@ getftypewfd(WIN32_FIND_DATAW *wfd)
     if (flag & FILE_ATTRIBUTE_REPARSE_POINT)
     {
 	if (tag == IO_REPARSE_TAG_MOUNT_POINT)
-	    return (char_u*)"junction";
+	{
+	    ret->string = (char_u *)"junction";
+	    ret->length = STRLEN_LITERAL("junction");
+	    return;
+	}
 	if (tag == IO_REPARSE_TAG_SYMLINK)
 	{
 	    if (flag & FILE_ATTRIBUTE_DIRECTORY)
-		return (char_u*)"linkd";
+	    {
+		ret->string = (char_u *)"linkd";
+		ret->length = STRLEN_LITERAL("linkd");
+		return;
+	    }
 
-	    return (char_u*)"link";
+	    ret->string = (char_u *)"link";
+	    ret->length = STRLEN_LITERAL("link");
+	    return;
 	}
-	return (char_u*)"reparse";	// unknown reparse point type
-    }
-    if (flag & FILE_ATTRIBUTE_DIRECTORY)
-	return (char_u*)"dir";
 
-    return (char_u*)"file";
+	// unknown reparse point type
+	ret->string = (char_u *)"reparse";
+	ret->length = STRLEN_LITERAL("reparse");
+	return;
+    }
+
+    if (flag & FILE_ATTRIBUTE_DIRECTORY)
+    {
+	ret->string = (char_u *)"dir";
+	ret->length = STRLEN_LITERAL("dir");
+	return;
+    }
+
+    ret->string = (char_u *)"file";
+    ret->length = STRLEN_LITERAL("file");
 }
 
     static dict_T *
@@ -4773,6 +4865,7 @@ create_readdirex_item(WIN32_FIND_DATAW *wfd)
     char_u	*p;
     varnumber_T	size, time;
     char_u	permbuf[] = "---------";
+    string_T	s;
 
     item = dict_alloc();
     if (item == NULL)
@@ -4800,14 +4893,15 @@ create_readdirex_item(WIN32_FIND_DATAW *wfd)
     if (dict_add_number(item, "time", time) == FAIL)
 	goto theend;
 
-    if (dict_add_string(item, "type", getftypewfd(wfd)) == FAIL)
+    getftypewfd(wfd, &s);
+    if (dict_add_string_len(item, "type", s.string, (int)s.length) == FAIL)
 	goto theend;
     if (dict_add_string(item, "perm", getfpermwfd(wfd, permbuf)) == FAIL)
 	goto theend;
 
-    if (dict_add_string(item, "user", (char_u*)"") == FAIL)
+    if (dict_add_string_len(item, "user", (char_u *)"", 0) == FAIL)
 	goto theend;
-    if (dict_add_string(item, "group", (char_u*)"") == FAIL)
+    if (dict_add_string_len(item, "group", (char_u *)"", 0) == FAIL)
 	goto theend;
 
     return item;
@@ -4822,12 +4916,13 @@ create_readdirex_item(char_u *path, char_u *name)
 {
     dict_T	*item;
     char	*p;
-    size_t	len;
+    size_t	pathlen, len;
+    size_t	namelen;
     stat_T	st;
     int		ret, link = FALSE;
     varnumber_T	size;
     char_u	permbuf[] = "---------";
-    char_u	*q = NULL;
+    string_T	q = {NULL, 0};
     struct passwd *pw;
     struct group  *gr;
 
@@ -4836,22 +4931,27 @@ create_readdirex_item(char_u *path, char_u *name)
 	return NULL;
     item->dv_refcount++;
 
-    len = STRLEN(path) + 1 + STRLEN(name) + 1;
+    pathlen = STRLEN(path);
+    namelen = STRLEN(name);
+    len = pathlen + 1 + namelen + 1;
     p = alloc(len);
     if (p == NULL)
 	goto theend;
-    vim_snprintf(p, len, "%s/%s", path, name);
+    if (pathlen > 0 && path[pathlen - 1] == '/')
+	vim_snprintf(p, len, "%s%s", path, name);
+    else
+	vim_snprintf(p, len, "%s/%s", path, name);
     ret = mch_lstat(p, &st);
     if (ret >= 0 && S_ISLNK(st.st_mode))
     {
 	link = TRUE;
 	ret = mch_stat(p, &st);
 	if (ret < 0)
-	    q = (char_u*)"link";
+	    STR_LITERAL_SET(q, "link");
     }
     vim_free(p);
 
-    if (dict_add_string(item, "name", name) == FAIL)
+    if (dict_add_string_len(item, "name", name, (int)namelen) == FAIL)
 	goto theend;
 
     if (ret >= 0)
@@ -4870,32 +4970,41 @@ create_readdirex_item(char_u *path, char_u *name)
 	if (link)
 	{
 	    if (S_ISDIR(st.st_mode))
-		q = (char_u*)"linkd";
+		STR_LITERAL_SET(q, "linkd");
 	    else
-		q = (char_u*)"link";
+		STR_LITERAL_SET(q, "link");
 	}
 	else
-	    q = getftypest(&st);
-	if (dict_add_string(item, "type", q) == FAIL)
+	{
+	    q.string = getftypest(&st);
+	    q.length = STRLEN(q.string);
+	}
+	if (dict_add_string_len(item, "type", q.string, (int)q.length) == FAIL)
 	    goto theend;
 	if (dict_add_string(item, "perm", getfpermst(&st, permbuf)) == FAIL)
 	    goto theend;
 
 	pw = getpwuid(st.st_uid);
 	if (pw == NULL)
-	    q = (char_u*)"";
+	    STR_LITERAL_SET(q, "");
 	else
-	    q = (char_u*)pw->pw_name;
-	if (dict_add_string(item, "user", q) == FAIL)
+	{
+	    q.string = (char_u *)pw->pw_name;
+	    q.length = STRLEN(q.string);
+	}
+	if (dict_add_string_len(item, "user", q.string, (int)q.length) == FAIL)
 	    goto theend;
 #  if !defined(VMS) || (defined(VMS) && defined(HAVE_XOS_R_H))
 	gr = getgrgid(st.st_gid);
 	if (gr == NULL)
-	    q = (char_u*)"";
+	    STR_LITERAL_SET(q, "");
 	else
-	    q = (char_u*)gr->gr_name;
+	{
+	    q.string = (char_u *)gr->gr_name;
+	    q.length = STRLEN(q.string);
+	}
 #  endif
-	if (dict_add_string(item, "group", q) == FAIL)
+	if (dict_add_string_len(item, "group", q.string, (int)q.length) == FAIL)
 	    goto theend;
     }
     else
@@ -4904,13 +5013,21 @@ create_readdirex_item(char_u *path, char_u *name)
 	    goto theend;
 	if (dict_add_number(item, "time", -1) == FAIL)
 	    goto theend;
-	if (dict_add_string(item, "type", q == NULL ? (char_u*)"" : q) == FAIL)
+	if (q.string == NULL)
+	{
+	    if (dict_add_string_len(item, "type", (char_u *)"", 0) == FAIL)
+		goto theend;
+	}
+	else
+	{
+	    if (dict_add_string_len(item, "type", q.string, (int)q.length) == FAIL)
+		goto theend;
+	}
+	if (dict_add_string_len(item, "perm", (char_u *)"", 0) == FAIL)
 	    goto theend;
-	if (dict_add_string(item, "perm", (char_u*)"") == FAIL)
+	if (dict_add_string_len(item, "user", (char_u *)"", 0) == FAIL)
 	    goto theend;
-	if (dict_add_string(item, "user", (char_u*)"") == FAIL)
-	    goto theend;
-	if (dict_add_string(item, "group", (char_u*)"") == FAIL)
+	if (dict_add_string_len(item, "group", (char_u *)"", 0) == FAIL)
 	    goto theend;
     }
     return item;
@@ -5253,6 +5370,19 @@ vim_closetempdir(void)
     closedir(vim_tempdir_dp);
     vim_tempdir_dp = NULL;
 }
+
+/*
+ * Return true if the temp directory we created is gone.
+ */
+    static bool
+vim_tempdir_gone(void)
+{
+    stat_T	st;
+
+    if (vim_tempdir_dp == NULL)
+	return false;
+    return fstat(dirfd(vim_tempdir_dp), &st) < 0 || st.st_nlink == 0;
+}
 # endif
 
 /*
@@ -5331,6 +5461,15 @@ vim_tempname(
     int		i;
 # ifndef EEXIST
     stat_T	st;
+# endif
+
+# if defined(UNIX) && defined(HAVE_FLOCK) && defined(HAVE_DIRFD)
+    // if the temp directory is gone, force re-creation of it
+    if (vim_tempdir != NULL && vim_tempdir_gone())
+    {
+	vim_closetempdir();
+	VIM_CLEAR(vim_tempdir);
+    }
 # endif
 
     /*

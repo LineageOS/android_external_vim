@@ -1091,7 +1091,7 @@ func Test_fold_expr_error()
   endfor
 
   set foldmethod& foldexpr&
-  close!
+  bw!
 endfunc
 
 func Test_undo_fold_deletion()
@@ -1473,6 +1473,56 @@ func Test_foldtextresult()
   bw!
 endfunc
 
+" Test for foldtext and fillchars with 'rightleft' enabled
+func Test_foldtext_and_fillchars_rightleft()
+  CheckFeature rightleft
+  CheckScreendump
+  CheckRunVimInTerminal
+
+  let script_lines =<< trim END
+    let longtext = 'Lorem ipsum dolor sit amet, consectetur adipiscing'
+    let g:multibyte = 'Ｌｏｒｅｍ ｉｐｓｕｍ ｄｏｌｏｒ ｓｉｔ ａｍｅｔ'
+
+    call setline(1, [longtext, longtext, longtext])
+    1,2fold
+
+    setlocal rightleft
+    set noshowmode noshowcmd
+  END
+  call writefile(script_lines, 'XTest_foldtext_and_fillchars_rightleft', 'D')
+  let buf = RunVimInTerminal('-S XTest_foldtext_and_fillchars_rightleft', {'rows': 5, 'cols': 70})
+
+  call VerifyScreenDump(buf, 'Test_foldtext_and_fillchars_rightleft_01', {})
+  call term_sendkeys(buf, ":call setline(1, [g:multibyte, g:multibyte, g:multibyte])\<CR>")
+  call VerifyScreenDump(buf, 'Test_foldtext_and_fillchars_rightleft_02', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+endfunc
+
+" Test for foldtextresult() with 'rightleft' enabled
+func Test_foldtextresult_rightleft()
+  CheckFeature rightleft
+
+  let save_columns = &columns
+  new
+  set columns=70
+  setlocal rightleft
+
+  let longtext = 'Lorem ipsum dolor sit amet, consectetur adipiscing'
+  let multibyte = 'Ｌｏｒｅｍ ｉｐｓｕｍ ｄｏｌｏｒ ｓｉｔ ａｍｅｔ'
+
+  call setline(1, [longtext, longtext, longtext])
+  1,2fold
+  call assert_equal('+--  2 lines: ' .. longtext, foldtextresult(1))
+
+  call setline(1, [multibyte, multibyte, multibyte])
+  call assert_equal('+--  2 lines: ' .. multibyte, foldtextresult(1))
+
+  bw!
+  let &columns = save_columns
+endfunc
+
 " Test for merging two recursive folds when an intermediate line with no fold
 " is removed
 func Test_fold_merge_recursive()
@@ -1716,7 +1766,7 @@ func Test_foldtext_in_modeline()
     bw!
   endfunc
 
-  set modeline modelineexpr
+  set modeline modelineexpr nomodelinestrict
   call Check_foldtext_in_modeline('setlocal')
   call Check_foldtext_in_modeline('set')
 
@@ -1742,7 +1792,7 @@ func Test_foldtext_in_modeline()
   call assert_equal(['after'], readfile('Xmodelinefoldtext_write'))
   bwipe!
 
-  set modeline& modelineexpr&
+  set modeline& modelineexpr& modelinestrict&
   delfunc ModelineFoldText
   delfunc Check_foldtext_in_modeline
 endfunc
@@ -1799,7 +1849,7 @@ func Test_foldexpr_in_modeline()
     bw!
   endfunc
 
-  set modeline modelineexpr
+  set modeline modelineexpr nomodelinestrict
   call Check_foldexpr_in_modeline('setlocal')
   call Check_foldexpr_in_modeline('set')
 
@@ -1825,7 +1875,7 @@ func Test_foldexpr_in_modeline()
   call assert_equal(['after'], readfile('Xmodelinefoldexpr_write'))
   bwipe!
 
-  set modeline& modelineexpr&
+  set modeline& modelineexpr& modelinestrict&
   delfunc ModelineFoldExpr
   delfunc Check_foldexpr_in_modeline
 endfunc

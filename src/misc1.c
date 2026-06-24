@@ -316,7 +316,7 @@ get_last_leader_offset(char_u *line, char_u **flags)
 		for (off = (len2 > i ? i : len2); off > 0 && off + len1 > len2;)
 		{
 		    --off;
-		    if (!STRNCMP(string + off, com_leader, len2 - off))
+		    if (STRNCMP(string + off, com_leader, len2 - off) == 0)
 		    {
 			if (i - off < lower_check_bound)
 			    lower_check_bound = i - off;
@@ -467,7 +467,7 @@ plines_win_col(win_T *wp, linenr_T lnum, long column)
     init_chartabsize_arg(&cts, wp, lnum, 0, line, line);
     while (*cts.cts_ptr != NUL && --column >= 0)
     {
-	cts.cts_vcol += win_lbr_chartabsize(&cts, NULL);
+	cts.cts_vcol += win_lbr_chartabsize(&cts, NULL, NULL);
 	MB_PTR_ADV(cts.cts_ptr);
     }
 
@@ -481,7 +481,7 @@ plines_win_col(win_T *wp, linenr_T lnum, long column)
     col = cts.cts_vcol;
     if (*cts.cts_ptr == TAB && (State & MODE_NORMAL)
 				    && (!wp->w_p_list || wp->w_lcs_chars.tab1))
-	col += win_lbr_chartabsize(&cts, NULL) - 1;
+	col += win_lbr_chartabsize(&cts, NULL, NULL) - 1;
     clear_chartabsize_arg(&cts);
 
     /*
@@ -621,7 +621,7 @@ check_status(buf_T *buf)
     FOR_ALL_WINDOWS(wp)
 	if (wp->w_buffer == buf && wp->w_status_height)
 	{
-	    wp->w_redr_status = TRUE;
+	    wp->w_redr_status = true;
 	    set_must_redraw(UPD_VALID);
 	}
 }
@@ -694,14 +694,14 @@ get_mode(char_u *buf)
 	buf[i++] = 'x';
 	buf[i++] = '!';
     }
-#ifdef FEAT_TERMINAL
+# ifdef FEAT_TERMINAL
     else if (term_use_loop())
     {
 	if (State & MODE_CMDLINE)
 	    buf[i++] = 'c';
 	buf[i++] = 't';
     }
-#endif
+# endif
     else if (State == MODE_HITRETURN || State == MODE_ASKMORE
 						      || State == MODE_SETWSIZE
 		|| State == MODE_CONFIRM)
@@ -771,10 +771,10 @@ get_mode(char_u *buf)
 	    buf[i++] = 'i';
 	    buf[i++] = restart_edit;
 	}
-#ifdef FEAT_TERMINAL
-	else if (term_in_normal_mode())
+# ifdef FEAT_TERMINAL
+	else if (term_in_normal_mode(curbuf))
 	    buf[i++] = 't';
-#endif
+# endif
     }
 
     buf[i] = NUL;
@@ -1398,7 +1398,7 @@ init_vimdir(void)
     char_u *
 expand_env_save(char_u *src)
 {
-    return expand_env_save_opt(src, FALSE);
+    return expand_env_save_opt(src, FALSE, NULL);
 }
 
 /*
@@ -1406,13 +1406,13 @@ expand_env_save(char_u *src)
  * expand "~" at the start.
  */
     char_u *
-expand_env_save_opt(char_u *src, int one)
+expand_env_save_opt(char_u *src, int one, char_u *esc_chars)
 {
     char_u	*p;
 
     p = alloc(MAXPATHL);
     if (p != NULL)
-	expand_env_esc(src, p, MAXPATHL, FALSE, one, NULL);
+	expand_env_esc(src, p, MAXPATHL, esc_chars, one, NULL);
     return p;
 }
 
@@ -1428,7 +1428,7 @@ expand_env(
     char_u	*dst,		// where to put the result
     int		dstlen)		// maximum length of the result
 {
-    return expand_env_esc(src, dst, dstlen, FALSE, FALSE, NULL);
+    return expand_env_esc(src, dst, dstlen, NULL, FALSE, NULL);
 }
 
     size_t
@@ -1436,7 +1436,7 @@ expand_env_esc(
     char_u	*srcp,		// input string e.g. "$HOME/vim.hlp"
     char_u	*dst,		// where to put the result
     int		dstlen,		// maximum length of the result
-    int		esc,		// escape spaces in expanded variables
+    char_u	*esc_chars,	// chars to escape in expanded vars
     int		one,		// "srcp" is one file name
     char_u	*startstr)	// start again after this (can be NULL)
 {
@@ -1532,7 +1532,7 @@ expand_env_esc(
 		    if (src[1] == '{')
 # else
 		    if (*src == '%')
-#endif
+# endif
 			++tail;
 #endif
 		    *var = NUL;
@@ -1655,11 +1655,13 @@ expand_env_esc(
 	    }
 #endif
 
-	    // If "var" contains white space, escape it with a backslash.
-	    // Required for ":e ~/tt" when $HOME includes a space.
-	    if (esc && var != NULL && vim_strpbrk(var, (char_u *)" \t") != NULL)
+	    // If "var" contains any character from "esc_chars", escape it
+	    // with a backslash.  The historical use is escaping spaces so
+	    // that ":e ~/tt" works when $HOME contains a space.
+	    if (esc_chars != NULL && var != NULL
+		    && vim_strpbrk(var, esc_chars) != NULL)
 	    {
-		char_u	*p = vim_strsave_escaped(var, (char_u *)" \t");
+		char_u	*p = vim_strsave_escaped(var, esc_chars);
 
 		if (p != NULL)
 		{
@@ -1752,32 +1754,39 @@ remove_tail(char_u *p, char_u *pend, char_u *name)
     static char_u *
 vim_version_dir(char_u *vimdir)
 {
-    char_u	*p;
+    string_T	p;
+    size_t	vimdir_len;
 
     if (vimdir == NULL || *vimdir == NUL)
 	return NULL;
-    p = concat_fnames(vimdir, (char_u *)VIM_VERSION_NODOT, TRUE);
-    if (p != NULL && mch_isdir(p))
-	return p;
-    vim_free(p);
-    p = concat_fnames(vimdir, (char_u *)RUNTIME_DIRNAME, TRUE);
-    if (p != NULL && mch_isdir(p))
+    vimdir_len = STRLEN(vimdir);
+    concat_fnames(vimdir, vimdir_len,
+	(char_u *)VIM_VERSION_NODOT, STRLEN_LITERAL(VIM_VERSION_NODOT), TRUE, &p);
+    if (p.string != NULL && mch_isdir(p.string))
+	return p.string;
+    vim_free(p.string);
+    concat_fnames(vimdir, vimdir_len,
+	(char_u *)RUNTIME_DIRNAME, STRLEN_LITERAL(RUNTIME_DIRNAME), TRUE, &p);
+    if (p.string != NULL && mch_isdir(p.string))
     {
-	char_u *fname = concat_fnames(p, (char_u *)"defaults.vim", TRUE);
+	string_T    fname;
+
+	concat_fnames(p.string, p.length,
+	    (char_u *)"defaults.vim", STRLEN_LITERAL("defaults.vim"), TRUE, &fname);
 
 	// Check that "defaults.vim" exists in this directory, to avoid picking
 	// up a stray "runtime" directory, it would make many tests fail in
 	// mysterious ways.
-	if (fname != NULL)
+	if (fname.string != NULL)
 	{
-	    int exists = file_is_readable(fname);
+	    int exists = file_is_readable(fname.string);
 
-	    vim_free(fname);
+	    vim_free(fname.string);
 	    if (exists)
-		return p;
+		return p.string;
 	}
     }
-    vim_free(p);
+    vim_free(p.string);
     return NULL;
 }
 
@@ -2170,7 +2179,7 @@ init_users(void)
     lazy_init_done = TRUE;
     ga_init2(&ga_users, sizeof(char_u *), 20);
 
-# if defined(HAVE_GETPWENT) && defined(HAVE_PWD_H)
+#if defined(HAVE_GETPWENT) && defined(HAVE_PWD_H)
     {
 	struct passwd*	pw;
 
@@ -2179,7 +2188,7 @@ init_users(void)
 	    add_user((char_u *)pw->pw_name, TRUE);
 	endpwent();
     }
-# elif defined(MSWIN)
+#elif defined(MSWIN)
     {
 	DWORD		nusers = 0, ntotal = 0, i;
 	PUSER_INFO_0	uinfo;
@@ -2193,8 +2202,8 @@ init_users(void)
 	    NetApiBufferFree(uinfo);
 	}
     }
-# endif
-# if defined(HAVE_GETPWNAM)
+#endif
+#if defined(HAVE_GETPWNAM)
     {
 	char_u	*user_env = mch_getenv((char_u *)"USER");
 
@@ -2225,7 +2234,7 @@ init_users(void)
 	    }
 	}
     }
-# endif
+#endif
 }
 
 /*
@@ -2277,7 +2286,7 @@ prepare_to_exit(void)
 #ifdef FEAT_GUI
     if (gui.in_use)
     {
-	gui.dying = TRUE;
+	gui.dying = true;
 	out_trash();	// trash any pending output
     }
     else
@@ -2373,7 +2382,7 @@ fast_breakcheck(void)
     }
 }
 
-# if defined(FEAT_SPELL)
+#if defined(FEAT_SPELL)
 /*
  * Like line_breakcheck() but check 100 times less often.
  */
@@ -2388,15 +2397,14 @@ veryfast_breakcheck(void)
 }
 #endif
 
-#if defined(VIM_BACKTICK) || defined(FEAT_EVAL) \
-	|| (defined(HAVE_LOCALE_H) || defined(X_LOCALE))
+#if defined(FEAT_EVAL) || (defined(HAVE_LOCALE_H) || defined(X_LOCALE))
 
-#ifndef SEEK_SET
-# define SEEK_SET 0
-#endif
-#ifndef SEEK_END
-# define SEEK_END 2
-#endif
+# ifndef SEEK_SET
+#  define SEEK_SET 0
+# endif
+# ifndef SEEK_END
+#  define SEEK_END 2
+# endif
 
 /*
  * Get the stdout of an external command.
@@ -2472,9 +2480,9 @@ get_cmd_output(
     mch_remove(tempname);
     if (buffer == NULL)
 	goto done;
-#ifdef VMS
+# ifdef VMS
     len = i;	// VMS doesn't give us what we asked for...
-#endif
+# endif
     if (i != len)
     {
 	semsg(_(e_cant_read_file_str), tempname);
@@ -2512,6 +2520,9 @@ get_cmd_output_as_rettv(
     FILE	*fd;
     list_T	*list = NULL;
     int		flags = SHELL_SILENT;
+    int		use_argv = FALSE;
+    char	**argv = NULL;
+    int		argc = 0;
 
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
@@ -2519,7 +2530,7 @@ get_cmd_output_as_rettv(
 	goto errret;
 
     if (in_vim9script()
-	    && (check_for_string_arg(argvars, 0) == FAIL
+	    && (check_for_string_or_list_arg(argvars, 0) == FAIL
 		|| check_for_opt_string_or_number_or_list_arg(argvars, 1)
 								      == FAIL))
 	return;
@@ -2599,6 +2610,47 @@ get_cmd_output_as_rettv(
 	}
     }
 
+    // When the command is a List, execute directly without the shell.
+    if (argvars[0].v_type == VAR_LIST)
+    {
+	list_T	*l = argvars[0].vval.v_list;
+
+	if (l == NULL || l->lv_len < 1)
+	{
+	    emsg(_(e_invalid_argument));
+	    goto errret;
+	}
+	if (build_argv_from_list(l, &argv, &argc) == FAIL)
+	    goto errret;
+	if (argc == 0 || *skipwhite((char_u *)argv[0]) == NUL)
+	{
+	    emsg(_(e_invalid_argument));
+	    goto errret;
+	}
+	use_argv = TRUE;
+
+	if (p_verbose > 3)
+	{
+	    int		i;
+	    garray_T	ga;
+
+	    verbose_enter();
+	    ga_init2(&ga, 1, 200);
+	    for (i = 0; i < argc; ++i)
+	    {
+		if (i > 0)
+		    ga_append(&ga, ' ');
+		ga_concat(&ga, (char_u *)argv[i]);
+	    }
+	    ga_append(&ga, NUL);
+	    smsg(_("Executing directly: \"%s\""), (char *)ga.ga_data);
+	    msg_putchar_attr('\n', 0);
+	    cursor_on();
+	    verbose_leave();
+	    ga_clear(&ga);
+	}
+    }
+
     // Omit SHELL_COOKED when invoked with ":silent".  Avoids that the shell
     // echoes typeahead, that messes up the display.
     if (!msg_silent)
@@ -2613,7 +2665,10 @@ get_cmd_output_as_rettv(
 	char_u		*end;
 	int		i;
 
-	res = get_cmd_output(tv_get_string(&argvars[0]), infile, flags, &len);
+	if (use_argv)
+	    res = mch_get_cmd_output_direct(argv, infile, flags, &len);
+	else
+	    res = get_cmd_output(tv_get_string(&argvars[0]), infile, flags, &len);
 	if (res == NULL)
 	    goto errret;
 
@@ -2653,8 +2708,11 @@ get_cmd_output_as_rettv(
     }
     else
     {
-	res = get_cmd_output(tv_get_string(&argvars[0]), infile, flags, NULL);
-#ifdef USE_CRNL
+	if (use_argv)
+	    res = mch_get_cmd_output_direct(argv, infile, flags, NULL);
+	else
+	    res = get_cmd_output(tv_get_string(&argvars[0]), infile, flags, NULL);
+#  ifdef USE_CRNL
 	// translate <CR><NL> into <NL>
 	if (res != NULL)
 	{
@@ -2669,12 +2727,19 @@ get_cmd_output_as_rettv(
 	    }
 	    *d = NUL;
 	}
-#endif
+#  endif
 	rettv->vval.v_string = res;
 	res = NULL;
     }
 
 errret:
+    if (argv != NULL)
+    {
+	int i;
+	for (i = 0; argv[i] != NULL; i++)
+	    vim_free(argv[i]);
+	vim_free(argv);
+    }
     if (infile != NULL)
     {
 	mch_remove(infile);

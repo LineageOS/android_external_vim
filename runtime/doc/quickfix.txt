@@ -1,4 +1,4 @@
-*quickfix.txt*  For Vim version 9.1.  Last change: 2025 Nov 09
+*quickfix.txt*  For Vim version 9.2.  Last change: 2026 May 28
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -491,8 +491,8 @@ entries parsed from lines.  The following shows how to use a custom
 
 EXECUTE A COMMAND IN ALL THE BUFFERS IN QUICKFIX OR LOCATION LIST:
 							*:cdo*
-:cdo[!] {cmd}		Execute {cmd} in each valid entry in the quickfix list.
-			It works like doing this: >
+:cdo[!] {cmd}		Execute {cmd} in each valid entry in the quickfix
+			list.  It works like doing this: >
 				:cfirst
 				:{cmd}
 				:cnext
@@ -624,6 +624,10 @@ can go back to the unfiltered list using the |:colder|/|:lolder| command.
 :cw[indow] [height]	Open the quickfix window when there are recognized
 			errors.  If the window is already open and there are
 			no recognized errors, close the window.
+
+			When opening the window and [height] is given, the
+			window becomes that high (if there is room).  When
+			[height] is omitted the window is made ten lines high.
 
 							*:lw* *:lwindow*
 :lw[indow] [height]	Same as ":cwindow", except use the window showing the
@@ -1654,6 +1658,22 @@ b/g:mypy_makeprg_params variable.  For example: >
 
 The global default is "--strict --ignore-missing-imports".
 
+PYRIGHT TYPE CHECKER					*compiler-pyright*
+
+Commonly used compiler options can be added to 'makeprg' by setting the
+b/g:pyright_makeprg_params variable.
+
+The global default is "pyright".
+
+TY TYPE CHECKER					*compiler-ty*
+
+Commonly used compiler options and executable can be set by the
+b/g:ty_makeprg variable.  For example: >
+
+	let b:ty_makeprg = "uv run ty"
+
+The global default is "ty --no-progress --color=never".
+
 RUFF LINTER						*compiler-ruff*
 
 Commonly used compiler options can be added to 'makeprg' by setting the
@@ -1801,9 +1821,9 @@ Basic items
 	%c		column number (finds a number representing character
 			column of the error, byte index, a <tab> is 1
 			character column)
-	%v		virtual column number (finds a number representing
-			screen column of the error (1 <tab> == 8 screen
-			columns))
+	%v		virtual column number (finds a number representing the
+			screen column of the error, where a <tab> is always 8
+			screen columns regardless of 'tabstop')
 	%k		end column number (finds a number representing
 			the character column of the error, byte index, or a
 			number representing screen end column of the error if
@@ -2015,9 +2035,9 @@ case they have to precede the letter, e.g. '%+A' or '%-G':
 	%-		do not include the matching multi-line in any output
 	%+		include the whole matching line in the %m error string
 
-One prefix is only useful in combination with '+' or '-', namely %G.  It parses
-over lines containing general information like compiler version strings or
-other headers that can be skipped.
+One prefix is only useful in combination with '+' or '-', namely %G.  It
+parses over lines containing general information like compiler version strings
+or other headers that can be skipped.
 	%-G		ignore this message
 	%+G		general message
 
@@ -2185,8 +2205,8 @@ prints information about entering a directory in the form "Making all in dir".
    Making all in dir2		  ./dir1/dir2
    Making all in dir2		  ./dir1/dir2
 
-   This can be solved by printing absolute directories in the "enter directory"
-   message or by printing "leave directory" messages.
+   This can be solved by printing absolute directories in the "enter
+   directory" message or by printing "leave directory" messages.
 
 To avoid this problem, ensure to print absolute directory names and "leave
 directory" messages.

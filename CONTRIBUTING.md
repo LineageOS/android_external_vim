@@ -12,10 +12,10 @@ A pull request has the advantage that it will trigger the Continuous
 Integration tests, you will be warned of problems (you can ignore the coverage
 warning, it's noisy).
 
-Please consider adding a test. All new functionality should be tested and bug
-fixes should be tested for regressions: the test should fail before the fix and
-pass after the fix. Look through recent patches for examples and find help
-with ":help testing". The tests are located under "src/testdir".
+Please always add a test, if possible. All new functionality should be tested
+and bug fixes should be tested for regressions: the test should fail before the
+fix and pass after the fix. Look through recent patches for examples and find
+help with ":help testing". The tests are located under "src/testdir".
 
 Contributions will be distributed with Vim under the Vim license. Providing a
 change to be included implies that you agree with this and your contribution
@@ -45,6 +45,15 @@ When merging PRs into Vim, the current maintainer @chrisbra usually adds missing
 `Signed-off-by` trailers for the author user name and email address as well for
 anybody that explicitly *ACK*s a pull request as a statement that those
 approvers are happy with that particular change.
+
+## Using AI
+
+When using AI for contributions, please disclose this. Any AI-generated code
+must follow the Vim code style. In particular, [test_codestyle.vim][18]
+must not report any failures. Check the CI output for any test failures.
+
+Ensure that changes are properly tested. Do not submit a single PR that
+addresses multiple unrelated issues.
 
 # Reporting issues
 
@@ -121,7 +130,7 @@ can be translated:
 - Menus, see [runtime/lang/README.txt][2]
 - Vim tutor, see [runtime/tutor/README.txt][3]
 - Manual pages, see [runtime/doc/\*.1][4] for examples
-- Installer, see [nsis/lang/README.txt][5]
+- Installer, see [nsis/lang/README.txt][5] in the [vim-win32-installer][20] repository
 
 The help files can be translated and made available separately.
 See https://www.vim.org/translations.php for examples.
@@ -138,8 +147,9 @@ For the recommended documentation style, please check [helphelp.txt][16].
 # I have a question
 
 If you have some question on the style guide, please contact the [vim-dev][0]
-mailing list. For other questions please use the [Vi Stack Exchange][8] website, the
-[vim-use][9] mailing list or make use of the [discussion][10] feature here at github.
+mailing list. For other questions you can join [`#vim`][19], use the 
+[Vi Stack Exchange][8] website, the [vim-use][9] mailing list or make use of the 
+[discussion][10] feature here at github.
 
 [todo list]: https://github.com/vim/vim/blob/master/runtime/doc/todo.txt
 [0]: http://www.vim.org/maillist.php#vim-dev
@@ -147,7 +157,7 @@ mailing list. For other questions please use the [Vi Stack Exchange][8] website,
 [2]: https://github.com/vim/vim/blob/master/runtime/lang/README.txt
 [3]: https://github.com/vim/vim/blob/master/runtime/tutor/README.txt
 [4]: https://github.com/vim/vim/blob/master/runtime/doc/vim.1
-[5]: https://github.com/vim/vim/blob/master/nsis/lang/README.txt
+[5]: https://github.com/vim/vim-win32-installer/blob/master/nsis/lang/README.txt
 [6]: https://github.com/vim/vim/discussions/13087
 [7]: https://github.com/vim/vim/blob/master/runtime/doc/develop.txt
 [8]: https://vi.stackexchange.com
@@ -160,3 +170,6 @@ mailing list. For other questions please use the [Vi Stack Exchange][8] website,
 [15]: https://en.wikipedia.org/wiki/Developer_Certificate_of_Origin
 [16]: https://github.com/vim/vim/blob/master/runtime/doc/helphelp.txt
 [17]: https://github.com/vim/vim/issues
+[18]: https://github.com/vim/vim/blob/master/src/testdir/test_codestyle.vim
+[19]: https://web.libera.chat/#vim
+[20]: https://github.com/vim/vim-win32-installer

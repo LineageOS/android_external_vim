@@ -6,6 +6,7 @@ CheckUnix
 CheckFeature job
 CheckWaylandCompositor
 CheckNotGui
+CheckEnv XDG_RUNTIME_DIR
 
 if !executable('wl-paste') || !executable('wl-copy')
   throw "Skipped: wl-clipboard is not available"
@@ -30,33 +31,12 @@ func s:PreTest()
   set cpm=wayland
 endfunc
 
-func s:SetupFocusStealing()
-  CheckFeature wayland_focus_steal
-  if !executable('wayland-info')
-    throw "Skipped: wayland-info program not available"
-  endif
-
-  " Starting a headless compositor won't expose a keyboard capability for its
-  " seat, so we must use the user's existing Wayland session if they are in one.
-  let $WAYLAND_DISPLAY = s:old_wayland_display
-
-  exe 'wlrestore! ' .. $WAYLAND_DISPLAY
-
-  " Check if we have keyboard capability for seat
-  if system("wayland-info -i wl_seat | grep capabilities") !~? "keyboard"
-    throw "Skipped: seat does not have keyboard"
-  endif
-
-  let $VIM_WAYLAND_FORCE_FS=1
-  wlrestore!
-endfunc
-
-func s:UnsetupFocusStealing()
-  unlet $VIM_WAYLAND_FORCE_FS
-endfunc
-
 func s:CheckClientserver()
   CheckFeature clientserver
+
+  if has('x11')
+      CheckEnv DISPLAY
+  endif
 
   if has('socketserver') && !has('x11')
     if v:servername == ""
@@ -249,14 +229,15 @@ func Test_wayland_mime_types_correct()
   call s:PreTest()
 
   let l:mimes = [
+        \ 'application/x-vim-enc-text',
         \ '_VIMENC_TEXT',
         \ '_VIM_TEXT',
+        \ 'application/x-vim-text',
         \ 'text/plain;charset=utf-8',
         \ 'text/plain',
         \ 'UTF8_STRING',
         \ 'STRING',
         \ 'TEXT',
-        \ 'application/x-vim-instance-' .. getpid()
         \ ]
 
   call setreg('+', 'text', 'c')
@@ -482,31 +463,6 @@ func Test_wayland_seat()
   set wlseat&
 endfunc
 
-" Test focus stealing
-func Test_wayland_focus_steal()
-  CheckFeature wayland_focus_steal
-  call s:PreTest()
-  call s:SetupFocusStealing()
-
-  call system('wl-copy regular')
-
-  call assert_equal('regular', getreg('+'))
-
-  call system('wl-copy -p primary')
-
-  call assert_equal('primary', getreg('*'))
-
-  call setreg('+', 'REGULAR')
-
-  call assert_equal('REGULAR', system('wl-paste -n'))
-
-  call setreg('*', 'PRIMARY')
-
-  call assert_equal('PRIMARY', system('wl-paste -p -n'))
-
-  call s:UnsetupFocusStealing()
-endfunc
-
 " Test when environment is not suitable for Wayland
 func Test_wayland_bad_environment()
   call s:PreTest()
@@ -559,32 +515,6 @@ func Test_wayland_lost_selection()
 
 endfunc
 
-" Same as above but for the focus stealing method
-func Test_wayland_lost_selection_focus_steal()
-  call s:PreTest()
-  call s:SetupFocusStealing()
-
-  call setreg('+', 'regular')
-  call setreg('*', 'primary')
-
-  call assert_equal('regular', getreg('+'))
-  call assert_equal('primary', getreg('*'))
-
-  call system('wl-copy overwrite')
-  call system('wl-copy -p overwrite')
-
-  call assert_equal('overwrite', getreg('+'))
-  call assert_equal('overwrite-primary', getreg('*'))
-
-  call setreg('+', 'regular')
-  call setreg('*', 'primary')
-
-  call assert_equal('regular', getreg('+'))
-  call assert_equal('primary', getreg('*'))
-
-  call s:UnsetupFocusStealing()
-endfunc
-
 " Test when there are no supported mime types for the selection
 func Test_wayland_no_mime_types_supported()
   call s:PreTest()
@@ -612,6 +542,14 @@ func Test_wayland_handle_large_data()
   call setreg('+', l:contents, 'c')
 
   call assert_equal(l:contents, system('wl-paste -n -t TEXT'))
+endfunc
+
+" Test for heap buffer overflow in wayland log handler
+func Test_wayland_protocol_error_overflow()
+  try
+    exe "wlrestore " .. repeat('X', 4096)
+  catch /^Vim(wlrestore):/
+  endtry
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

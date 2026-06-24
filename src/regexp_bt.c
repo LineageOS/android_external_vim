@@ -253,7 +253,7 @@ static int	one_exactly = FALSE;	// only do one char for EXACTLY
 
 // When making changes to classchars also change nfa_classcodes.
 static char_u	*classchars = (char_u *)".iIkKfFpPsSdDxXoOwWhHaAlLuU";
-static int	classcodes[] = {
+static const int classcodes[] = {
     ANY, IDENT, SIDENT, KWORD, SKWORD,
     FNAME, SFNAME, PRINT, SPRINT,
     WHITE, NWHITE, DIGIT, NDIGIT,
@@ -1689,7 +1689,7 @@ regatom(int *flagp)
 					  colnr_T vcol = 0;
 
 					  getvvcol(curwin, &curwin->w_cursor,
-							    NULL, NULL, &vcol);
+							 NULL, NULL, &vcol, 0);
 					  ++vcol;
 					  n = vcol;
 				      }
@@ -2497,6 +2497,9 @@ bt_regcomp(char_u *expr, int re_flags)
     if (r == NULL)
 	return NULL;
     r->re_in_use = FALSE;
+#ifdef DEBUG
+    r->regsz = regsize;
+#endif
 
     // Second pass: emit code.
     regcomp_start(expr, re_flags);
@@ -5188,11 +5191,11 @@ regdump(char_u *pattern, bt_regprog_T *r)
     char_u  *end = NULL;
     FILE    *f;
 
-#ifdef BT_REGEXP_LOG
+# ifdef BT_REGEXP_LOG
     f = fopen("bt_regexp_log.log", "a");
-#else
+# else
     f = stdout;
-#endif
+# endif
     if (f == NULL)
 	return;
     fprintf(f, "-------------------------------------\n\r\nregcomp(%s):\r\n", pattern);
@@ -5200,11 +5203,11 @@ regdump(char_u *pattern, bt_regprog_T *r)
     s = r->program + 1;
     // Loop until we find the END that isn't before a referred next (an END
     // can also appear in a NOMATCH operand).
-    while (op != END || s <= end)
+    while ((op != END || s <= end) && s < r->program + r->regsz)
     {
 	op = OP(s);
 	fprintf(f, "%2d%s", (int)(s - r->program), regprop(s)); // Where, what.
-	next = regnext(s);
+	next = (s + 3 <= r->program + r->regsz) ? regnext(s) : NULL;
 	if (next == NULL)	// Next ptr.
 	    fprintf(f, "(0)");
 	else
@@ -5230,14 +5233,22 @@ regdump(char_u *pattern, bt_regprog_T *r)
 	    s += 5;
 	}
 	s += 3;
+	if (op == MULTIBYTECODE)
+	{
+	    fprintf(f, " mbc=%d", utf_ptr2char(s));
+	    s += utfc_ptr2len(s);
+	}
 	if (op == ANYOF || op == ANYOF + ADD_NL
 		|| op == ANYBUT || op == ANYBUT + ADD_NL
 		|| op == EXACTLY)
 	{
 	    // Literal string, where present.
 	    fprintf(f, "\nxxxxxxxxx\n");
-	    while (*s != NUL)
-		fprintf(f, "%c", *s++);
+	    while (*s != NUL && s < r->program + r->regsz)
+	    {
+		fprintf(f, "%c", *s);
+		s += utfc_ptr2len(s);  // advance by full char including combining
+	    }
 	    fprintf(f, "\nxxxxxxxxx\n");
 	    s++;
 	}
@@ -5255,9 +5266,9 @@ regdump(char_u *pattern, bt_regprog_T *r)
 	fprintf(f, "must have \"%s\"", r->regmust);
     fprintf(f, "\r\n");
 
-#ifdef BT_REGEXP_LOG
+# ifdef BT_REGEXP_LOG
     fclose(f);
-#endif
+# endif
 }
 #endif	    // BT_REGEXP_DUMP
 
@@ -5514,7 +5525,7 @@ regprop(char_u *op)
       case MOPEN + 7:
       case MOPEN + 8:
       case MOPEN + 9:
-	buflen += sprintf(buf + buflen, "MOPEN%d", OP(op) - MOPEN);
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "MOPEN%d", OP(op) - MOPEN);
 	p = NULL;
 	break;
       case MCLOSE + 0:
@@ -5529,7 +5540,7 @@ regprop(char_u *op)
       case MCLOSE + 7:
       case MCLOSE + 8:
       case MCLOSE + 9:
-	buflen += sprintf(buf + buflen, "MCLOSE%d", OP(op) - MCLOSE);
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "MCLOSE%d", OP(op) - MCLOSE);
 	p = NULL;
 	break;
       case BACKREF + 1:
@@ -5541,7 +5552,7 @@ regprop(char_u *op)
       case BACKREF + 7:
       case BACKREF + 8:
       case BACKREF + 9:
-	buflen += sprintf(buf + buflen, "BACKREF%d", OP(op) - BACKREF);
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "BACKREF%d", OP(op) - BACKREF);
 	p = NULL;
 	break;
       case NOPEN:
@@ -5550,7 +5561,7 @@ regprop(char_u *op)
       case NCLOSE:
 	p = "NCLOSE";
 	break;
-#ifdef FEAT_SYN_HL
+# ifdef FEAT_SYN_HL
       case ZOPEN + 1:
       case ZOPEN + 2:
       case ZOPEN + 3:
@@ -5560,7 +5571,7 @@ regprop(char_u *op)
       case ZOPEN + 7:
       case ZOPEN + 8:
       case ZOPEN + 9:
-	buflen += sprintf(buf + buflen, "ZOPEN%d", OP(op) - ZOPEN);
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "ZOPEN%d", OP(op) - ZOPEN);
 	p = NULL;
 	break;
       case ZCLOSE + 1:
@@ -5572,7 +5583,7 @@ regprop(char_u *op)
       case ZCLOSE + 7:
       case ZCLOSE + 8:
       case ZCLOSE + 9:
-	buflen += sprintf(buf + buflen, "ZCLOSE%d", OP(op) - ZCLOSE);
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "ZCLOSE%d", OP(op) - ZCLOSE);
 	p = NULL;
 	break;
       case ZREF + 1:
@@ -5584,10 +5595,10 @@ regprop(char_u *op)
       case ZREF + 7:
       case ZREF + 8:
       case ZREF + 9:
-	buflen += sprintf(buf + buflen, "ZREF%d", OP(op) - ZREF);
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "ZREF%d", OP(op) - ZREF);
 	p = NULL;
 	break;
-#endif
+# endif
       case STAR:
 	p = "STAR";
 	break;
@@ -5625,7 +5636,7 @@ regprop(char_u *op)
       case BRACE_COMPLEX + 7:
       case BRACE_COMPLEX + 8:
       case BRACE_COMPLEX + 9:
-	buflen += sprintf(buf + buflen, "BRACE_COMPLEX%d", OP(op) - BRACE_COMPLEX);
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "BRACE_COMPLEX%d", OP(op) - BRACE_COMPLEX);
 	p = NULL;
 	break;
       case MULTIBYTECODE:
@@ -5635,12 +5646,12 @@ regprop(char_u *op)
 	p = "NEWL";
 	break;
       default:
-	buflen += sprintf(buf + buflen, "corrupt %d", OP(op));
+	buflen += vim_snprintf(buf + buflen, sizeof(buf) - buflen, "corrupt %d", OP(op));
 	p = NULL;
 	break;
     }
     if (p != NULL)
-	STRCPY(buf + buflen, p);
+	vim_strncpy((char_u *)buf + buflen, (char_u *)p, sizeof(buf) - buflen - 1);
     return (char_u *)buf;
 }
 #endif	    // DEBUG

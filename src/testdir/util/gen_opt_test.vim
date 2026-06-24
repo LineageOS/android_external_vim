@@ -24,6 +24,7 @@ while search("^'[^']*'.*\\n.*|global-local", 'W')
 endwhile
 call extend(global_locals, #{
       \ scrolloff: -1,
+      \ scrolloffpad: -1,
       \ sidescrolloff: -1,
       \ undolevels: -123456,
       \})
@@ -93,6 +94,7 @@ let test_values = {
       \ 'scroll': [[0, 1, 2, 15], [-1, 999]],
       \ 'scrolljump': [[-100, -1, 0, 1, 2, 15], [-101, 999]],
       \ 'scrolloff': [[0, 1, 8, 999], [-1]],
+      \ 'scrolloffpad': [[0, 1, 2, 3], [-1]],
       \ 'shiftwidth': [[0, 1, 8, 999], [-1]],
       \ 'showtabpanel': [[0, 1, 2], []],
       \ 'sidescroll': [[0, 1, 8, 999], [-1]],
@@ -236,7 +238,6 @@ let test_values = {
       \ 'helplang': [['', 'de', 'de,it'], ['xxx']],
       \ 'highlight': [['', 'e:Error'], ['xxx']],
       \ 'imactivatekey': [['', 'S-space'], ['xxx']],
-      \ 'isexpand': [['', '.,->', '/,/*,\\,'], [',,', '\\,,']],
       \ 'isfname': [['', '@', '@,48-52'], ['xxx', '@48']],
       \ 'isident': [['', '@', '@,48-52'], ['xxx', '@48']],
       \ 'iskeyword': [['', '@', '@,48-52'], ['xxx', '@48']],
@@ -248,11 +249,13 @@ let test_values = {
       \		['xxx', ':none', 'xxx:', 'x:non', 'y:mok3', 'z:kittty']],
       \ 'langmap': [['', 'xX', 'aA,bB'], ['xxx']],
       \ 'lispoptions': [['', 'expr:0', 'expr:1'], ['xxx', 'expr:x', 'expr:']],
-      \ 'listchars': [['', 'eol:x', 'tab:xy', 'tab:xyz', 'space:x',
-      \		'multispace:xxxy', 'lead:x', 'leadmultispace:xxxy', 'trail:x',
-      \		'extends:x', 'precedes:x', 'conceal:x', 'nbsp:x', 'eol:\\x24',
-      \		'eol:\\u21b5', 'eol:\\U000021b5', 'eol:x,space:y'],
-      \		['xxx', 'eol:']],
+      \ 'listchars': [['', 'eol:x', 'tab:xy', 'tab:xyz', 'space:x', 'lead:x',
+      \		'multispace:xxxy', 'tab:xy,leadtab:xyz', 'leadtab:xyz,tab:xy',
+      \		'leadmultispace:xxxy', 'trail:x', 'extends:x', 'precedes:x',
+      \		'conceal:x', 'eol:\\x24', 'eol:\\u21b5', 'eol:\\U000021b5',
+      \		'eol:x,space:y', 'nbsp:x'],
+      \		['xxx', 'eol:', 'leadtab:xyz', 'multispace:xxxy,leadtab:xyz',
+      \		'leadmultispace:xxxy,leadtab:xyz,multispace:yyyx']],
       \ 'matchpairs': [['', '(:)', '(:),<:>'], ['xxx']],
       \ 'maxsearchcount': [[1, 10, 100, 1000], [0, -1, 10000]],
       \ 'messagesopt': [['hit-enter,history:1', 'hit-enter,history:10000',
@@ -273,10 +276,14 @@ let test_values = {
       \		['xxx']],
       \ 'patchmode': [['', 'xxx', '.x'], [&backupext, '*']],
       \ 'previewpopup': [['', 'height:13', 'width:20', 'highlight:That',
-      \		'align:item', 'align:menu', 'border:on', 'border:off',
+      \		'border:on', 'border:off', 'border:round', 'border:single',
+      \		'border:double', 'border:ascii', 'close:on', 'close:off',
+      \		'resize:on', 'resize:off', 'shadow:on', 'shadow:off',
+      \		'borderhighlight:Title',
       \		'width:10,height:234,highlight:Mine'],
       \		['xxx', 'xxx:99', 'height:yes', 'width:no', 'align:xxx',
-      \		'border:maybe', 'border:1', 'border:']],
+      \		'border:maybe', 'border:1', 'border:', 'resize:xxx', 'close:xxx',
+      \		'shadow:xxx']],
       \ 'printmbfont': [['', 'r:some', 'b:some', 'i:some', 'o:some', 'c:yes',
       \		'c:no', 'a:yes', 'a:no', 'b:Bold,c:yes'],
       \		['xxx', 'xxx,c:yes', 'xxx:', 'xxx:,c:yes']],
@@ -286,6 +293,11 @@ let test_values = {
       \		'double,margin,shadow', 'custom:─;│;─;│;┌;┐;┘;└,shadow',
       \		'ascii,margin'],
       \		['xxx', 'margin', 'margin,shadow', 'custom:', 'custom:+;']],
+      \ 'pumopt': [['', 'border:single', 'border:double', 'border:ascii',
+      \		'height:10', 'width:20', 'maxwidth:30', 'opacity:50',
+      \		'border:double,margin,shadow',
+      \		'height:10,width:20,maxwidth:30,opacity:80'],
+      \		['xxx', 'opacity:200', 'opacity:-1', 'margin']],
       \ 'renderoptions': [[''], ['xxx']],
       \ 'rightleftcmd': [['search'], ['xxx']],
       \ 'rulerformat': [['', 'xxx'], ['%-', '%(', '%15(%%']],
@@ -295,6 +307,10 @@ let test_values = {
       \ 'sessionoptions': [['', 'blank', 'curdir', 'sesdir',
       \		'help,options,slash'],
       \		['xxx', 'curdir,sesdir']],
+      \ 'shellpipe': [[ '', '>', '>%s2>&1', '\|tee', '\|&tee', '2>&1\|tee', '%%'],
+      \		['%s%s%s', '%s%p%d']],
+      \ 'shellredir': [[ '', '>', '>%s2>&1', '\|tee', '\|&tee', '2>&1\|tee', '%%'],
+      \		['%s%s%s', '%s%p%d']],
       \ 'showcmdloc': [['', 'last', 'statusline', 'tabline'], ['xxx']],
       \ 'signcolumn': [['', 'auto', 'no', 'yes', 'number'], ['xxx', 'no,yes']],
       \ 'spellfile': [['', 'file.en.add', 'xxx.en.add,yyy.gb.add,zzz.ja.add',
@@ -309,6 +325,7 @@ let test_values = {
       \		['xxx', '-1', 'timeout:', 'best,double', 'double,fast']],
       \ 'splitkeep': [['', 'cursor', 'screen', 'topline'], ['xxx']],
       \ 'statusline': [['', 'xxx'], ['%$', '%{', '%{%', '%{%}', '%(', '%)']],
+      \ 'statuslineopt': [['', 'maxheight:1'], ['xxx', 'maxheight', 'fixedheight:3']],
       \ 'swapsync': [['', 'sync', 'fsync'], ['xxx']],
       \ 'switchbuf': [['', 'useopen', 'usetab', 'split', 'vsplit', 'newtab',
       \		'uselast', 'split,newtab'],
@@ -317,9 +334,11 @@ let test_values = {
       \ 'tabline': [['', 'xxx'], ['%$', '%{', '%{%', '%{%}', '%(', '%)']],
       \ 'tabpanel': [['', 'aaa', 'bbb'], []],
       \ 'tabpanelopt': [['', 'align:left', 'align:right', 'vert', 'columns:0',
-      \		'columns:20', 'columns:999'],
+      \		'columns:20', 'columns:999', 'scrollbar',
+      \		'columns:15,vert,scrollbar',
+      \		'align:right,columns:12,vert,scrollbar'],
       \		['xxx', 'align:', 'align:middle', 'colomns:', 'cols:10',
-      \		'cols:-1']],
+      \		'cols:-1', 'scroll', 'scrol', 'scrollbarx']],
       \ 'tagcase': [['followic', 'followscs', 'ignore', 'match', 'smart'],
       \		['', 'xxx', 'smart,match']],
       \ 'termencoding': [has('gui_gtk') ? [] : ['', 'utf-8'], ['xxx']],
@@ -350,10 +369,15 @@ let test_values = {
       \		['xxx']],
       \ 'wildmode': [['', 'full', 'longest', 'list', 'lastused', 'list:full',
       \		'noselect', 'noselect,full', 'noselect:lastused,full',
+      \		'noinsert', 'noinsert,full', 'noinsert:lastused,full',
       \		'full,longest', 'full,full,full,full'],
       \		['xxx', 'a4', 'full,full,full,full,full']],
       \ 'wildoptions': [['', 'tagfile', 'pum', 'fuzzy'], ['xxx']],
       \ 'winaltkeys': [['no', 'yes', 'menu'], ['', 'xxx']],
+      \ 'winhighlight': [['Search:Errormsg,Comment:String', 'Search:Comment', ''],
+      \		['xxx', ',', 'Search:Comment,', 'Search:Errormsg,Comment:String,',
+      \		':', 'Search:,', 'Search:', ',Search', ',Search:Test', 'S:,A:B',
+      \		',', ',S:']],
       \
       "\ skipped options
       \ 'luadll': [[], []],
@@ -370,6 +394,22 @@ let test_values = {
       \ 'othernum': [[-1, 0, 100], ['']],
       \ 'otherstring': [['', 'xxx'], []],
       \}
+
+if !has('clipboard')
+  " If +clipboard isn't enabled but +clipboard_provider is, then 'clipboard' is
+  " limited to "unnamed" and "unnamedplus"
+  let test_values['clipboard'] = [
+	\ ['', 'unnamed', 'unnamedplus'],
+	\ ['xxx', 'autoselect', 'exclude:\\%(']
+	\ ]
+endif
+
+if has('unix')
+  let test_values['termresize'] = [
+	\ ['', 'sigwinch', 'inband'],
+	\ ['xxx', 'sig']
+	\ ]
+endif
 
 " Two lists with values: values that pre- and post-processing in test.
 " Clear out t_WS: we don't want to resize the actual terminal.
@@ -516,7 +556,7 @@ catch
   " Append errors to test.log
   let error = $'Error: {v:exception} in {v:throwpoint}'
   echoc error
-  split test.log
+  split gen_opt_test.log
   call append('$', error)
   write
 endtry

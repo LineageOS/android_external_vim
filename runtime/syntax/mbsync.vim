@@ -3,6 +3,8 @@
 " Maintainer:	Pierrick Guillaume  <pguillaume@fymyte.com>
 " Last Change:	2025 Apr 13
 " 2025 Jun 04 by Vim project: match TLSType configuration variable
+" 2026 Jan 15 by Vim project: support TLSVersions keyword
+" 2026 May 20 by Vim project: handle sync keyword #20243
 "
 " Syntax support for mbsync config file
 
@@ -85,7 +87,9 @@ syn keyword mbsIAConfTLSTypeOpt None STARTTLS IMAPS contained
 syn match mbsIAConfStSSLType      '^SSLType\s\+\ze.*$'        contains=mbsIAConfItemK contained nextgroup=mbsIAConfTLSTypeOpt transparent
 syn match mbsIAConfStTLSType      '^TLSType\s\+\ze.*$'        contains=mbsIAConfItemK contained nextgroup=mbsIAConfTLSTypeOpt transparent
 syn match mbsIAConfSSLVersionsOpt '\%(SSLv3\|TLSv1\%(.[123]\)\?\)\%(\s\+\%(SSLv3\|TLSv1\%(.[123]\)\?\)\)*' contained
+syn match mbsIAConfTLSVersionsOpt '[+-]\d\.\d\(\s\+[+-]\d\.\d\)*' contained
 syn match mbsIAConfStSSLVersions  '^SSLVersions\s\+\ze.*$'    contains=mbsIAConfItemK contained nextgroup=mbsIAConfSSLVersionsOpt transparent
+syn match mbsIAConfStTLSVersions  '^TLSVersions\s\ze.*$'    contains=mbsIAConfItemK contained nextgroup=mbsIAConfTLSVersionsOpt transparent
 syn match mbsIAConfStSystemCertificates  '^SystemCertificates\s\+\ze.*$'    contains=mbsIAConfItemK contained nextgroup=mbsBool transparent
 syn match mbsIAConfStCertificateFile  '^CertificateFile\s\+\ze.*$'    contains=mbsIAConfItemK contained nextgroup=mbsPath transparent
 syn match mbsIAConfStClientCertificate  '^ClientCertificate\s\+\ze.*$'    contains=mbsIAConfItemK contained nextgroup=mbsPath transparent
@@ -95,9 +99,8 @@ syn match mbsIAConfStPipelineDepth '^PipelineDepth\s\+\ze.*$'  contains=mbsIACon
 syn match mbsIAConfStDisableExtensions '^DisableExtensions\?\s\+\ze.*$'  contains=mbsIAConfItemK contained nextgroup=mbsPath transparent
 
 syn cluster mbsIAConfItem contains=mbsIAConfSt.*
-
 syn keyword mbsIAConfItemK
-  \ IMAPAccount Host Port Timeout User UserCmd Pass PassCmd UseKeychain Tunnel
+  \ IMAPAccount Host Port Timeout User UserCmd Pass PassCmd UseKeychain Tunnel TLSVersions
   \ AuthMechs SSLType TLSType SSLVersions SystemCertificates CertificateFile ClientCertificate
   \ ClientKey CipherString PipelineDepth DisableExtension[s] contained
 
@@ -112,7 +115,6 @@ syn match mbsISConfStPathDelimiter '^PathDelimiter\s\+\ze.*$'   contains=mbsISCo
 syn match mbsISConfStSubscribedOnly '^SubscribedOnly\s\+\ze.*$'   contains=mbsISConfItemK contained nextgroup=mbsBool transparent
 
 syn cluster mbsISConfItem contains=mbsISConfSt.*
-
 syn keyword mbsISConfItemK  IMAPStore Account UseNamespace PathDelimiter SubscribedOnly contained
 
 syn region mbsIMAPStore start="^IMAPStore" end="^$" end="\%$" contains=@mbsGlobConfItem,mbsCommentL,@mbsISConfItem,mbsError transparent
@@ -131,7 +133,28 @@ syn match mbsCConfStPattern       '^Patterns\?\s\+\ze.*$'     contains=mbsCConfI
 syn match mbsCConfStMaxSize       '^MaxSize\s\+\ze.*$'        contains=mbsCConfItemK contained nextgroup=mbsSize transparent
 syn match mbsCConfStMaxMessages   '^MaxMessages\s\+\ze.*$'    contains=mbsCConfItemK contained nextgroup=mbsNumber transparent
 syn match mbsCConfStExpireUnread  '^ExpireUnread\s\+\ze.*$'   contains=mbsCConfItemK contained nextgroup=mbsBool transparent
-syn match mbsCConfSyncOpt 'None\|All\|\%(\s\+\%(Pull\|Push\|New\|ReNew\|Delete\|Flags\)\)\+' display contained
+" Properly matching mbsCConfSyncOpt:
+"
+" None is a special case. From mbsync's man page:
+"   "None may not be combined with any other operation."
+" Once "None" is out of the way, first try to match operations, including:
+"   - New, Old, Upgrade, Gone, Flags
+"   - ReNew (deprecated synonym for Upgrade)
+"   - Delete (deprecated synonym for Gone)
+"   - All and Full, since they can be combined with other flags
+" Then try to match the "second style" (as defined by mbsync's man page),
+" which is a concatenation of direction Flags (Pull/Push) and of the
+" operations seen above (New, Old, Upgrade/Renew, Gone/Delete, Flags, Full).
+" Note that while "PullFull" exists, "PullAll" is not handled by mbsync's
+" parser.
+" Last but not least, match "\s+%(All of the above, except None) as multiple
+" operations may be given to Sync.
+syn match mbsCConfSyncOpt /\v(
+  \None
+  \|%(Pull|Push|New|Old|Upgrade|ReNew|Gone|Delete|Flags|Full|All
+    \|%(Pull|Push)%(New|Old|Upgrade|ReNew|Gone|Delete|Flags|Full))
+  \%(\s+%(Pull|Push|New|Old|Upgrade|ReNew|Gone|Delete|Flags|Full|All
+        \|%(Pull|Push)%(New|Old|Upgrade|ReNew|Gone|Delete|Flags|Full)))*)$/ display contained
 syn match mbsCConfStSync          '^Sync\s\+\ze.*$'           contains=mbsCConfItemK contained nextgroup=mbsCConfSyncOpt transparent
 syn keyword mbsCConfManipOpt  None Far Near Both contained
 syn match mbsCConfStCreate        '^Create\s\+\ze.*$'         contains=mbsCConfItemK contained nextgroup=mbsCConfManipOpt transparent
@@ -199,6 +222,7 @@ hi def link mbsMdSConfSubFoldersOpt Keyword
 hi def link mbsIAConfItemK    Statement
 hi def link mbsIAConfTLSTypeOpt Keyword
 hi def link mbsIAConfSSLVersionsOpt Keyword
+hi def link mbsIAConfTLSVersionsOpt Keyword
 
 hi def link mbsISConfItemK    Statement
 

@@ -330,7 +330,7 @@ if test "$vim_cv_uname_output" = Darwin; then
 
      dnl Assume we don't want X11 unless it was specifically asked for
      dnl (--with-x) or Motif or GTK GUI is used.
-     if test -z "$with_x" -a "X$enable_gui" != Xmotif -a "X$enable_gui" != Xgtk2 -a "X$enable_gui" != Xgtk3; then
+     if test -z "$with_x" -a "X$enable_gui" != Xmotif -a "X$enable_gui" != Xgtk2 -a "X$enable_gui" != Xgtk3 -a "X$enable_gui" != Xgtk4; then
       with_x=no
      fi
   fi
@@ -2148,10 +2148,6 @@ if test "$enable_rubyinterp" = "yes" -o "$enable_rubyinterp" = "dynamic"; then
 	  RUBY_LIBS="$RUBY_LIBS -L$rubylibdir"
 	fi
 
-	if test "X$librubyarg" != "X"; then
-	  RUBY_LIBS="$librubyarg $RUBY_LIBS"
-	fi
-
 	dnl Here the Ruby LDFLAGS used to be added to LDFLAGS, but that turns
 	dnl out to cause trouble and was removed.
 
@@ -2166,6 +2162,19 @@ if test "$enable_rubyinterp" = "yes" -o "$enable_rubyinterp" = "dynamic"; then
 	  AC_DEFINE(DYNAMIC_RUBY)
 	  RUBY_CFLAGS="-DDYNAMIC_RUBY_DLL=\\\"$libruby_soname\\\" $RUBY_CFLAGS"
 	  RUBY_LIBS=
+	  dnl For dynamic Ruby keep only the library search path / runpath from
+	  dnl librubyarg so the dlopen()ed library can be found at runtime,
+	  dnl without adding -lruby and thus a hard dependency on the Ruby
+	  dnl library, which would defeat dynamic loading.
+	  for arg in $librubyarg; do
+	    case "$arg" in
+	      -L*|-R*|-Wl,-R*|-Wl,-rpath*) RUBY_LIBS="$RUBY_LIBS $arg" ;;
+	    esac
+	  done
+	  librubyarg=
+	fi
+	if test "X$librubyarg" != "X"; then
+	  RUBY_LIBS="$librubyarg $RUBY_LIBS"
 	fi
 	if test "X$CLANG_VERSION" != "X" -a "$rubyversion" -ge 30; then
 	  RUBY_CFLAGS="$RUBY_CFLAGS -fdeclspec"
@@ -2238,6 +2247,8 @@ if test "$enable_channel" = "yes"; then
 	AC_CHECK_LIB(network, socket)
   else
 	AC_CHECK_LIB(socket, socket)
+	dnl On Solaris we need the nsl library.
+	AC_CHECK_LIB(nsl, gethostbyname)
   fi
 
   AC_CACHE_CHECK([whether compiling with IPv6 networking is possible], [vim_cv_ipv6_networking],
@@ -2274,8 +2285,6 @@ if test "$enable_channel" = "yes"; then
     AC_DEFINE(FEAT_IPV6)
     AC_CHECK_FUNCS(inet_ntop)
   else
-    dnl On Solaris we need the nsl library.
-    AC_CHECK_LIB(nsl, gethostbyname)
     AC_CACHE_CHECK([whether compiling with IPv4 networking is possible], [vim_cv_ipv4_networking],
       [AC_LINK_IFELSE([AC_LANG_PROGRAM([
 #include <stdio.h>
@@ -2363,24 +2372,6 @@ if test "$enable_autoservername" = "yes"; then
   AC_DEFINE(FEAT_AUTOSERVERNAME)
 fi
 
-AC_MSG_CHECKING(--enable-socketserver argument)
-AC_ARG_ENABLE(socketserver,
-	[  --enable-socketserver Use sockets for clientserver communication.],
-	[enable_socketserver=$enableval],
-	AS_IF([test "x$features" = xtiny],
-			[enable_socketserver=no_auto
-			 AC_MSG_RESULT([cannot use socketserver with tiny features])],
-			[enable_socketserver=auto]))
-if test "$enable_socketserver" = "yes"; then
-  AC_DEFINE(WANT_SOCKETSERVER)
-  AC_MSG_RESULT([yes])
-elif test "$enable_socketserver" = "auto"; then
-  AC_DEFINE(MAYBE_SOCKETSERVER)
-  AC_MSG_RESULT([auto])
-elif test "$enable_socketserver" = "no"; then
-  AC_MSG_RESULT([no])
-fi
-
 AC_MSG_CHECKING(--enable-multibyte argument)
 AC_ARG_ENABLE(multibyte,
 	[  --enable-multibyte      Include multibyte editing support.], ,
@@ -2463,18 +2454,6 @@ if test "$with_wayland" = yes; then
   if "$PKG_CONFIG" --exists 'wayland-client'; then
     AC_MSG_RESULT([yes])
 
-    AC_MSG_CHECKING(--enable-wayland-focus-steal argument)
-    AC_ARG_ENABLE(wayland-focus-steal,
-		  [AS_HELP_STRING([--enable-wayland-focus-steal],
-                          [Include focus stealing support for Wayland clipboard.])],
-		  [enable_wayland_fs=$enableval],
-		  enable_wayland_fs="yes")
-
-    AS_IF([test "$enable_wayland_fs" = "yes"],
-          [AC_MSG_RESULT([yes])
-          AC_DEFINE(FEAT_WAYLAND_CLIPBOARD_FS)],
-          [AC_MSG_RESULT([no])])
-
     AC_DEFINE(HAVE_WAYLAND)
     WAYLAND_CPPFLAGS=`$PKG_CONFIG --cflags-only-I wayland-client`
     WAYLAND_CFLAGS=`$PKG_CONFIG --cflags-only-other wayland-client`
@@ -2490,14 +2469,6 @@ if test "$with_wayland" = yes; then
       objects/ext-data-control-v1.o \
       objects/wayland.o"
 
-    AS_IF([test "$enable_wayland_fs" = "yes"],
-          [AS_VAR_APPEND([WAYLAND_SRC], " \
-            auto/wayland/xdg-shell.c \
-            auto/wayland/primary-selection-unstable-v1.c")
-           AS_VAR_APPEND([WAYLAND_OBJ], " \
-            objects/xdg-shell.o \
-            objects/primary-selection-unstable-v1.o")])
-
     AC_SUBST(WAYLAND_CPPFLAGS)
     AC_SUBST(WAYLAND_CFLAGS)
     AC_SUBST(WAYLAND_LIBS)
@@ -2511,8 +2482,15 @@ CPPFLAGS=$cppflags_save
 CFLAGS=$cflags_save
 fi
 
+dnl GTK4 does not use X11 APIs directly, so skip X11 detection entirely.
+dnl This avoids pulling libICE/libSM/libX11/libXt into build dependencies
+dnl for GTK4-only builds, even when --with-x=yes is passed (e.g. by a
+dnl distro's default packaging script).
+if test "x$enable_gui" = "xgtk4"; then
+  with_x=no
+fi
 test -z "$with_x" && with_x=yes
-test "${enable_gui-yes}" != no -a "x$MACOS_X" != "xyes" -a "x$QNX" != "xyes" && with_x=yes
+test "${enable_gui-yes}" != no -a "x$MACOS_X" != "xyes" -a "x$QNX" != "xyes" -a "x$enable_gui" != "xgtk4" && with_x=yes
 if test "$with_x" = no; then
   AC_MSG_RESULT(defaulting to: don't HAVE_X11)
 else
@@ -2627,15 +2605,16 @@ else
 fi
 
 dnl Check if --with-x was given but it doesn't work.
-if test "x$with_x" = xno -a "x$with_x_arg" = xyes; then
+dnl GTK4 always forces with_x=no above, so don't treat that as a failure.
+if test "x$with_x" = xno -a "x$with_x_arg" = xyes -a "x$enable_gui" != "xgtk4"; then
     AC_MSG_ERROR([could not configure X])
 fi
 
-test "x$with_x" = xno -a "x$HAIKU" != "xyes" -a "x$MACOS_X" != "xyes" -a "x$QNX" != "xyes" && enable_gui=no
+test "x$with_x" = xno -a "x$HAIKU" != "xyes" -a "x$MACOS_X" != "xyes" -a "x$QNX" != "xyes" -a "x$enable_gui" != xgtk4 && enable_gui=no
 
 AC_MSG_CHECKING(--enable-gui argument)
 AC_ARG_ENABLE(gui,
- [  --enable-gui[=OPTS]       X11 GUI. [default=auto] [OPTS=auto/no/gtk2/gnome2/gtk3/motif/haiku/photon/carbon]], , enable_gui="auto")
+ [  --enable-gui[=OPTS]       X11 GUI. [default=auto] [OPTS=auto/no/gtk2/gnome2/gtk3/gtk4/motif/haiku/photon/carbon]], , enable_gui="auto")
 
 dnl Canonicalize the --enable-gui= argument so that it can be easily compared.
 dnl Do not use character classes for portability with old tools.
@@ -2645,6 +2624,7 @@ enable_gui_canon=`echo "_$enable_gui" | \
 dnl Skip everything by default.
 SKIP_GTK2=YES
 SKIP_GTK3=YES
+SKIP_GTK4=YES
 SKIP_GNOME=YES
 SKIP_MOTIF=YES
 SKIP_PHOTON=YES
@@ -2668,7 +2648,7 @@ elif test "x$QNX" = "xyes" -a "x$with_x" = "xno" ; then
     no)		AC_MSG_RESULT(no GUI support)
 		SKIP_PHOTON=YES ;;
     yes|""|auto) AC_MSG_RESULT(automatic GUI support)
-    		gui_auto=yes ;;
+		gui_auto=yes ;;
     photon)	AC_MSG_RESULT(Photon GUI support) ;;
     *)		AC_MSG_RESULT([Sorry, $enable_gui GUI is not supported])
 		SKIP_PHOTON=YES ;;
@@ -2678,7 +2658,7 @@ elif test "x$MACOS_X" = "xyes" -a "x$with_x" = "xno" ; then
   case "$enable_gui_canon" in
     no)		AC_MSG_RESULT(no GUI support) ;;
     yes|"")	AC_MSG_RESULT(yes - automatic GUI support)
-    		gui_auto=yes ;;
+		gui_auto=yes ;;
     auto)	AC_MSG_RESULT(auto - disable GUI support for Mac OS) ;;
     *)		AC_MSG_RESULT([Sorry, $enable_gui GUI is not supported]) ;;
   esac
@@ -2690,6 +2670,7 @@ else
 		gui_auto=yes
 		SKIP_GTK2=
 		SKIP_GTK3=
+		SKIP_GTK4=
 		SKIP_GNOME=
 		SKIP_MOTIF=;;
     gtk2)	AC_MSG_RESULT(GTK+ 2.x GUI support)
@@ -2699,6 +2680,8 @@ else
 		SKIP_GTK2=;;
     gtk3)	AC_MSG_RESULT(GTK+ 3.x GUI support)
 		SKIP_GTK3=;;
+    gtk4)	AC_MSG_RESULT(GTK 4.x GUI support)
+		SKIP_GTK4=;;
     motif)	AC_MSG_RESULT(Motif GUI support)
 		SKIP_MOTIF=;;
     *)		AC_MSG_RESULT([Sorry, $enable_gui GUI is not supported]) ;;
@@ -2729,6 +2712,30 @@ if test "x$SKIP_GNOME" != "xYES" -a "$enable_gui_canon" != "gnome2"; then
     SKIP_GNOME=YES
   fi
 fi
+
+if test "x$SKIP_GTK4" != "xYES" -a "$enable_gui_canon" != "gtk4"; then
+  AC_MSG_CHECKING(whether or not to look for GTK 4)
+  AC_ARG_ENABLE(gtk4-check,
+	[  --enable-gtk4-check     If auto-select GUI, check for GTK 4 [default=yes]],
+	, enable_gtk4_check="yes")
+  AC_MSG_RESULT($enable_gtk4_check)
+  if test "x$enable_gtk4_check" = "xno"; then
+    SKIP_GTK4=YES
+  fi
+fi
+
+if test "x$SKIP_GTK4" != "xYES" -a "$enable_gui_canon" = "gtk4"; then
+  AC_MSG_CHECKING(--enable-gtk4-hwaccel argument)
+  AC_ARG_ENABLE(gtk4-hwaccel,
+	[  --enable-gtk4-hwaccel  Use hardware accelerated rendering backend for GTK4 [default=no]],
+	, enable_gtk4_hwaccel="no")
+  AC_MSG_RESULT($enable_gtk4_hwaccel)
+
+  if test "x$enable_gtk4_hwaccel" = "xyes"; then
+    AC_DEFINE(USE_GTK4_SNAPSHOT)
+  fi
+fi
+
 
 if test "x$SKIP_GTK3" != "xYES" -a "$enable_gui_canon" != "gtk3"; then
   AC_MSG_CHECKING(whether or not to look for GTK+ 3)
@@ -2769,6 +2776,7 @@ AC_DEFUN(AM_PATH_GTK,
     AS_CASE([$min_gtk_version],
 	    [2.*], [gtk_pkg_name="gtk+-2.0"],
 	    [3.*], [gtk_pkg_name="gtk+-3.0"],
+	    [4.*], [gtk_pkg_name="gtk4"],
 		   [AC_MSG_FAILURE([The configure script does not know which pkg-config name to use for GTK $min_gtk_version"])])
 
     AC_MSG_CHECKING([for pkg-config $gtk_pkg_name])
@@ -2776,9 +2784,9 @@ AC_DEFUN(AM_PATH_GTK,
 	  [
 	     AC_MSG_RESULT(found)
 	     AC_MSG_CHECKING([for GTK - version >= $min_gtk_version])
-	     dnl We should be using PKG_CHECK_MODULES() instead of this hack.
-	     dnl But I guess the dependency on pkgconfig.m4 is not wanted or
-	     dnl something like that.
+dnl We should be using PKG_CHECK_MODULES() instead of this hack.
+dnl But I guess the dependency on pkgconfig.m4 is not wanted or
+dnl something like that.
 	     GTK_CPPFLAGS=`$PKG_CONFIG --cflags-only-I $gtk_pkg_name`
 	     GTK_CFLAGS=`$PKG_CONFIG --cflags-only-other $gtk_pkg_name`
 	     GTK_LIBDIR=`$PKG_CONFIG --libs-only-L $gtk_pkg_name`
@@ -2957,7 +2965,7 @@ AC_DEFUN([GNOME_INIT],[
 ])
 
 dnl ---------------------------------------------------------------------------
-dnl Check for GTK3. If it succeeds, skip the check for GTK2.
+dnl Check for GTK3. If it succeeds, skip the check for GTK2/GTK4
 dnl ---------------------------------------------------------------------------
 if test -z "$SKIP_GTK3"; then
   AC_MSG_CHECKING(--disable-gtktest argument)
@@ -2976,11 +2984,53 @@ if test -z "$SKIP_GTK3"; then
 		 GUI_INC_LOC="$GTK_CPPFLAGS"])
     if test -n "$GTK_CPPFLAGS"; then
       SKIP_GTK2=YES
+      SKIP_GTK4=YES
       SKIP_GNOME=YES
       SKIP_MOTIF=YES
       GUITYPE=GTK
       AC_SUBST(GTK_LIBNAME)
       AC_DEFINE(USE_GTK3)
+    fi
+  fi
+fi
+
+dnl ---------------------------------------------------------------------------
+dnl Check for GTK4. If it succeeds, skip the check for GTK3/GTK2.
+dnl ---------------------------------------------------------------------------
+if test -z "$SKIP_GTK4"; then
+  AC_MSG_CHECKING(--disable-gtktest argument)
+  AC_ARG_ENABLE(gtktest, [  --disable-gtktest       Do not try to compile and run a test GTK program],
+	, enable_gtktest=yes)
+  if test "x$enable_gtktest" = "xyes" ; then
+    AC_MSG_RESULT(gtk test enabled)
+  else
+    AC_MSG_RESULT(gtk test disabled)
+  fi
+
+  if test "x$PKG_CONFIG" != "xno"; then
+    AM_PATH_GTK(4.10.0,
+		[GUI_LIB_LOC="$GTK_LIBDIR"
+		 GTK_LIBNAME="$GTK_LIBS"
+		 GUI_INC_LOC="$GTK_CPPFLAGS"])
+    if test -n "$GTK_CPPFLAGS"; then
+      SKIP_GTK3=YES
+      SKIP_GTK2=YES
+      SKIP_GNOME=YES
+      SKIP_MOTIF=YES
+      GUITYPE=GTK4
+      AC_SUBST(GTK_LIBNAME)
+      AC_DEFINE(USE_GTK4)
+      dnl GTK4 does not use any X11 APIs directly.
+      dnl GTK4 itself links against X11 for its backend, so the
+      dnl dynamic linker resolves X11 symbols via GTK4's dependency.
+      X_LIBS=
+      X_PRE_LIBS=
+      X_EXTRA_LIBS=
+      X_LIB=
+      dnl automatically enable XIM for GTK4
+      if test "$enable_xim" = "auto"; then
+        enable_xim="yes"
+      fi
     fi
   fi
 fi
@@ -3239,8 +3289,9 @@ EOF
 fi
 
 dnl Look for XSMP support - but don't necessarily restrict it to X11 GUIs
-dnl use the X11 include path
-if test "$enable_xsmp" = "yes"; then
+dnl use the X11 include path.  Skip when X11 is not in use; USE_XSMP itself
+dnl requires HAVE_X11, so the header check would be wasted otherwise.
+if test "$enable_xsmp" = "yes" -a "x$with_x" != "xno"; then
   cppflags_save=$CPPFLAGS
   CPPFLAGS="$CPPFLAGS $X_CFLAGS"
   AC_CHECK_HEADERS(X11/SM/SMlib.h)
@@ -3422,17 +3473,8 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <stdio.h>], [int x __attribute__((u
 
 AC_HEADER_DIRENT
 
-dnl If sys/wait.h is not found it might still exist but not be POSIX
-dnl compliant. In that case we define HAVE_UNION_WAIT (for NeXT)
-if test $ac_cv_header_sys_wait_h = no; then
-  AC_MSG_CHECKING([for sys/wait.h that defines union wait])
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <sys/wait.h>],
-			[union wait xx, yy; xx = yy])],
-		AC_MSG_RESULT(yes)
-			AC_DEFINE(HAVE_SYS_WAIT_H)
-			AC_DEFINE(HAVE_UNION_WAIT),
-		AC_MSG_RESULT(no))
-fi
+AC_CHECK_HEADERS([sys/wait.h])
+AC_CHECK_FUNCS([waitpid])
 
 AC_CHECK_HEADERS(stdint.h stdlib.h string.h \
 	sys/select.h sys/utsname.h termcap.h fcntl.h \
@@ -3995,7 +4037,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 
 dnl Check for timer_create. It probably requires the 'rt' library.
 AC_CACHE_CHECK([for timer_create without -lrt], [vim_cv_timer_create], [
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([
   #include <time.h>
   ], [
     timer_create(CLOCK_MONOTONIC, NULL, NULL);
@@ -4009,7 +4051,7 @@ if test "x$vim_cv_timer_create" = "xno" ; then
   save_LIBS="$LIBS"
   LIBS="$LIBS -lrt"
   AC_CACHE_CHECK([for timer_create with -lrt], [vim_cv_timer_create_with_lrt], [
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([
     #include <time.h>
     ], [
       timer_create(CLOCK_MONOTONIC, NULL, NULL);

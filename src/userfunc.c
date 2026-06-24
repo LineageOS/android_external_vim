@@ -563,7 +563,7 @@ parse_argument_types(
 			{
 			    if (obj_members != NULL
 				    && STRCMP(aname,
-					obj_members[om].ocm_name) == 0)
+					obj_members[om].ocm_name.string) == 0)
 			    {
 				type = obj_members[om].ocm_type;
 				break;
@@ -1132,7 +1132,7 @@ get_function_body(
 	    {
 		if (!nesting_inline[nesting] && nesting_def[nesting]
 								&& p < cmd + 6)
-		    semsg(_(e_command_cannot_be_shortened_str), "enddef");
+		    semsg(_(e_command_cannot_be_shortened_str), cmd);
 		if (nesting-- == 0)
 		{
 		    char_u *nextcmd = NULL;
@@ -1405,7 +1405,7 @@ get_function_body(
 	    // For a :def function "python << EOF" concatenates all the lines,
 	    // to be used for the instruction later.
 	    ga_concat(&heredoc_ga, theline);
-	    ga_concat(&heredoc_ga, (char_u *)"\n");
+	    GA_CONCAT_LITERAL(&heredoc_ga, "\n");
 	    p = vim_strnsave((char_u *)"", 0);
 	}
 	else
@@ -2910,7 +2910,7 @@ funcdepth_increment(void)
 {
     if (funcdepth >= p_mfd)
     {
-	emsg(_(e_function_call_depth_is_higher_than_macfuncdepth));
+	emsg(_(e_function_call_depth_is_higher_than_maxfuncdepth));
 	return FAIL;
     }
     ++funcdepth;
@@ -3038,6 +3038,11 @@ call_user_func(
 
     if (fp->uf_def_status != UF_NOT_COMPILED)
     {
+	if (fp->uf_flags & FC_SANDBOX)
+	{
+	    using_sandbox = TRUE;
+	    ++sandbox;
+	}
 #ifdef FEAT_PROFILE
 	ufunc_T *caller = fc->fc_caller == NULL ? NULL : fc->fc_caller->fc_func;
 #endif
@@ -3050,6 +3055,8 @@ call_user_func(
 	if (call_def_function(fp, argcount, argvars, 0,
 		   funcexe->fe_partial, funcexe->fe_object, fc, rettv) == FAIL)
 	    retval = FCERR_FAILED;
+	if (using_sandbox)
+	    --sandbox;
 	funcdepth_decrement();
 #ifdef FEAT_PROFILE
 	if (do_profiling == PROF_YES && (fp->uf_profiling
@@ -4524,7 +4531,8 @@ trans_function_name_ext(
 	else if (lv.ll_tv->v_type == VAR_CLASS
 					     && lv.ll_tv->vval.v_class != NULL)
 	{
-	    name = vim_strsave(lv.ll_tv->vval.v_class->class_name);
+	    name = vim_strnsave(lv.ll_tv->vval.v_class->class_name.string,
+		lv.ll_tv->vval.v_class->class_name.length);
 	    *pp = end;
 	}
 	else if (lv.ll_tv->v_type == VAR_PARTIAL
@@ -5252,33 +5260,40 @@ define_function(
 	    char_u  *name_base = arg;
 	    int	    i;
 
-	    if (*arg == K_SPECIAL)
+	    // When defining a dictionary function with bracket notation
+	    // (e.g. obj['foo-bar']()), the key is a dictionary key and is not
+	    // required to follow function naming rules.  Skip the identifier
+	    // check in that case.
+	    if (arg != fudi.fd_newkey)
 	    {
-		name_base = vim_strchr(arg, '_');
-		if (name_base == NULL)
-		    name_base = arg + 3;
-		else
-		    ++name_base;
-	    }
-	    for (i = 0; name_base[i] != NUL && (i == 0
-					? eval_isnamec1(name_base[i])
-					: eval_isnamec(name_base[i])); ++i)
-		;
-	    if (name_base[i] != NUL)
-	    {
-		emsg_funcname(e_invalid_argument_str, arg);
-		goto ret_free;
-	    }
+		if (*arg == K_SPECIAL)
+		{
+		    name_base = vim_strchr(arg, '_');
+		    if (name_base == NULL)
+			name_base = arg + 3;
+		    else
+			++name_base;
+		}
+		for (i = 0; name_base[i] != NUL && (i == 0
+					    ? eval_isnamec1(name_base[i])
+					    : eval_isnamec(name_base[i])); ++i)
+		    ;
+		if (name_base[i] != NUL)
+		{
+		    emsg_funcname(e_invalid_argument_str, arg);
+		    goto ret_free;
+		}
 
-	    // In Vim9 script a function cannot have the same name as a
-	    // variable.
-	    if (vim9script && *arg == K_SPECIAL
-		&& eval_variable(name_base, i, 0, NULL,
-		    NULL, EVAL_VAR_NOAUTOLOAD + EVAL_VAR_IMPORT
+		// In Vim9 script a function cannot have the same name as a
+		// variable.
+		if (vim9script && *arg == K_SPECIAL
+		    && eval_variable(name_base, i, 0, NULL,
+			NULL, EVAL_VAR_NOAUTOLOAD + EVAL_VAR_IMPORT
 						     + EVAL_VAR_NO_FUNC) == OK)
-	    {
-		semsg(_(e_redefining_script_item_str), name_base);
-		goto ret_free;
+		{
+		    semsg(_(e_redefining_script_item_str), name_base);
+		    goto ret_free;
+		}
 	    }
 	}
 	// Disallow using the g: dict.
@@ -5597,18 +5612,27 @@ define_function(
 
 	if (fudi.fd_dict != NULL)
 	{
+	    char_u *func_name = vim_strnsave(name, namelen);
+
+	    if (func_name == NULL)
+	    {
+		VIM_CLEAR(fp);
+		goto erret;
+	    }
 	    if (fudi.fd_di == NULL)
 	    {
 		// add new dict entry
 		fudi.fd_di = dictitem_alloc(fudi.fd_newkey);
 		if (fudi.fd_di == NULL)
 		{
+		    vim_free(func_name);
 		    VIM_CLEAR(fp);
 		    goto erret;
 		}
 		if (dict_add(fudi.fd_dict, fudi.fd_di) == FAIL)
 		{
 		    vim_free(fudi.fd_di);
+		    vim_free(func_name);
 		    VIM_CLEAR(fp);
 		    goto erret;
 		}
@@ -5617,7 +5641,7 @@ define_function(
 		// overwrite existing dict entry
 		clear_tv(&fudi.fd_di->di_tv);
 	    fudi.fd_di->di_tv.v_type = VAR_FUNC;
-	    fudi.fd_di->di_tv.vval.v_string = vim_strnsave(name, namelen);
+	    fudi.fd_di->di_tv.vval.v_string = func_name;
 
 	    // behave like "dict" was used
 	    flags |= FC_DICT;
@@ -5955,7 +5979,7 @@ defcompile_function(ufunc_T *ufunc, class_T *cl)
 	(void)compile_def_function(ufunc, FALSE, compile_type, NULL);
     else
 	smsg(_("Function %s%s%s does not need compiling"),
-				cl != NULL ? cl->class_name : (char_u *)"",
+				cl != NULL ? cl->class_name.string : (char_u *)"",
 				cl != NULL ? (char_u *)"." : (char_u *)"",
 				ufunc->uf_name);
 }
@@ -6249,7 +6273,7 @@ ex_delfunction(exarg_T *eap)
     int		is_global = FALSE;
 
     p = eap->arg;
-    name = trans_function_name_ext(&p, &is_global, eap->skip, 0, &fudi,
+    name = trans_function_name_ext(&p, &is_global, eap->skip, TFN_NO_DECL, &fudi,
 							     NULL, NULL, NULL);
     vim_free(fudi.fd_newkey);
     if (name == NULL)
@@ -6799,7 +6823,7 @@ ex_call(exarg_T *eap)
 	return;
     }
 
-    tofree = trans_function_name_ext(&arg, NULL, FALSE, TFN_INT,
+    tofree = trans_function_name_ext(&arg, NULL, FALSE, TFN_INT | TFN_NO_DECL,
 			   &fudi, &partial, vim9script ? &type : NULL, &ufunc);
     if (fudi.fd_newkey != NULL)
     {

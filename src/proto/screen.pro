@@ -1,7 +1,7 @@
 /* screen.c */
 int conceal_cursor_line(win_T *wp);
 void conceal_check_cursor_line(int was_concealed);
-int get_wcr_attr(win_T *wp);
+int get_win_attr(win_T *wp);
 void win_draw_end(win_T *wp, int c1, int c2, int draw_margin, int row, int endrow, hlf_T hl);
 int compute_foldcolumn(win_T *wp, int col);
 size_t fill_foldcolumn(char_u *p, win_T *wp, int closed, linenr_T lnum);
@@ -48,7 +48,7 @@ void clearmode(void);
 void draw_tabline(void);
 void get_trans_bufname(buf_T *buf);
 int fillchar_status(int *attr, win_T *wp);
-int fillchar_vsep(int *attr, win_T *wp);
+int fillchar_vsep(int *attr, win_T *wp, int row);
 int redrawing(void);
 int messaging(void);
 void comp_col(void);

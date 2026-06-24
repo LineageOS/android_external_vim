@@ -3,7 +3,7 @@ vim9script
 # Vim runtime support library
 #
 # Maintainer:   The Vim Project <https://github.com/vim/vim>
-# Last Change:  2025 Aug 15
+# Last Change:  2026 May 30
 
 export def IsSafeExecutable(filetype: string, executable: string): bool
   if empty(exepath(executable))
@@ -51,7 +51,7 @@ if has('unix')
         execute $'silent !cmd /c start "" /b {args} {Redir()}' | redraw!
       enddef
     endif
-  elseif exists('$WSL_DISTRO_NAME') # use cmd.exe to start GUI apps in WSL
+  elseif exists('$WSL_DISTRO_NAME') && executable('cmd.exe') # use cmd.exe to start GUI apps in WSL
     export def Launch(args: string)
       const command = (args =~? '\v<\f+\.(exe|com|bat|cmd)>')
         ? $'cmd.exe /c start /b {args} {Redir()}'
@@ -60,15 +60,20 @@ if has('unix')
     enddef
   else
     export def Launch(args: string)
-      const fork = has('gui_running') ? '' : '&'
-      execute $':silent ! nohup {args} {Redir()} {fork}' | redraw!
+      # Use job_start, because using !xdg-open is known not to work with zsh
+      # ignore signals on exit
+      job_start(['sh', '-c', args], {'stoponexit': '', 'in_io': 'null', 'out_io': 'null', 'err_io': 'null'})
     enddef
   endif
 elseif has('win32')
   export def Launch(args: string)
-    const shell = (&shell =~? '\<cmd\.exe\>') ? '' : 'cmd.exe /c'
-    const quotes = empty(shell) ? '' : '""'
-    execute $'silent ! {shell} start {quotes} /b {args} {Redir()}' | redraw!
+    try
+      execute ':silent !start' args | redraw!
+    catch /^Vim(!):E371:/
+      echohl ErrorMsg
+      echom "dist#vim9#Launch(): can not start" args
+      echohl None
+    endtry
   enddef
 else
   export def Launch(dummy: string)
@@ -81,7 +86,10 @@ var os_viewer = null_string
 if has('win32unix')
   # (cyg)start suffices
   os_viewer = ''
-# Windows / WSL
+# Windows
+elseif has('win32')
+  os_viewer = '' # Use :!start
+# WSL
 elseif executable('explorer.exe')
   os_viewer = 'explorer.exe'
 # Linux / BSD
@@ -123,10 +131,18 @@ enddef
 export def Open(file: string)
   # disable shellslash for shellescape, required on Windows #17995
   if exists('+shellslash') && &shellslash
-    &shellslash = false
     defer setbufvar('%', '&shellslash', true)
+    &shellslash = false
   endif
-  Launch($"{Viewer()} {shellescape(file, 1)}")
+  if &shell == 'pwsh' || &shell == 'powershell'
+    defer setbufvar('%', '&shell', &shell)
+    setlocal shell&
+  endif
+  if has('unix') && !has('win32unix') && !exists('$WSL_DISTRO_NAME')
+    Launch($"{Viewer()} {shellescape(file)}")
+  else
+    Launch($"{Viewer()} {shellescape(file, 1)}")
+  endif
 enddef
 
 # Uncomment this line to check for compilation errors early

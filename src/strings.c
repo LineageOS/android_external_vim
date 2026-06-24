@@ -156,9 +156,9 @@ vim_strsave_shellescape(char_u *string, int do_special, int do_newline)
     int		fish_like;
     char_u	*shname;
     int		powershell;
-# ifdef MSWIN
+#ifdef MSWIN
     int		double_quotes;
-# endif
+#endif
 
     // Only csh and similar shells expand '!' within single quotes.  For sh and
     // the like we must not put a backslash before it, it will be taken
@@ -173,24 +173,24 @@ vim_strsave_shellescape(char_u *string, int do_special, int do_newline)
     // PowerShell uses its own version for quoting single quotes
     shname = gettail(p_sh);
     powershell = strstr((char *)shname, "pwsh") != NULL;
-# ifdef MSWIN
+#ifdef MSWIN
     powershell = powershell || strstr((char *)shname, "powershell") != NULL;
     // PowerShell only accepts single quotes so override shellslash.
     double_quotes = !powershell && !p_ssl;
-# endif
+#endif
 
     // First count the number of extra bytes required.
     length = (unsigned)STRLEN(string) + 3;  // two quotes and a trailing NUL
     for (p = string; *p != NUL; MB_PTR_ADV(p))
     {
-# ifdef MSWIN
+#ifdef MSWIN
 	if (double_quotes)
 	{
 	    if (*p == '"')
 		++length;		// " -> ""
 	}
 	else
-# endif
+#endif
 	if (*p == '\'')
 	{
 	    if (powershell)
@@ -221,16 +221,16 @@ vim_strsave_shellescape(char_u *string, int do_special, int do_newline)
 	d = escaped_string;
 
 	// add opening quote
-# ifdef MSWIN
+#ifdef MSWIN
 	if (double_quotes)
 	    *d++ = '"';
 	else
-# endif
+#endif
 	    *d++ = '\'';
 
 	for (p = string; *p != NUL; )
 	{
-# ifdef MSWIN
+#ifdef MSWIN
 	    if (double_quotes)
 	    {
 		if (*p == '"')
@@ -242,7 +242,7 @@ vim_strsave_shellescape(char_u *string, int do_special, int do_newline)
 		}
 	    }
 	    else
-# endif
+#endif
 	    if (*p == '\'')
 	    {
 		if (powershell)
@@ -288,11 +288,11 @@ vim_strsave_shellescape(char_u *string, int do_special, int do_newline)
 	}
 
 	// add terminating quote and finish with a NUL
-# ifdef MSWIN
+#ifdef MSWIN
 	if (double_quotes)
 	    *d++ = '"';
 	else
-# endif
+#endif
 	    *d++ = '\'';
 	*d = NUL;
     }
@@ -626,6 +626,8 @@ vim_strchr(char_u *string, int c)
     int		b;
 
     p = string;
+    if (enc_utf8 && c > 0 && c < 0x80)
+	return vim_strbyte(string, c);
     if (enc_utf8 && c >= 0x80)
     {
 	while (*p != NUL)
@@ -1107,8 +1109,10 @@ byteidx_common(typval_T *argvars, typval_T *rettv, int comp)
 	    int c = (clen > 1) ? utf_ptr2char(t) : *t;
 	    if (c > 0xFFFF)
 		idx--;
+	    if (idx > 0)
+		t += clen;
 	}
-	if (idx > 0)
+	else if (idx > 0)
 	    t += ptr2len(t);
     }
     rettv->vval.v_number = (varnumber_T)(t - str);
@@ -1197,22 +1201,32 @@ f_charidx(typval_T *argvars, typval_T *rettv)
 /*
  * Convert the string "str", from encoding "from" to encoding "to".
  */
-    static char_u *
-convert_string(char_u *str, char_u *from, char_u *to)
+    static int
+convert_string(string_T *str, char_u *from, char_u *to, string_T *ret)
 {
     vimconv_T	vimconv;
 
     vimconv.vc_type = CONV_NONE;
     if (convert_setup(&vimconv, from, to) == FAIL)
-	return NULL;
+	return FAIL;
     vimconv.vc_fail = TRUE;
     if (vimconv.vc_type == CONV_NONE)
-	str = vim_strsave(str);
+    {
+	ret->string = vim_strnsave(str->string, str->length);
+	if (ret->string == NULL)
+	    ret->length = 0;
+	else
+	    ret->length = str->length;
+    }
     else
-	str = string_convert(&vimconv, str, NULL);
+    {
+	int len = (int)str->length;
+	ret->string = string_convert(&vimconv, str->string, &len);
+	ret->length = len;
+    }
     convert_setup(&vimconv, NULL, NULL);
 
-    return str;
+    return (ret->string == NULL) ? FAIL : OK;
 }
 
 /*
@@ -1221,58 +1235,189 @@ convert_string(char_u *str, char_u *from, char_u *to)
     static void
 blob_from_string(char_u *str, blob_T *blob)
 {
-    char_u  *p;
+    int	    len = (int)STRLEN(str);
+    char_u  *dest;
 
-    for (p = str; *p != NUL; ++p)
-    {
-	// Translate newlines in the string to NUL character
-	ga_append(&blob->bv_ga, (*p == NL) ? NUL : (int)*p);
-    }
+    if (len == 0)
+	return;
+    if (ga_grow(&blob->bv_ga, len) == FAIL)
+	return;
+    dest = (char_u *)blob->bv_ga.ga_data + blob->bv_ga.ga_len;
+    mch_memmove(dest, str, (size_t)len);
+    // Translate newlines in the string to NUL characters
+    for (int i = 0; i < len; ++i)
+	if (dest[i] == NL)
+	    dest[i] = NUL;
+    blob->bv_ga.ga_len += len;
 }
 
 /*
  * Return a string created from the bytes in blob starting at "start_idx".
  * A NL character in the blob indicates end of string.
  * A NUL character in the blob is translated to a NL.
+ * If a newline is followed by another newline (empty line), then an empty
+ * allocated string is returned and "start_idx" is moved forward by one byte.
  * On return, "start_idx" points to next byte to process in blob.
  */
-    static char_u *
-string_from_blob(blob_T *blob, long *start_idx)
+    static int
+string_from_blob(blob_T *blob, long *start_idx, string_T *ret)
 {
-    garray_T	str_ga;
-    long	blen;
-    int		idx;
+    long	blen = blob_len(blob);
+    long	start = *start_idx;
+    char_u	*src;
+    char_u	*nl;
+    long	line_len;
 
-    ga_init2(&str_ga, sizeof(char), 80);
-
-    blen = blob_len(blob);
-
-    for (idx = *start_idx; idx < blen; idx++)
+    if (start >= blen)
     {
-	char_u byte = (char_u)blob_get(blob, idx);
-	if (byte == NL)
-	{
-	    idx++;
-	    break;
-	}
-
-	if (byte == NUL)
-	    byte = NL;
-
-	ga_append(&str_ga, byte);
+	ret->string = vim_strsave((char_u *)"");
+	ret->length = 0;
+	*start_idx = blen;
+	return (ret->string == NULL) ? FAIL : OK;
     }
 
-    char_u *ret_str = vim_strnsave(str_ga.ga_data, str_ga.ga_len);
-    *start_idx = idx;
+    src = (char_u *)blob->bv_ga.ga_data + start;
+    nl = (char_u *)memchr(src, NL, (size_t)(blen - start));
+    line_len = (nl == NULL) ? (blen - start) : (long)(nl - src);
 
-    ga_clear(&str_ga);
-    return ret_str;
+    ret->string = alloc(line_len + 1);
+    if (ret->string == NULL)
+    {
+	ret->length = 0;
+	return FAIL;
+    }
+    if (line_len > 0)
+	mch_memmove(ret->string, src, (size_t)line_len);
+    ret->string[line_len] = NUL;
+    ret->length = (size_t)line_len;
+
+    // A NUL byte in the blob represents a NL in the resulting string.
+    for (long i = 0; i < line_len; i++)
+	if (ret->string[i] == NUL)
+	    ret->string[i] = NL;
+
+    *start_idx = start + line_len + (nl != NULL ? 1 : 0);
+    return OK;
+}
+
+/*
+ * Normalize encoding name for iconv by adding hyphens.
+ * For example: "ucs2be" -> "ucs-2be", "utf16le" -> "utf-16le"
+ * Returns allocated string or NULL on allocation failure.
+ */
+    static char_u *
+normalize_encoding_name(char_u *enc_skipped)
+{
+    char_u *from_encoding_raw = alloc(STRLEN(enc_skipped) + 3);
+    if (from_encoding_raw == NULL)
+	return NULL;
+
+    char_u *s = enc_skipped;
+    char_u *pe = from_encoding_raw;
+
+    // Convert to lowercase and replace '_' with '-'
+    while (*s != NUL)
+    {
+	if (*s == '_')
+	    *pe++ = '-';
+	else
+	    *pe++ = TOLOWER_ASC(*s);
+	++s;
+    }
+    *pe = NUL;
+
+    // Add hyphen before digit: "ucs2be" -> "ucs-2be", "utf16le" -> "utf-16le"
+    char_u *p = from_encoding_raw;
+    if ((STRNCMP(p, "ucs", 3) == 0 && VIM_ISDIGIT(p[3]) && p[3] != NUL && p[4] != '-') ||
+	(STRNCMP(p, "utf", 3) == 0 && VIM_ISDIGIT(p[3]) && p[3] != NUL && p[4] != '-'))
+    {
+	// Insert hyphen after "ucs" or "utf": "ucs2" -> "ucs-2"
+	mch_memmove(p + 4, p + 3, STRLEN(p + 3) + 1);
+	p[3] = '-';
+    }
+
+    return from_encoding_raw;
 }
 
 /*
  * "blob2str()" function
  * Converts a blob to a string, ensuring valid UTF-8 encoding.
  */
+    static void
+append_converted_string_to_list(
+	string_T *converted,
+	int validate_utf8,
+	list_T *list,
+	char_u *from_encoding)
+{
+    if (converted->string != NULL)
+    {
+	// After conversion, the output is a valid UTF-8 string (NUL-terminated)
+	// Split by newlines and add to list
+	char_u *p = converted->string;
+	char_u *end = converted->string + converted->length;
+	while (p < end)
+	{
+	    string_T	line;
+	    char_u	*line_start = p;
+
+	    while (p < end && *p != NL)
+		p++;
+
+	    // Add this line to the result list
+	    line.length = (size_t)(p - line_start);
+	    line.string = vim_strnsave(line_start, line.length);
+	    if (line.string != NULL)
+	    {
+		if (validate_utf8 && !utf_valid_string(line.string, NULL))
+		{
+		    vim_free(line.string);
+		    semsg(_(e_str_encoding_from_failed), p_enc);
+		    vim_free(converted->string);
+		    return; // Stop processing
+		}
+		if (list_append_string(list, line.string, (int)line.length) == FAIL)
+		{
+		    vim_free(line.string);
+		    vim_free(converted->string);
+		    return; // Stop processing on append failure
+		}
+		vim_free(line.string);
+	    }
+	    else
+	    {
+		// Allocation failure: report error and stop processing
+		emsg(_(e_out_of_memory));
+		vim_free(converted->string);
+		return;
+	    }
+
+	    if (*p == NL)
+		p++;
+	}
+	vim_free(converted->string);
+    }
+    else
+    {
+	semsg(_(e_str_encoding_from_failed), from_encoding);
+    }
+}
+
+    static int
+append_validated_line_to_list(string_T *line, int validate_utf8, list_T *list)
+{
+    if (validate_utf8 && !utf_valid_string(line->string, NULL))
+    {
+	semsg(_(e_str_encoding_from_failed), p_enc);
+	vim_free(line->string);
+	return FAIL;
+    }
+
+    int ret = list_append_string(list, line->string, (int)line->length);
+    vim_free(line->string);
+    return ret;
+}
+
     void
 f_blob2str(typval_T *argvars, typval_T *rettv)
 {
@@ -1294,6 +1439,7 @@ f_blob2str(typval_T *argvars, typval_T *rettv)
     blen = blob_len(blob);
 
     char_u	*from_encoding = NULL;
+    char_u	*from_encoding_raw = NULL;  // Encoding name with endianness preserved for iconv
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
 	dict_T *d = argvars[1].vval.v_dict;
@@ -1301,7 +1447,20 @@ f_blob2str(typval_T *argvars, typval_T *rettv)
 	{
 	    char_u *enc = dict_get_string(d, "encoding", FALSE);
 	    if (enc != NULL)
-		from_encoding = enc_canonize(enc_skip(enc));
+	    {
+		char_u *enc_skipped = enc_skip(enc);
+		from_encoding = enc_canonize(enc_skipped);
+
+		// For iconv, preserve the endianness suffix by creating a normalized
+		// version with hyphens: "ucs2be" -> "ucs-2be", "utf16le" -> "utf-16le"
+		from_encoding_raw = normalize_encoding_name(enc_skipped);
+		if (from_encoding_raw == NULL)
+		{
+		    emsg(_(e_out_of_memory));
+		    VIM_CLEAR(from_encoding);
+		    return;
+		}
+	    }
 	}
     }
 
@@ -1311,50 +1470,94 @@ f_blob2str(typval_T *argvars, typval_T *rettv)
     if (from_encoding != NULL && STRCMP(from_encoding, "none") == 0)
     {
 	validate_utf8 = FALSE;
-	vim_free(from_encoding);
-	from_encoding = NULL;
+	VIM_CLEAR(from_encoding);
+	VIM_CLEAR(from_encoding_raw);
     }
 
-    idx = 0;
-    while (idx < blen)
+    // Special handling for UTF-16/UCS-2/UTF-32/UCS-4 encodings: convert entire blob before splitting by newlines
+    int from_prop = 0;
+    if (from_encoding != NULL)
+	from_prop = enc_canon_props(from_encoding);
+    if (from_encoding != NULL && (from_prop & (ENC_2BYTE | ENC_4BYTE | ENC_2WORD)))
     {
-	char_u	*str;
-	char_u	*converted_str;
-
-	str = string_from_blob(blob, &idx);
-	if (str == NULL)
-	    break;
-
-	converted_str = str;
-	if (from_encoding != NULL)
+	// Build a temporary buffer from the blob as a whole
+	// Don't use string_from_blob() because it treats NUL as line separator
+	garray_T blob_ga;
+	int nul_size = (from_prop & ENC_4BYTE) ? 4 : 2;
+	ga_init2(&blob_ga, 1, blen + nul_size);
+	if (ga_grow(&blob_ga, blen + nul_size) == OK)
 	{
-	    converted_str = convert_string(str, from_encoding, p_enc);
-	    vim_free(str);
-	    if (converted_str == NULL)
-	    {
-		semsg(_(e_str_encoding_from_failed), from_encoding);
-		goto done;
-	    }
+	    if (blen > 0)
+		mch_memmove(blob_ga.ga_data, blob->bv_ga.ga_data, (size_t)blen);
+	    // NUL terminator (2 bytes for UTF-16/UCS-2, 4 bytes for UTF-32/UCS-4)
+	    vim_memset((char_u *)blob_ga.ga_data + blen, 0, (size_t)nul_size);
+	    blob_ga.ga_len = blen + nul_size;
 	}
 
-	if (validate_utf8)
+	// Convert the entire blob at once
+	vimconv_T vimconv;
+	vimconv.vc_type = CONV_NONE;
+	// Use raw encoding name for iconv to preserve endianness (utf-16be vs utf-16)
+	// from_encoding_raw is guaranteed non-NULL whenever from_encoding != NULL
+	if (convert_setup_ext(&vimconv, from_encoding_raw, FALSE, p_enc, FALSE) == FAIL)
 	{
-	    if (!utf_valid_string(converted_str, NULL))
-	    {
-		semsg(_(e_str_encoding_from_failed), p_enc);
-		vim_free(converted_str);
-		goto done;
-	    }
+	    ga_clear(&blob_ga);
+	    semsg(_(e_str_encoding_from_failed), from_encoding);
+	    goto done;
 	}
+	vimconv.vc_fail = TRUE;
 
-	int ret = list_append_string(rettv->vval.v_list, converted_str, -1);
-	vim_free(converted_str);
-	if (ret == FAIL)
-	    break;
+	// Use string_convert_ext with explicit input length
+	string_T    converted;
+
+	int len = blen;
+	converted.string =
+	    string_convert_ext(&vimconv, (char_u *)blob_ga.ga_data, &len, NULL);
+	converted.length = len;
+	convert_setup(&vimconv, NULL, NULL);
+	ga_clear(&blob_ga);
+	append_converted_string_to_list(&converted, validate_utf8, rettv->vval.v_list, from_encoding);
     }
+    else
+    {
+	// Original logic for non-UTF-16 encodings
+	idx = 0;
+	while (idx < blen)
+	{
+	    string_T	str;
+
+	    if (string_from_blob(blob, &idx, &str) != OK)
+		break;
+
+	    if (from_encoding != NULL)
+	    {
+		// from_encoding_raw is guaranteed non-NULL whenever from_encoding != NULL
+		int	    res;
+		string_T    converted;
+
+		res = convert_string(&str, from_encoding_raw, p_enc, &converted);
+		vim_free(str.string);
+		if (res != OK)
+		{
+		    semsg(_(e_str_encoding_from_failed), from_encoding);
+		    goto done;
+		}
+		str.string = converted.string;
+		str.length = converted.length;
+	    }
+
+	    if (append_validated_line_to_list(&str, validate_utf8, rettv->vval.v_list) == FAIL)
+		goto done;
+	}
+    }
+
+    // If the blob ends with a newline, we need to add another empty string.
+    if (blen > 0 && blob_get(blob, blen - 1) == NL)
+	list_append_string(rettv->vval.v_list, (char_u *)"", 0);
 
 done:
     vim_free(from_encoding);
+    vim_free(from_encoding_raw);
 }
 
 /*
@@ -1381,6 +1584,7 @@ f_str2blob(typval_T *argvars, typval_T *rettv)
 	return;
 
     char_u	*to_encoding = NULL;
+    char_u	*to_encoding_raw = NULL;  // Encoding name with endianness preserved for iconv
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
 	dict_T *d = argvars[1].vval.v_dict;
@@ -1388,43 +1592,144 @@ f_str2blob(typval_T *argvars, typval_T *rettv)
 	{
 	    char_u *enc = dict_get_string(d, "encoding", FALSE);
 	    if (enc != NULL)
-		to_encoding = enc_canonize(enc_skip(enc));
+	    {
+		char_u *enc_skipped = enc_skip(enc);
+		to_encoding = enc_canonize(enc_skipped);
+
+		// For iconv, preserve the endianness suffix by creating a
+		// normalized version with hyphens: "utf16le" -> "utf-16le"
+		to_encoding_raw = normalize_encoding_name(enc_skipped);
+		if (to_encoding_raw == NULL)
+		{
+		    emsg(_(e_out_of_memory));
+		    VIM_CLEAR(to_encoding);
+		    return;
+		}
+	    }
 	}
     }
 
-    FOR_ALL_LIST_ITEMS(list, li)
+    // Special handling for UTF-16/UCS-2/UTF-32/UCS-4 target encodings: join the
+    // list items with a newline and convert the whole string at once, so that
+    // the wide-encoded newline separators and embedded NUL bytes are preserved
+    // (mirrors blob2str()).  convert_string() cannot be used here because it
+    // treats every Unicode encoding as utf-8, leaving the bytes unconverted.
+    int to_prop = 0;
+    if (to_encoding != NULL)
+	to_prop = enc_canon_props(to_encoding);
+    if (to_encoding != NULL && (to_prop & (ENC_2BYTE | ENC_4BYTE | ENC_2WORD)))
     {
-	if (li->li_tv.v_type != VAR_STRING)
-	    continue;
+	garray_T	str_ga;
 
-	char_u	*str = li->li_tv.vval.v_string;
-
-	if (str == NULL)
-	    str = (char_u *)"";
-
-	if (to_encoding != NULL)
+	ga_init2(&str_ga, 1, 256);
+	FOR_ALL_LIST_ITEMS(list, li)
 	{
-	    str = convert_string(str, p_enc, to_encoding);
-	    if (str == NULL)
+	    char_u *s;
+
+	    if (li->li_tv.v_type != VAR_STRING)
+		continue;
+
+	    s = li->li_tv.vval.v_string;
+
+	    // Each list string item is separated by a newline in the blob
+	    if (li != list->lv_first)
+		ga_append(&str_ga, NL);
+	    if (s != NULL && *s != NUL)
+	    {
+		int slen = (int)STRLEN(s);
+
+		if (ga_grow(&str_ga, slen) == FAIL)
+		{
+		    ga_clear(&str_ga);
+		    goto done;
+		}
+		mch_memmove((char_u *)str_ga.ga_data + str_ga.ga_len, s,
+								(size_t)slen);
+		str_ga.ga_len += slen;
+	    }
+	}
+
+	if (str_ga.ga_len > 0)
+	{
+	    vimconv_T	vimconv;
+
+	    vimconv.vc_type = CONV_NONE;
+	    if (convert_setup_ext(&vimconv, p_enc, FALSE, to_encoding_raw, FALSE)
+								    == FAIL)
+	    {
+		ga_clear(&str_ga);
+		semsg(_(e_str_encoding_to_failed), to_encoding);
+		goto done;
+	    }
+	    vimconv.vc_fail = TRUE;
+
+	    int		len = str_ga.ga_len;
+	    char_u	*converted = string_convert_ext(&vimconv,
+				    (char_u *)str_ga.ga_data, &len, NULL);
+	    convert_setup(&vimconv, NULL, NULL);
+	    ga_clear(&str_ga);
+
+	    if (converted == NULL)
 	    {
 		semsg(_(e_str_encoding_to_failed), to_encoding);
 		goto done;
 	    }
+	    if (len > 0 && ga_grow(&blob->bv_ga, len) == OK)
+	    {
+		mch_memmove((char_u *)blob->bv_ga.ga_data + blob->bv_ga.ga_len,
+						    converted, (size_t)len);
+		blob->bv_ga.ga_len += len;
+	    }
+	    vim_free(converted);
 	}
+	else
+	    ga_clear(&str_ga);
+    }
+    else
+    {
+	FOR_ALL_LIST_ITEMS(list, li)
+	{
+	    if (li->li_tv.v_type != VAR_STRING)
+		continue;
 
-	if (li != list->lv_first)
-	    // Each list string item is separated by a newline in the blob
-	    ga_append(&blob->bv_ga, NL);
+	    string_T	str = {li->li_tv.vval.v_string, 0};
 
-	blob_from_string(str, blob);
+	    if (str.string == NULL)
+		STR_LITERAL_SET(str, "");
+	    else
+		str.length = STRLEN(str.string);
 
-	if (to_encoding != NULL)
-	    vim_free(str);
+	    if (to_encoding != NULL)
+	    {
+		int	    res;
+		string_T    converted;
+
+		res = convert_string(&str, p_enc, to_encoding, &converted);
+		if (res != OK)
+		{
+		    semsg(_(e_str_encoding_to_failed), to_encoding);
+		    goto done;
+		}
+		str.string = converted.string;
+		str.length = converted.length;
+	    }
+
+	    if (li != list->lv_first)
+		// Each list string item is separated by a newline in the blob
+		ga_append(&blob->bv_ga, NL);
+
+	    blob_from_string(str.string, blob);
+
+	    if (to_encoding != NULL)
+		vim_free(str.string);
+	}
     }
 
 done:
     if (to_encoding != NULL)
 	vim_free(to_encoding);
+    if (to_encoding_raw != NULL)
+	vim_free(to_encoding_raw);
 }
 
 /*
@@ -2045,7 +2350,7 @@ f_utf16idx(typval_T *argvars, typval_T *rettv)
 	int c = (clen > 1) ? utf_ptr2char(p) : *p;
 	if (c > 0xFFFF)
 	    len++;
-	p += ptr2len(p);
+	p += clen;
 	if (charidx)
 	    idx--;
     }
@@ -2640,6 +2945,9 @@ vim_snprintf_safelen(char *str, size_t str_m, const char *fmt, ...)
     va_list ap;
     int	    str_l;
 
+    if (str_m == 0)
+	return 0;
+
     va_start(ap, fmt);
     str_l = vim_vsnprintf_typval(str, str_m, fmt, ap, NULL);
     va_end(ap);
@@ -2800,22 +3108,22 @@ format_typename(
     switch (format_typeof(type))
     {
 	case TYPE_INT:
-	    return _(typename_int);
+	    return typename_int;
 
 	case TYPE_LONGINT:
-	    return _(typename_longint);
+	    return typename_longint;
 
 	case TYPE_LONGLONGINT:
-	    return _(typename_longlongint);
+	    return typename_longlongint;
 
 	case TYPE_UNSIGNEDINT:
-	    return _(typename_unsignedint);
+	    return typename_unsignedint;
 
 	case TYPE_UNSIGNEDLONGINT:
-	    return _(typename_unsignedlongint);
+	    return typename_unsignedlongint;
 
 	case TYPE_UNSIGNEDLONGLONGINT:
-	    return _(typename_unsignedlonglongint);
+	    return typename_unsignedlonglongint;
 
 	case TYPE_POINTER:
 	    return _(typename_pointer);
@@ -2824,13 +3132,13 @@ format_typename(
 	    return _(typename_percent);
 
 	case TYPE_CHAR:
-	    return _(typename_char);
+	    return typename_char;
 
 	case TYPE_STRING:
 	    return _(typename_string);
 
 	case TYPE_FLOAT:
-	    return _(typename_float);
+	    return typename_float;
     }
 
     return _(typename_unknown);
@@ -2843,6 +3151,12 @@ adjust_types(
     int *num_posarg,
     const char *type)
 {
+    if (arg <= 0)
+    {
+	semsg(_( e_invalid_format_specifier_str), type);
+	return FAIL;
+    }
+
     if (*ap_types == NULL || *num_posarg < arg)
     {
 	int	    idx;
@@ -2876,7 +3190,8 @@ adjust_types(
 	    {
 		switch (pt[0])
 		{
-		    case 'd': case 'i': break;
+		    case 'd':
+		    case 'i': break;
 		    default:
 			semsg(_(e_positional_num_field_spec_reused_str_str), arg, format_typename((*ap_types)[arg - 1]), format_typename(type));
 			return FAIL;
@@ -2920,7 +3235,7 @@ format_overflow_error(const char *pstart)
 	semsg(_(e_out_of_memory_allocating_nr_bytes), arglen);
 }
 
-#define MAX_ALLOWED_STRING_WIDTH 1048576    // 1 MiB
+# define MAX_ALLOWED_STRING_WIDTH 1048576    // 1 MiB
 
     static int
 get_unsigned_int(
@@ -2968,7 +3283,7 @@ parse_fmt_types(
     int		any_arg = 0;
     int		arg_idx;
 
-#define CHECK_POS_ARG do { \
+# define CHECK_POS_ARG do { \
     if (any_pos && any_arg) \
     { \
 	semsg(_( e_cannot_mix_positional_and_non_positional_str), fmt); \
@@ -2983,7 +3298,7 @@ parse_fmt_types(
     {
 	if (*p != '%')
 	{
-	    char    *q = strchr(p + 1, '%');
+	    const char    *q = strchr(p + 1, '%');
 	    size_t  n = (q == NULL) ? STRLEN(p) : (size_t)(q - p);
 
 	    p += n;
@@ -3384,7 +3699,7 @@ vim_vsnprintf_typval(
     {
 	if (*p != '%')
 	{
-	    char    *q = strchr(p + 1, '%');
+	    const char    *q = strchr(p + 1, '%');
 	    size_t  n = (q == NULL) ? STRLEN(p) : (size_t)(q - p);
 
 	    // Copy up to the next '%' or NUL without any changes.
@@ -3712,7 +4027,7 @@ vim_vsnprintf_typval(
 		    else
 		    {
 			// memchr on HP does not like n > 2^31  !!!
-			char *q = memchr(str_arg, '\0',
+			const char *q = memchr(str_arg, '\0',
 				  precision <= (size_t)0x7fffffffL ? precision
 						       : (size_t)0x7fffffffL);
 

@@ -359,7 +359,7 @@ func Test_term_mouse_middle_click_insert_mode()
   let &term = save_term
   let &ttymouse = save_ttymouse
   call test_override('no_query_mouse', 0)
-  close!
+  bw!
 endfunc
 
 " Test for switching window using mouse in insert mode
@@ -1720,6 +1720,7 @@ func Test_xx01_term_style_response()
         \ underline_rgb: 'u',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'u'
         \ }, terminalprops())
 
   set t_RV=
@@ -1755,6 +1756,7 @@ func Test_xx02_iTerm2_response()
         \ underline_rgb: 'u',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'y'
         \ }, terminalprops())
 
   set t_RV=
@@ -1775,6 +1777,7 @@ func Run_libvterm_konsole_response(code)
         \ underline_rgb: 'u',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'u'
         \ }, terminalprops())
 endfunc
 
@@ -1818,6 +1821,7 @@ func Test_xx04_Mac_Terminal_response()
         \ underline_rgb: 'y',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'n'
         \ }, terminalprops())
   call assert_equal("\<Esc>[58;2;%lu;%lu;%lum", &t_8u)
 
@@ -1849,6 +1853,7 @@ func Test_xx05_mintty_response()
         \ underline_rgb: 'y',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'u'
         \ }, terminalprops())
 
   set t_RV=
@@ -1885,6 +1890,7 @@ func Test_xx06_screen_response()
         \ underline_rgb: 'y',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'n'
         \ }, terminalprops())
 
   set t_RV=
@@ -1910,6 +1916,7 @@ func Do_check_t_8u_set_reset(set_by_user)
         \ underline_rgb: 'u',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'u'
         \ }, terminalprops())
   call assert_equal(a:set_by_user ? default_value : '', &t_8u)
 endfunc
@@ -1949,6 +1956,7 @@ func Test_xx07_xterm_response()
         \ underline_rgb: 'y',
         \ mouse: 'u',
         \ kitty: 'u',
+        \ decrqm: 'u'
         \ }, terminalprops())
 
   " xterm >= 95 < 277 "xterm2"
@@ -1965,6 +1973,7 @@ func Test_xx07_xterm_response()
         \ underline_rgb: 'u',
         \ mouse: '2',
         \ kitty: 'u',
+        \ decrqm: 'u'
         \ }, terminalprops())
 
   " xterm >= 277: "sgr"
@@ -1981,6 +1990,7 @@ func Test_xx07_xterm_response()
         \ underline_rgb: 'u',
         \ mouse: 's',
         \ kitty: 'u',
+        \ decrqm: 'u'
         \ }, terminalprops())
 
   " xterm >= 279: "sgr" and cursor_style not reset; also check t_8u reset,
@@ -2010,6 +2020,7 @@ func Test_xx08_kitty_response()
         \ underline_rgb: 'y',
         \ mouse: 's',
         \ kitty: 'y',
+        \ decrqm: 'y'
         \ }, terminalprops())
 
   call feedkeys("\<Esc>[?1u") " simulate the kitty keyboard protocol is enabled
@@ -2776,6 +2787,99 @@ func Test_home_key_works()
   let &t_@7 = save_end
 endfunc
 
+func Test_home_is_not_khome()
+  " kHome and Home (or xHome) might be defined to the same termcode (for
+  " example, when xterm-codes reports the same for both termcaps).
+  " It is better to choose Home than kHome.
+  let save_K1 = exists('&t_K1') ? &t_K1 : ''
+  let save_kh = exists('&t_kh') ? &t_kh : ''
+
+  let &t_K1 = "\<Esc>OH"       " <kHome>
+  let &t_kh = "\<Esc>O*H"      " <Home>
+
+  new
+  call feedkeys("i\<C-K>\<Esc>OH\<Esc>", 'tx')
+  call assert_equal("<Home>", getline(1))
+
+  bwipe!
+  let &t_K1 = save_K1
+  let &t_kh = save_kh
+endfunc
+
+func Test_raw_codes_in_mappings()
+  let save_cpo = &cpo
+  let save_ku = exists('&t_ku') ? &t_ku : ''
+
+  set cpo-=k
+  let &t_ku = "\<Esc>O*A"
+  exe "map X ^\<Esc>OAjk"
+  let &t_ku = ""
+
+  new
+  exe "normal iabc\<CR>abc\<CR>abc\<CR>abc\<Esc>XX"
+  call assert_equal(['abc', 'abc', 'abc', 'abc'], getline(1, '$'))
+  call assert_equal([0, 2, 1, 0], getpos('.'))
+
+  bwipe!
+  let &cpo = save_cpo
+  let &t_ku = save_ku
+  unmap X
+endfunc
+
+func Test_avoid_keypad_if_ambiguous()
+  let save_kh = exists('&t_kh') ? &t_kh : ''
+  let save_K1 = exists('&t_K1') ? &t_K1 : ''
+  let save_at7 = exists('&t_@7') ? &t_@7 : ''
+  let save_K4 = exists('&t_K4') ? &t_K4 : ''
+  let save_kP = exists('&t_kP') ? &t_kP : ''
+  let save_K3 = exists('&t_K3') ? &t_K3 : ''
+  let save_kN = exists('&t_kN') ? &t_kN : ''
+  let save_K5 = exists('&t_K5') ? &t_K5 : ''
+
+  let &t_kh = "\<Esc>[@;*H"
+  let &t_K1 = "\<Esc>[1;*~"
+  let &t_@7 = "\<Esc>[@;*F"
+  let &t_K4 = "\<Esc>[4;*~"
+  let &t_kP = "\<Esc>[5;*~"
+  let &t_K3 = "\<Esc>Oy"
+  let &t_kN = "\<Esc>[6;*~"
+  let &t_K5 = "\<Esc>Os"
+
+  call feedkeys("\<Esc>P1+r6b68=1B4F48\<Esc>\\", 't') " kh <Home> <Esc>OH
+  call feedkeys("\<Esc>P1+r4b31=1B4F48\<Esc>\\", 't') " K1 <kHome> <Esc>OH
+  call feedkeys("\<Esc>P1+r4037=1B4F46\<Esc>\\", 't') " @7 <End> <Esc>OF
+  call feedkeys("\<Esc>P1+r4b34=1B4F46\<Esc>\\", 't') " K4 <kEnd> <Esc>OF
+  call feedkeys("\<Esc>P1+r6b50=1B5B357E\<Esc>\\", 't') " kP <PageUp> <Esc>[5~
+  call feedkeys("\<Esc>P1+r4b33=1B5B357E\<Esc>\\", 't') " K3 <kPageUp> <Esc>[5~
+  call feedkeys("\<Esc>P1+r6b4e=1B5B367E\<Esc>\\", 't') " kN <PageDown> <Esc>[6~
+  call feedkeys("\<Esc>P1+r4b35=1B5B367E\<Esc>\\", 'tx') " K5 <kPageDown> <Esc>[6~
+
+  let test_kh = exists('&t_kh') ? &t_kh : ''
+  let test_K1 = exists('&t_K1') ? &t_K1 : ''
+  let test_at7 = exists('&t_@7') ? &t_@7 : ''
+  let test_K4 = exists('&t_K4') ? &t_K4 : ''
+  let test_kP = exists('&t_kP') ? &t_kP : ''
+  let test_K3 = exists('&t_K3') ? &t_K3 : ''
+  let test_kN = exists('&t_kN') ? &t_kN : ''
+  let test_K5 = exists('&t_K5') ? &t_K5 : ''
+
+  call assert_equal(
+        \ ["\<Esc>OH", "\<Esc>[1;*~", "\<Esc>OF", "\<Esc>[4;*~",
+        \ "\<Esc>[5;*~", "\<Esc>Oy", "\<Esc>[6;*~", "\<Esc>Os"],
+        \ [test_kh, test_K1, test_at7, test_K4,
+        \ test_kP, test_K3, test_kN, test_K5])
+
+  bwipe!
+  let &t_kh = save_kh
+  let &t_K1 = save_K1
+  let &t_@7 = save_at7
+  let &t_K4 = save_K4
+  let &t_kP = save_kP
+  let &t_K3 = save_K3
+  let &t_kN = save_kN
+  let &t_K5 = save_K5
+endfunc
+
 func Test_terminal_builtin_without_gui()
   CheckNotMSWindows
 
@@ -2847,12 +2951,36 @@ func Test_term_response_osc()
   " Test if large OSC responses (that must be processed in chunks) are handled
   let data = repeat('a', 3000)
 
-  call feedkeys("\<Esc>]12;" .. data .. "\x07", 'Lx!')
-  call assert_equal("\<Esc>]12;" .. data .. "\x07", v:termosc)
+  call feedkeys("\<Esc>]12;" .. data .. "\<Esc>\\", 'Lx!')
+  call assert_equal("\<Esc>]12;" .. data .. "\<Esc>\\", v:termosc)
 
   " Test small OSC responses
-  call feedkeys("\<Esc>]15;hello world!\07", 'Lx!')
+  call feedkeys("\<Esc>]15;hello world!\x07", 'Lx!')
   call assert_equal("\<Esc>]15;hello world!\x07", v:termosc)
+endfunc
+
+" Test if xOSC key is emitted.
+func Test_term_response_xosc_key()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    func Test()
+      while getcharstr(-1) != "\<xOSC>"
+      endwhile
+      call writefile(["done"], 'XTestResult')
+    endfunc
+  END
+  call writefile(lines, 'XTest', 'D')
+  defer delete('XTestResult')
+
+  let buf = RunVimInTerminal("-S XTest", {'rows': 10})
+  call TermWait(buf)
+  call term_sendkeys(buf, "\<Esc>:call Test()\<CR>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "\<Esc>]52;hello;\<Esc>\\")
+  call TermWait(buf)
+  call WaitForAssert({-> assert_equal(["done"], readfile('XTestResult'))})
+  call StopVimInTerminal(buf)
 endfunc
 
 " This only checks if the sequence is recognized.
@@ -2921,6 +3049,90 @@ func Test_term_rgb_response()
   call assert_equal('light', &background)
 
   set t_RF= t_RB=
+endfunc
+
+" Test in-band window resize events (DEC mode 2048).
+" https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83
+func Test_term_win_resize()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+  vim9script
+
+  autocmd VimResized * writefile([$"{&lines} {&columns}"], "XTestWinResizeResult")
+  END
+  call writefile(lines, 'XTestWinResize', 'D')
+  defer delete("XTestWinResizeResult")
+
+  let buf = RunVimInTerminal('-S XTestWinResize', #{rows: 15, cols: 20})
+
+  " Must add a delay, since status report is sent internally by vim only when
+  " version response is received, which may come after we send the status report
+  " here.
+  sleep 100m
+
+  " Send status report
+  call term_sendkeys(buf, "\<Esc>[?2048;1$y")
+  call TermWait(buf)
+
+  " Resize to 50 rows 100 cols
+  call term_sendkeys(buf, "\<Esc>[48;50;100;0;0t")
+  call TermWait(buf)
+
+  call WaitForAssert({-> assert_equal(["50 100"], readfile("XTestWinResizeResult"))})
+
+  " Test that screen is only resized if it actually changed in width or height.
+  call term_sendkeys(buf, "\<Esc>:intro\<CR>")
+  call TermWait(buf)
+
+  call term_sendkeys(buf, "\<Esc>[48;50;100;0;0t")
+  call TermWait(buf)
+
+  " call delete("tmp.dump")
+  " call term_dumpwrite(buf, "tmp.dump")
+
+  " SIGWINCH handler should be uninstalled
+  call job_stop(term_getjob(buf), 28)
+  call TermWait(buf)
+
+  call WaitForAssert({-> assert_equal(["50 100"], readfile("XTestWinResizeResult"))})
+
+  " SIGWINCH handler should be reinstalled again
+  call term_sendkeys(buf, "\<Esc>:set termresize=sigwinch\<CR>")
+  call TermWait(buf)
+
+  call WaitForAssert({-> assert_equal(["15 20"], readfile("XTestWinResizeResult"))})
+
+  call term_sendkeys(buf, "\<Esc>:set termresize=\<CR>")
+  call TermWait(buf)
+
+  call term_sendkeys(buf, "\<Esc>[48;50;30;0;0t")
+  call TermWait(buf)
+
+  call WaitForAssert({-> assert_equal(["50 30"], readfile("XTestWinResizeResult"))})
+
+  " Simulate no support for in-band window resize
+  call term_sendkeys(buf, "\<Esc>[?2048;0$y")
+  call TermWait(buf)
+
+  " Should reinstall SIGWINCH handler
+  call WaitForAssert({-> assert_equal(["15 20"], readfile("XTestWinResizeResult"))})
+
+  call term_setsize(buf, 5, 20)
+  call TermWait(buf)
+  call WaitForAssert({-> assert_equal(["5 20"], readfile("XTestWinResizeResult"))})
+
+  " Setting 'termresize' to "inband" should do nothing if support is not
+  " detected from terminal.
+  call term_sendkeys(buf, "\<Esc>:set termresize=inband\<CR>")
+  call TermWait(buf)
+
+  call term_sendkeys(buf, "\<Esc>[48;50;100;0;0t")
+  call TermWait(buf)
+
+  call WaitForAssert({-> assert_equal(["5 20"], readfile("XTestWinResizeResult"))})
+
+  call StopVimInTerminal(buf)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

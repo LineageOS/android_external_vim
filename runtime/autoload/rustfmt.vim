@@ -1,8 +1,9 @@
 " Author: Stephen Sugden <stephen@stephensugden.com>
 " Last Modified: 2023-09-11
 " Last Change:
-" 2025 Oct 27 by Vim project don't use rustfmt as 'formatprg' by default
-"
+" 2025 Oct 27 by Vim project: don't use rustfmt as 'formatprg' by default
+" 2026 Jan 25 by Vim project: don't hide rustfmt errors, restore default var
+" 2026 Mar 30 by Vim project: use fnameescape for :chdir commands
 "
 " Adapted from https://github.com/fatih/vim-go
 " For bugs, patches and license go to https://github.com/rust-lang/rust.vim
@@ -69,6 +70,12 @@ function! s:RustfmtWriteMode()
 endfunction
 
 function! s:RustfmtConfigOptions()
+    let default = '--edition 2018'
+
+    if !get(g:, 'rustfmt_find_toml', 0)
+        return default
+    endif
+
     let l:rustfmt_toml = findfile('rustfmt.toml', expand('%:p:h') . ';')
     if l:rustfmt_toml !=# ''
         return '--config-path '.shellescape(fnamemodify(l:rustfmt_toml, ":p"))
@@ -128,7 +135,7 @@ function! s:RunRustfmt(command, tmpname, from_writepre)
         " chdir to the directory of the file
         let l:has_lcd = haslocaldir()
         let l:prev_cd = getcwd()
-        execute 'lchdir! '.expand('%:h')
+        execute 'lchdir! ' . fnameescape(expand('%:h'))
 
         let l:buffer = getline(1, '$')
         if exists("*systemlist")
@@ -199,7 +206,7 @@ function! s:RunRustfmt(command, tmpname, from_writepre)
             echo "rust.vim: was not able to parse rustfmt messages. Here is the raw output:"
             echo "\n"
             for l:line in l:stderr
-                echo l:line
+                echomsg l:line
             endfor
         endif
 
@@ -208,6 +215,7 @@ function! s:RunRustfmt(command, tmpname, from_writepre)
     endif
 
     " Restore the current directory if needed
+    let l:prev_cd = fnameescape(l:prev_cd)
     if a:tmpname ==# ''
         if l:has_lcd
             execute 'lchdir! '.l:prev_cd
@@ -218,7 +226,10 @@ function! s:RunRustfmt(command, tmpname, from_writepre)
 
     " Open lwindow after we have changed back to the previous directory
     if l:open_lwindow == 1
+        try
         lwindow
+        catch /^Vim\%((\S\+)\)\=:E776:/
+        endtry
     endif
 
     call winrestview(l:view)

@@ -17,7 +17,7 @@
 #else
 // based on Alpha's gen64def.h; the file is absent on VAX
 typedef struct _generic_64 {
-#   pragma __nomember_alignment
+# pragma __nomember_alignment
     __union  {				     // You can treat me as...
 	// long long is not available on VAXen
 	// unsigned __int64 gen64$q_quadword; ...a single 64-bit value, or
@@ -858,7 +858,12 @@ RealWaitForChar(
  * appropriate time conversion function accordingly.
  */
 #if __IEEE_FLOAT
-# define LIB_CVTX_TO_INTERNAL_TIME lib$cvts_to_internal_time // IEEE
+// allow fallback for older Alphas
+# ifdef lib$cvts_to_internal_time
+#  define LIB_CVTX_TO_INTERNAL_TIME lib$cvts_to_internal_time // IEEE
+# else
+#  define LIB_CVTX_TO_INTERNAL_TIME lib$cvtf_to_internal_time
+# endif
 #else
 # define LIB_CVTX_TO_INTERNAL_TIME lib$cvtf_to_internal_time // VAX
 #endif // __IEEE_FLOAT CVTS
@@ -919,8 +924,8 @@ RealWaitForChar(
 
 #if !defined( __VAX) && (__CRTL_VER >= 70301000)
 
-#include <stdio.h>
-#include <unixlib.h>
+# include <stdio.h>
+# include <unixlib.h>
 
 // Structure to hold a DECC$* feature name and its desired value
 
@@ -1017,29 +1022,29 @@ vms_init(void)
 
 /* Get "vms_init()" into a valid, loaded LIB$INITIALIZE PSECT. */
 
-#pragma nostandard
+# pragma nostandard
 
 /* Establish the LIB$INITIALIZE PSECTs, with proper alignment and
  * other attributes.  Note that "nopic" is significant only on VAX.
  */
-#pragma extern_model save
+# pragma extern_model save
 
-#pragma extern_model strict_refdef "LIB$INITIALIZE" 2, nopic, nowrt
+# pragma extern_model strict_refdef "LIB$INITIALIZE" 2, nopic, nowrt
 void (*const x_vms_init)() = vms_init;
 
-#pragma extern_model strict_refdef "LIB$INITIALIZ" 2, nopic, nowrt
+# pragma extern_model strict_refdef "LIB$INITIALIZ" 2, nopic, nowrt
 const int spare[ 8] = { 0 };
 
-#pragma extern_model restore
+# pragma extern_model restore
 
 // Fake reference to ensure loading the LIB$INITIALIZE PSECT
 
-#pragma extern_model save
+# pragma extern_model save
 int LIB$INITIALIZE(void);
-#pragma extern_model strict_refdef
+# pragma extern_model strict_refdef
 int dmy_lib$initialize = (int) LIB$INITIALIZE;
-#pragma extern_model restore
+# pragma extern_model restore
 
-#pragma standard
+# pragma standard
 
 #endif // !defined( __VAX) && (__CRTL_VER >= 70301000)

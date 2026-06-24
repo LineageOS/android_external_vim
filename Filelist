@@ -3,31 +3,33 @@
 
 # Source files for all source archives.
 SRC_ALL =	\
-		.cirrus.yml \
 		.gitattributes \
 		.git-blame-ignore-revs \
 		.github/MAINTAINERS \
 		.github/ISSUE_TEMPLATE/bug_report.yml \
 		.github/ISSUE_TEMPLATE/feature_request.md \
+		.github/workflows/ci-linux.yml \
+		.github/workflows/ci-linux_asan.yml \
+		.github/workflows/ci-macos.yml \
+		.github/workflows/ci-windows.yml \
 		.github/workflows/ci.yml \
 		.github/workflows/codeql-analysis.yml \
 		.github/workflows/coverity.yml \
 		.github/workflows/link-check.yml \
+		.github/actions/build_vim_on_linux/action.yml \
 		.github/actions/test_artifacts/action.yml \
 		.github/dependabot.yml \
 		.gitignore \
 		.hgignore \
-		.appveyor.yml \
 		.clang-format \
 		.codecov.yml \
 		.editorconfig \
-		ci/appveyor.bat \
 		ci/config.mk*.sed \
+		ci/gen_testset.py \
 		ci/if_ver*.vim \
 		ci/if_feat_check.vim \
 		ci/lychee.toml \
 		ci/setup-xvfb.sh \
-		ci/setup-sway.sh \
 		ci/remove_snap.sh \
 		ci/ddebs.list \
 		ci/pinned-pkgs \
@@ -146,12 +148,17 @@ SRC_ALL =	\
 		src/session.c \
 		src/sha256.c \
 		src/sign.c \
+		src/sixel.c \
+		src/kitty.c \
+		src/cairo.c \
+		src/socketserver.c \
 		src/sound.c \
 		src/spell.c \
 		src/spell.h \
 		src/spellfile.c \
 		src/spellsuggest.c \
 		src/strings.c \
+		src/strptime.c \
 		src/structs.h \
 		src/syntax.c \
 		src/tabpanel.c \
@@ -214,6 +221,7 @@ SRC_ALL =	\
 		src/testdir/ru_RU/LC_MESSAGES/__PACKAGE__.po \
 		src/testdir/runtest.vim \
 		src/testdir/samples/*.html \
+		src/testdir/samples/*.swp \
 		src/testdir/samples/*.txt \
 		src/testdir/samples/*.vim \
 		src/testdir/samples/evil.zip \
@@ -224,6 +232,8 @@ SRC_ALL =	\
 		src/testdir/samples/test000 \
 		src/testdir/samples/test_undo.txt.undo \
 		src/testdir/samples/testa.zip \
+		src/testdir/samples/crypt_utf8_test.txt \
+		src/testdir/samples/uncrypt_utf8_test.txt \
 		src/testdir/sautest/autoload/*.vim \
 		src/testdir/silent.wav \
 		src/testdir/test77a.com \
@@ -248,6 +258,7 @@ SRC_ALL =	\
 		src/testdir/util/view_util.vim \
 		src/testdir/util/vim9.vim \
 		src/testdir/util/window_manager.vim \
+		src/testdir/util/socketserver.vim \
 		src/testdir/viewdumps.vim \
 		src/proto.h \
 		src/protodef.h \
@@ -340,6 +351,10 @@ SRC_ALL =	\
 		src/proto/session.pro \
 		src/proto/sha256.pro \
 		src/proto/sign.pro \
+		src/proto/sixel.pro \
+		src/proto/kitty.pro \
+		src/proto/cairo.pro \
+		src/proto/socketserver.pro \
 		src/proto/sound.pro \
 		src/proto/spell.pro \
 		src/proto/spellfile.pro \
@@ -437,6 +452,7 @@ SRC_ALL =	\
 		src/libvterm/t/66screen_extent.test \
 		src/libvterm/t/67screen_dbl_wh.test \
 		src/libvterm/t/68screen_termprops.test \
+		src/libvterm/t/69screen_pushline.test \
 		src/libvterm/t/69screen_reflow.test \
 		src/libvterm/t/90vttest_01-movement-1.test \
 		src/libvterm/t/90vttest_01-movement-2.test \
@@ -493,6 +509,17 @@ SRC_UNIX =	\
 		src/gui_gtk_f.c \
 		src/gui_gtk_f.h \
 		src/gui_gtk_x11.c \
+		src/gui_gtk4.c \
+		src/gui_gtk4_f.c \
+		src/gui_gtk4_f.h \
+		src/gui_gtk4_cb.c \
+		src/gui_gtk4_cb.h \
+		src/gui_gtk4_da.c \
+		src/gui_gtk4_da.h \
+		src/gui_gtk4_tb.c \
+		src/gui_gtk4_tb.h \
+		src/gui_gtk4_menu.c \
+		src/gui_gtk4_menu.h \
 		src/gui_gtk_res.xml \
 		src/gui_motif.c \
 		src/gui_xmdlg.c \
@@ -522,6 +549,7 @@ SRC_UNIX =	\
 		src/proto/gui_gtk.pro \
 		src/proto/gui_gtk_x11.pro \
 		src/proto/gui_gtk_gresources.pro \
+		src/proto/gui_gtk4.pro \
 		src/proto/gui_motif.pro \
 		src/proto/gui_xmdlg.pro \
 		src/proto/gui_x11.pro \
@@ -540,7 +568,6 @@ SRC_UNIX =	\
 		src/wayland.c \
 		src/wayland.h \
 		src/which.sh \
-		src/gen-wayland-protocols.sh \
 		src/xxd/Makefile \
 
 # Source files for both MS Windows and Unix-like.
@@ -638,13 +665,7 @@ SRC_DOS =	\
 		src/tee/tee.c \
 		src/xxd/Make_ming.mak \
 		src/xxd/Make_mvc.mak \
-		nsis/auxiliary.nsh \
-		nsis/gvim.nsi \
-		nsis/Makefile \
-		nsis/Make_mvc.mak \
 		nsis/README.txt \
-		nsis/lang/*.nsi \
-		nsis/lang/README.txt \
 		uninstall.txt \
 
 # Source files for MS Windows without CR/LF translation (also in the extra archive).
@@ -662,7 +683,6 @@ SRC_DOS_BIN =	\
 		src/xpm/x86/lib-vc14/libXpm.lib \
 		src/xpm/x86/lib/libXpm.a \
 		runtime/bitmaps/vim.ico \
-		nsis/icons.zip \
 
 # Source files for Amiga, DOS, etc. (also in the extra archive).
 SRC_AMI_DOS =	\
@@ -676,6 +696,7 @@ SRC_AMI =	\
 		src/Make_ami.mak \
 		src/os_amiga.c \
 		src/os_amiga.h \
+		src/os_amiga_stubs.c \
 		src/proto/os_amiga.pro \
 		src/testdir/Make_amiga.mak \
 		src/testdir/util/amiga.vim \
@@ -804,6 +825,10 @@ RT_ALL =	\
 		runtime/tutor/en/vim-01-beginner.tutor.json \
 		runtime/tutor/en/vim-02-beginner.tutor \
 		runtime/tutor/en/vim-02-beginner.tutor.json \
+		runtime/tutor/sv/vim-01-beginner.tutor \
+		runtime/tutor/sv/vim-01-beginner.tutor.json \
+		runtime/tutor/sv/vim-02-beginner.tutor \
+		runtime/tutor/sv/vim-02-beginner.tutor.json \
 		runtime/tutor/tutor.tutor \
 		runtime/tutor/tutor.tutor.json \
 		runtime/tutor/tutor.vim \
@@ -821,7 +846,6 @@ RT_ALL =	\
 		runtime/pack/dist/opt/editorconfig/.editorconfig \
 		runtime/pack/dist/opt/editorconfig/CONTRIBUTORS \
 		runtime/pack/dist/opt/editorconfig/LICENSE* \
-		runtime/pack/dist/opt/editorconfig/mkzip.sh \
 		runtime/pack/dist/opt/editorconfig/README.md \
 		runtime/pack/dist/opt/editorconfig/autoload/*.vim \
 		runtime/pack/dist/opt/editorconfig/autoload/editorconfig_core/*.vim \
@@ -829,6 +853,10 @@ RT_ALL =	\
 		runtime/pack/dist/opt/editorconfig/doc/editorconfig.txt \
 		runtime/pack/dist/opt/editorconfig/ftdetect/editorconfig.vim \
 		runtime/pack/dist/opt/editorconfig/plugin/editorconfig.vim \
+		runtime/pack/dist/opt/helpcurwin/autoload/helpcurwin.vim \
+		runtime/pack/dist/opt/helpcurwin/doc/helpcurwin.txt \
+		runtime/pack/dist/opt/helpcurwin/doc/tags \
+		runtime/pack/dist/opt/helpcurwin/plugin/helpcurwin.vim \
 		runtime/pack/dist/opt/helptoc/autoload/helptoc.vim \
 		runtime/pack/dist/opt/helptoc/doc/helptoc.txt \
 		runtime/pack/dist/opt/helptoc/doc/tags \
@@ -852,7 +880,12 @@ RT_ALL =	\
 		runtime/pack/dist/opt/netrw/autoload/netrw_gitignore.vim \
 		runtime/pack/dist/opt/netrw/doc/netrw.txt \
 		runtime/pack/dist/opt/netrw/plugin/netrwPlugin.vim \
-		runtime/pack/dist/opt/netrw/syntax/netrw.vim
+		runtime/pack/dist/opt/netrw/syntax/netrw.vim \
+		runtime/pack/dist/opt/osc52/plugin/osc52.vim \
+		runtime/pack/dist/opt/osc52/autoload/osc52.vim \
+		runtime/pack/dist/opt/osc52/doc/osc52.txt \
+		runtime/pack/dist/opt/osc52/doc/tags \
+		runtime/xdg.vim
 
 # Runtime files for all distributions without CR/LF translation.
 RT_ALL_BIN =	\
@@ -907,7 +940,6 @@ RT_SCRIPTS =	\
 		runtime/syntax/testdir/input/selftestdir/* \
 		runtime/syntax/testdir/input/setup/*.* \
 		runtime/syntax/testdir/dumps/*.dump \
-		runtime/syntax/testdir/dumps/*.vim \
 		runtime/syntax/testdir/tools/* \
 		runtime/syntax/generator/Makefile \
 		runtime/syntax/generator/README.md \
@@ -928,12 +960,15 @@ RT_UNIX_DOS_BIN =	\
 		runtime/vim16x16.gif \
 		runtime/vim16x16.png \
 		runtime/vim16x16.xpm \
+		runtime/vim16x16_png.h \
 		runtime/vim32x32.gif \
 		runtime/vim32x32.png \
 		runtime/vim32x32.xpm \
+		runtime/vim32x32_png.h \
 		runtime/vim48x48.gif \
 		runtime/vim48x48.png \
 		runtime/vim48x48.xpm \
+		runtime/vim48x48_png.h \
 
 # Runtime not for Unix-like or extra.
 RT_NO_UNIX =	\
@@ -979,8 +1014,7 @@ RT_AMI =	\
 		runtime/macros/maze/*.info \
 		runtime/macros/urm/*.info \
 		runtime/tools.info \
-		runtime/tutor.info \
-		runtime/tutor/*.info \
+		runtime/tutor.info
 
 # Runtime files in extra archive.
 RT_EXTRA =	\
@@ -1095,6 +1129,8 @@ LANG_GEN = \
 		runtime/doc/*-pl.UTF-8.1 \
 		runtime/doc/*-ru.1 \
 		runtime/doc/*-ru.UTF-8.1 \
+		runtime/doc/*-sv.1 \
+		runtime/doc/*-sv.UTF-8.1 \
 		runtime/doc/*-tr.1 \
 		runtime/doc/*-tr.UTF-8.1 \
 		runtime/lang/README.txt \
@@ -1114,6 +1150,8 @@ LANG_GEN = \
 		runtime/tutor/sr/vim-01-beginner.tutor.json \
 		runtime/tutor/sr/vim-02-beginner.tutor \
 		runtime/tutor/sr/vim-02-beginner.tutor.json \
+		runtime/tutor/zh/vim-01-beginner.tutor \
+		runtime/tutor/zh/vim-01-beginner.tutor.json \
 		runtime/tutor/tutor1.?? \
 		runtime/tutor/tutor1.??_?? \
 		runtime/tutor/tutor1.bar \
@@ -1171,10 +1209,10 @@ LANG_DOS = \
 # be excluded from distribution tarballs and the like.
 # This excludes them from the CI check for unlisted files.
 IGNORE = \
-		.appveyor.yml \
 		.github/FUNDING.yml \
 		.github/labeler.yml \
 		.github/workflows/label.yml \
+		AGENTS.md \
 		SECURITY.md \
 		ci/unlisted.make \
 		ci/hlgroups.make \

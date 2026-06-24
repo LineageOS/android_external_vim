@@ -1,4 +1,4 @@
-README_extra.txt for version 9.1 of Vim: Vi IMproved.
+README_extra.txt for version 9.2 of Vim: Vi IMproved.
 
 These extra files of Vim are for special purposes.  This README explains what
 the files are for.  For general information about Vim, see the "README.txt"
@@ -30,8 +30,6 @@ src/Make_mvc.mak	MS Visual C++ makefile for the Win32 GUI.
 src/if_ole.*		OLE automation interface, for MS Windows.
 
 src/GvimExt/*		DLL for the "Edit with Vim" context menu entry
-
-nsis/*			NSIS script to build the self-installing MS-Windows exe
 
 runtime/doc/*.man	Preprocessed manual pages.
 

@@ -24,9 +24,10 @@ typedef struct ucmd
     cmd_addr_T	uc_addr_type;	// The command's address type
     sctx_T	uc_script_ctx;	// SCTX where the command was defined
     int		uc_flags;	// some UC_ flags
-# ifdef FEAT_EVAL
+    int		uc_compl_opt;	// completion options (UCC_ flags)
+#ifdef FEAT_EVAL
     char_u	*uc_compl_arg;	// completion argument if any
-# endif
+#endif
 } ucmd_T;
 
 // List of all user commands.
@@ -207,14 +208,15 @@ find_ucmd(
 
 		    if (complp != NULL)
 			*complp = uc->uc_compl;
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 		    if (xp != NULL)
 		    {
 			xp->xp_arg = uc->uc_compl_arg;
+			xp->xp_complete_opt = uc->uc_compl_opt;
 			xp->xp_script_ctx = uc->uc_script_ctx;
 			xp->xp_script_ctx.sc_lnum += SOURCING_LNUM;
 		    }
-# endif
+#endif
 		    // Do not search for further abbreviations
 		    // if this is an exact match.
 		    matchlen = k;
@@ -283,6 +285,16 @@ set_context_in_user_cmd(expand_T *xp, char_u *arg_in)
 		xp->xp_context = EXPAND_USER_COMPLETE;
 		xp->xp_pattern = p + 1;
 	    }
+	    else if (STRNICMP(arg, "completeopt", p - arg) == 0)
+	    {
+		xp->xp_context = EXPAND_USER_COMPLETEOPT;
+		// xp_pattern points to the last comma-separated item being
+		// typed so that completion replaces only that item.
+		xp->xp_pattern = p + 1;
+		for (char_u *c = p + 1; *c != NUL; ++c)
+		    if (*c == ',')
+			xp->xp_pattern = c + 1;
+	    }
 	    else if (STRNICMP(arg, "nargs", p - arg) == 0)
 	    {
 		xp->xp_context = EXPAND_USER_NARGS;
@@ -344,15 +356,18 @@ set_context_in_user_cmdarg(
 	return set_context_in_map_cmd(xp, (char_u *)"map", arg, forceit, FALSE,
 							FALSE, CMD_map);
     // Find start of last argument.
-    p = arg;
-    while (*p)
+    if (!(argt & EX_ARGSPACE))
     {
-	if (*p == ' ')
-	    // argument starts after a space
-	    arg = p + 1;
-	else if (*p == '\\' && *(p + 1) != NUL)
-	    ++p; // skip over escaped character
-	MB_PTR_ADV(p);
+	p = arg;
+	while (*p)
+	{
+	    if (*p == ' ')
+		// argument starts after a space
+		arg = p + 1;
+	    else if (*p == '\\' && *(p + 1) != NUL)
+		++p; // skip over escaped character
+	    MB_PTR_ADV(p);
+	}
     }
     xp->xp_pattern = arg;
     xp->xp_context = context;
@@ -437,7 +452,7 @@ get_user_cmd_flags(expand_T *xp UNUSED, int idx)
 {
     static char *user_cmd_flags[] = {
 	"addr", "bang", "bar", "buffer", "complete",
-	"count", "nargs", "range", "register", "keepscript"
+	"completeopt", "count", "nargs", "range", "register", "keepscript"
     };
 
     if (idx < 0 || idx >= (int)ARRAY_LENGTH(user_cmd_flags))
@@ -451,7 +466,7 @@ get_user_cmd_flags(expand_T *xp UNUSED, int idx)
     char_u *
 get_user_cmd_nargs(expand_T *xp UNUSED, int idx)
 {
-    static char *user_cmd_nargs[] = {"0", "1", "*", "?", "+"};
+    static char *user_cmd_nargs[] = {"0", "1", "_", "*", "?", "+"};
 
     if (idx < 0 || idx >= (int)ARRAY_LENGTH(user_cmd_nargs))
 	return NULL;
@@ -468,6 +483,26 @@ get_user_cmd_complete(expand_T *xp UNUSED, int idx)
     if (idx < 0 || idx >= (int)ARRAY_LENGTH(command_complete_tab))
 	return NULL;
     return command_complete_tab[idx].value.string;
+}
+
+/*
+ * Names of options accepted by -completeopt= for :command.  Keep in sync with
+ * parse_completeopt_arg() below.
+ */
+static char *user_cmd_completeopt_tab[] = {
+    "escape"
+};
+
+/*
+ * Function given to ExpandGeneric() to obtain the list of values for
+ * -completeopt.
+ */
+    char_u *
+get_user_cmd_completeopt(expand_T *xp UNUSED, int idx)
+{
+    if (idx < 0 || idx >= (int)ARRAY_LENGTH(user_cmd_completeopt_tab))
+	return NULL;
+    return (char_u *)user_cmd_completeopt_tab[idx];
 }
 
 /*
@@ -640,13 +675,14 @@ uc_list(char_u *name, size_t name_len)
 	    len = 0;
 
 	    // Arguments
-	    switch ((int)(a & (EX_EXTRA|EX_NOSPC|EX_NEEDARG)))
+	    switch ((int)(a & (EX_EXTRA|EX_NOSPC|EX_NEEDARG|EX_ARGSPACE)))
 	    {
 		case 0:				IObuff[len++] = '0'; break;
 		case (EX_EXTRA):		IObuff[len++] = '*'; break;
 		case (EX_EXTRA|EX_NOSPC):	IObuff[len++] = '?'; break;
 		case (EX_EXTRA|EX_NEEDARG):	IObuff[len++] = '+'; break;
 		case (EX_EXTRA|EX_NOSPC|EX_NEEDARG): IObuff[len++] = '1'; break;
+		case (EX_EXTRA|EX_NOSPC|EX_NEEDARG|EX_ARGSPACE): IObuff[len++] = '_'; break;
 	    }
 
 	    do
@@ -711,6 +747,9 @@ uc_list(char_u *name, size_t name_len)
 			len += (int)uc_compl_arglen;
 		    }
 		}
+		if (p_verbose > 0 && (cmd->uc_compl_opt & UCC_ESCAPE))
+		    len += vim_snprintf((char *)IObuff + len, IOSIZE - len,
+						       " -completeopt=escape");
 #endif
 	    }
 
@@ -830,9 +869,9 @@ parse_compl_arg(
     char_u	**compl_arg UNUSED)
 {
     char_u	*arg = NULL;
-# if defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
     size_t	arglen = 0;
-# endif
+#endif
     int		i;
     int		valend = vallen;
     keyvalue_T	target;
@@ -845,9 +884,9 @@ parse_compl_arg(
 	if (value[i] == ',')
 	{
 	    arg = &value[i + 1];
-# if defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
 	    arglen = vallen - i - 1;
-# endif
+#endif
 	    valend = i;
 	    break;
 	}
@@ -882,17 +921,17 @@ parse_compl_arg(
 	*argt |= EX_XFILE;
 
     if (
-# if defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
 	*complp != EXPAND_USER_DEFINED && *complp != EXPAND_USER_LIST
 								&&
-# endif
+#endif
 								arg != NULL)
     {
 	emsg(_(e_completion_argument_only_allowed_for_custom_completion));
 	return FAIL;
     }
 
-# if defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
     if ((*complp == EXPAND_USER_DEFINED || *complp == EXPAND_USER_LIST)
 							       && arg == NULL)
     {
@@ -902,8 +941,74 @@ parse_compl_arg(
 
     if (arg != NULL)
 	*compl_arg = vim_strnsave(arg, arglen);
-# endif
+#endif
 
+    return OK;
+}
+
+/*
+ * Parse a -completeopt= value.  "value" points to a comma-separated list of
+ * option names; on success the corresponding UCC_ flags are OR'ed into
+ * "*compl_opt".
+ * Returns FAIL on an unknown name.
+ */
+    static int
+parse_completeopt_arg(char_u *value, int vallen, int *compl_opt)
+{
+    char_u  *p = value;
+    char_u  *end = value + vallen;
+    int	    flags = 0;
+
+    if (vallen == 0)
+    {
+	semsg(_(e_argument_required_for_str), "-completeopt");
+	return FAIL;
+    }
+
+    while (p < end)
+    {
+	char_u	*comma;
+	size_t	itemlen;
+	int	matched = FALSE;
+	int	i;
+
+	comma = vim_strchr(p, ',');
+	if (comma == NULL || comma > end)
+	    itemlen = (size_t)(end - p);
+	else
+	    itemlen = (size_t)(comma - p);
+
+	if (itemlen == 0)
+	{
+	    semsg(_(e_invalid_value_for_argument_str), "completeopt");
+	    return FAIL;
+	}
+
+	for (i = 0; i < (int)ARRAY_LENGTH(user_cmd_completeopt_tab); ++i)
+	{
+	    char *name = user_cmd_completeopt_tab[i];
+
+	    if (STRLEN(name) == itemlen
+				   && STRNCMP(p, name, itemlen) == 0)
+	    {
+		if (STRCMP(name, "escape") == 0)
+		    flags |= UCC_ESCAPE;
+		matched = TRUE;
+		break;
+	    }
+	}
+	if (!matched)
+	{
+	    semsg(_(e_invalid_value_for_argument_str), "completeopt");
+	    return FAIL;
+	}
+
+	p += itemlen;
+	if (p < end && *p == ',')
+	    ++p;
+    }
+
+    *compl_opt |= flags;
     return OK;
 }
 
@@ -920,6 +1025,7 @@ uc_scan_attr(
     int		*flags,
     int		*complp,
     char_u	**compl_arg,
+    int		*compl_opt,
     cmd_addr_T	*addr_type_arg)
 {
     char_u	*p;
@@ -975,6 +1081,8 @@ uc_scan_attr(
 		    *argt |= (EX_EXTRA | EX_NOSPC);
 		else if (*val == '+')
 		    *argt |= (EX_EXTRA | EX_NEEDARG);
+		else if (*val == '_')
+		    *argt |= (EX_EXTRA | EX_NOSPC | EX_NEEDARG | EX_ARGSPACE);
 		else
 		    goto wrong_nargs;
 	    }
@@ -1048,6 +1156,17 @@ invalid_count:
 								      == FAIL)
 		return FAIL;
 	}
+	else if (STRNICMP(attr, "completeopt", attrlen) == 0)
+	{
+	    if (val == NULL)
+	    {
+		semsg(_(e_argument_required_for_str), "-completeopt");
+		return FAIL;
+	    }
+
+	    if (parse_completeopt_arg(val, (int)vallen, compl_opt) == FAIL)
+		return FAIL;
+	}
 	else if (STRNICMP(attr, "addr", attrlen) == 0)
 	{
 	    *argt |= EX_RANGE;
@@ -1087,6 +1206,7 @@ uc_add_command(
     int		flags,
     int		compl,
     char_u	*compl_arg UNUSED,
+    int		compl_opt,
     cmd_addr_T	addr_type,
     int		force)
 {
@@ -1180,6 +1300,7 @@ uc_add_command(
     cmd->uc_argt = argt;
     cmd->uc_def = def;
     cmd->uc_compl = compl;
+    cmd->uc_compl_opt = compl_opt;
     cmd->uc_script_ctx = current_sctx;
     if (flags & UC_VIM9)
 	cmd->uc_script_ctx.sc_version = SCRIPT_VERSION_VIM9;
@@ -1240,6 +1361,8 @@ may_get_cmd_block(exarg_T *eap, char_u *p, char_u **tofree, int *flags)
 	    }
 	vim_free(line);
 	retp = *tofree = ga_concat_strings(&ga, "\n");
+	if (retp == NULL)
+	    retp = p;
 	ga_clear_strings(&ga);
 	*flags |= UC_VIM9;
     }
@@ -1260,6 +1383,7 @@ ex_command(exarg_T *eap)
     int		flags = 0;
     int		compl = EXPAND_NOTHING;
     char_u	*compl_arg = NULL;
+    int		compl_opt = 0;
     cmd_addr_T	addr_type_arg = ADDR_NONE;
     int		has_attr = (eap->arg[0] == '-');
     int		name_len;
@@ -1272,7 +1396,7 @@ ex_command(exarg_T *eap)
 	++p;
 	end = skiptowhite(p);
 	if (uc_scan_attr(p, end - p, &argt, &def, &flags, &compl,
-					   &compl_arg, &addr_type_arg) == FAIL)
+			       &compl_arg, &compl_opt, &addr_type_arg) == FAIL)
 	    goto theend;
 	p = skipwhite(end);
     }
@@ -1318,6 +1442,13 @@ ex_command(exarg_T *eap)
 		       (char_u *)_(e_complete_used_without_allowing_arguments),
 								   TRUE, TRUE);
     }
+    else if ((compl_opt & UCC_ESCAPE) && (argt & EX_ARGSPACE))
+    {
+	// -nargs=_ disables the argument splitter, so escaping spaces in
+	// inserted matches has no effect.  Reject the combination instead of
+	// silently ignoring it.
+	emsg(_(e_completeopt_escape_cannot_be_used_with_nargs_underscore));
+    }
     else
     {
 	char_u *tofree = NULL;
@@ -1325,7 +1456,7 @@ ex_command(exarg_T *eap)
 	p = may_get_cmd_block(eap, p, &tofree, &flags);
 
 	uc_add_command(name, end - name, p, argt, def, flags, compl, compl_arg,
-						  addr_type_arg, eap->forceit);
+					compl_opt, addr_type_arg, eap->forceit);
 	vim_free(tofree);
 
 	return;  // success
@@ -1380,9 +1511,9 @@ uc_clear(garray_T *gap)
 	vim_free(cmd->uc_name);
 	cmd->uc_namelen = 0;
 	vim_free(cmd->uc_rep);
-# if defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
 	vim_free(cmd->uc_compl_arg);
-# endif
+#endif
     }
     ga_clear(gap);
 }
@@ -1434,9 +1565,9 @@ ex_delcommand(exarg_T *eap)
 
     vim_free(cmd->uc_name);
     vim_free(cmd->uc_rep);
-# if defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
     vim_free(cmd->uc_compl_arg);
-# endif
+#endif
 
     --gap->ga_len;
 
@@ -1815,6 +1946,11 @@ uc_check_code(
 		STRCPY(buf, eap->arg);
 	    break;
 	case 1: // Quote, but don't split
+	{
+	    // For -completeopt=escape give <q-args> the logical value: a
+	    // backslash before a space, tab or backslash is collapsed.
+	    int	unesc = (cmd->uc_compl_opt & UCC_ESCAPE) != 0;
+
 	    result = STRLEN(eap->arg) + 2;
 	    for (p = eap->arg; *p; ++p)
 	    {
@@ -1822,6 +1958,13 @@ uc_check_code(
 		    // DBCS can contain \ in a trail byte, skip the
 		    // double-byte character.
 		    ++p;
+		else if (unesc && *p == '\\'
+				     && (VIM_ISWHITE(p[1]) || p[1] == '\\'))
+		{
+		    if (VIM_ISWHITE(p[1]))
+			--result;
+		    ++p;
+		}
 		else
 		     if (*p == '\\' || *p == '"')
 		    ++result;
@@ -1836,6 +1979,13 @@ uc_check_code(
 			// DBCS can contain \ in a trail byte, copy the
 			// double-byte character to avoid escaping.
 			*buf++ = *p++;
+		    else if (unesc && *p == '\\'
+				     && (VIM_ISWHITE(p[1]) || p[1] == '\\'))
+		    {
+			++p;	// drop the escaping backslash
+			if (*p == '\\')
+			    *buf++ = '\\';	// re-escape for the quotes
+		    }
 		    else
 			 if (*p == '\\' || *p == '"')
 			*buf++ = '\\';
@@ -1845,6 +1995,7 @@ uc_check_code(
 	    }
 
 	    break;
+	}
 	case 2: // Quote and split (<f-args>)
 	    // This is hard, so only do it once, and cache the result
 	    if (*split_buf == NULL)
@@ -1995,9 +2146,9 @@ do_ucmd(exarg_T *eap)
 		if (*ksp == K_SPECIAL
 			&& (start == NULL || ksp < start || end == NULL)
 			&& ((ksp[1] == KS_SPECIAL && ksp[2] == KE_FILLER)
-# ifdef FEAT_GUI
+#ifdef FEAT_GUI
 			    || (ksp[1] == KS_EXTRA && ksp[2] == (int)KE_CSI)
-# endif
+#endif
 			    ))
 		{
 		    // K_SPECIAL has been put in the buffer as K_SPECIAL

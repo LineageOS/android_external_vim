@@ -340,6 +340,25 @@ func Test_message_more()
   call StopVimInTerminal(buf)
 endfunc
 
+func Test_message_more_recording()
+  CheckRunVimInTerminal
+  let buf = RunVimInTerminal('', {'rows': 6})
+  call term_sendkeys(buf, ":call setline(1, range(1, 100))\n")
+  call term_sendkeys(buf, ":%p\n")
+  call WaitForAssert({-> assert_equal('-- More --', term_getline(buf, 6))})
+  call term_sendkeys(buf, 'G')
+  call WaitForAssert({-> assert_equal('Press ENTER or type command to continue', term_getline(buf, 6))})
+
+  " Hitting 'q' at the end of the more prompt should not start recording
+  call term_sendkeys(buf, 'q')
+  call WaitForAssert({-> assert_equal(5, term_getcursor(buf)[0])})
+  " Hitting 'k' now should move the cursor up instead of recording keys
+  call term_sendkeys(buf, 'k')
+  call WaitForAssert({-> assert_equal(4, term_getcursor(buf)[0])})
+
+  call StopVimInTerminal(buf)
+endfunc
+
 " Test more-prompt scrollback
 func Test_message_more_scrollback()
   CheckScreendump
@@ -420,7 +439,7 @@ func Test_mode_cleared_after_silent_message()
   let buf = RunVimInTerminal('-S XsilentMessageMode', {'rows': 10})
 
   call term_sendkeys(buf, 'v')
-  call TermWait(buf)
+  call WaitForAssert({-> assert_match('VISUAL.*\d\+\s\+\d', term_getline(buf, 10))}, 1000)
   call VerifyScreenDump(buf, 'Test_mode_cleared_after_silent_message_1', {})
 
   call term_sendkeys(buf, 'd')
@@ -439,6 +458,8 @@ func Test_echo_verbose_system()
   CheckNotMac  " the macos TMPDIR is too long for snapshot testing
 
   let buf = RunVimInTerminal('', {'rows': 10})
+  " give it some time to handle DECRQM response
+  call TermWait(buf, 50)
   call term_sendkeys(buf, ":4 verbose echo system('seq 20')\<CR>")
   " Note that the screendump is filtered to remove the name of the temp file
   call VerifyScreenDump(buf, 'Test_verbose_system_1', {})
@@ -665,6 +686,19 @@ func Test_echowindow()
   call term_sendkeys(buf, ":call HideWin()\<CR>")
   call VerifyScreenDump(buf, 'Test_echowindow_9', {})
 
+  call term_sendkeys(buf, ":set cmdheight=2 columns=50\<CR>")
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, ":echowindow 'S' .. repeat('a', &columns - 2) .. 'Eabcde'\<CR>")
+  call VerifyScreenDump(buf, 'Test_echowindow_10', {})
+  call term_sendkeys(buf, "\<ESC>")
+  call TermWait(buf, 50)
+
+  call term_sendkeys(buf, ":echowindow 'A' .. repeat('0', &columns - 2) .. 'a' .. 'B' .. repeat('a', &columns - 2) .. 'b' .. 'C' .. repeat('a', &columns - 2) .. 'c' .. 'D' .. repeat('a', &columns - 2) .. 'd12345'")
+  call term_sendkeys(buf, "\<CR>")
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, "\<CR>")
+  call VerifyScreenDump(buf, 'Test_echowindow_11', {})
+
   " clean up
   call StopVimInTerminal(buf)
 endfunc
@@ -752,6 +786,120 @@ func Test_messagesopt_wait()
 
   " clean up
   call StopVimInTerminal(buf)
+endfunc
+
+" Check that using a long 'formatprg' doesn't cause a hit-enter prompt or
+" wrong cursor position.
+func Test_long_formatprg_no_hit_enter()
+  CheckScreendump
+  CheckExecutable sed
+
+  let lines =<< trim END
+    setlocal scrolloff=0
+    call setline(1, range(1, 40))
+    let &l:formatprg = $'sed{repeat(' ', &columns)}p'
+    normal 20Gmz
+    normal 10Gzt
+  END
+  call writefile(lines, 'XtestLongFormatprg', 'D')
+  let buf = RunVimInTerminal('-S XtestLongFormatprg', #{rows: 10})
+  call VerifyScreenDump(buf, 'Test_long_formatprg_no_hit_enter_1', {})
+  call term_sendkeys(buf, 'gq2j')
+  call VerifyScreenDump(buf, 'Test_long_formatprg_no_hit_enter_2', {})
+  call term_sendkeys(buf, ":messages\<CR>")
+  call VerifyScreenDump(buf, 'Test_long_formatprg_no_hit_enter_3', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+endfunc
+
+" Test that fileinfo is shown after deleting the last listed buffer with :bd
+func Test_fileinfo_after_last_bd()
+  CheckRunVimInTerminal
+
+  let content =<< trim END
+    set shortmess-=F
+    edit xxx
+    edit yyy
+  END
+
+  call writefile(content, 'Xtest_fileinfo_last_bd', 'D')
+  let buf = RunVimInTerminal('-S Xtest_fileinfo_last_bd', #{rows: 10})
+  call WaitForAssert({-> assert_match('^"yyy" \[New\]', term_getline(buf, 10))})
+
+  call term_sendkeys(buf, ":bd\<CR>")
+  call WaitForAssert({-> assert_match('^"xxx" \[New\]', term_getline(buf, 10))})
+
+  call term_sendkeys(buf, ":bd\<CR>")
+  call WaitForAssert({-> assert_match('^\"\[No Name\]\" --No lines in buffer--', term_getline(buf, 10))})
+
+  " clean up
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_undo_messages()
+  new
+
+  " Normal undo/redo messages
+  redir => result
+  call setline(1, 'foo')
+  undo
+  undo
+  redo
+  redo
+  redir END
+  let msg_list = split(result, "\n")
+  call assert_match("^1 line less; before #1", msg_list[0])
+  call assert_equal("Already at oldest change", msg_list[1])
+  call assert_match("^1 more line; after #1", msg_list[2])
+  call assert_equal("Already at newest change", msg_list[3])
+
+  " Ignore undo/redo messages
+  redir => result
+  set shortmess+=u
+  call setline(1, 'foo')
+  undo
+  undo
+  redo
+  redo
+  redir END
+  let msg_list = split(result, "\n")
+  call assert_equal([], msg_list)
+  set shortmess&
+
+  " undo_time() path: :earlier and :later go through a separate
+  " message site than u_doit(); make sure SHM_UNDO suppresses it too.
+  enew!
+  call setline(1, 'a')
+  call setline(1, 'b')
+  call setline(1, 'c')
+
+  redir => result
+  earlier 1
+  earlier 999
+  earlier 999
+  later 1
+  later 999
+  redir END
+  let msg_list = split(result, "\n")
+  call assert_match('^1 line less; before #', msg_list[0])
+  call assert_match('^1 changes; before #', msg_list[1])
+  call assert_match('^1 changes; before #', msg_list[2])
+  call assert_match('^1 more line; after #', msg_list[3])
+  call assert_equal('Already at newest change', msg_list[4])
+
+  set shortmess+=u
+  redir => result
+  earlier 1
+  earlier 999
+  later 1
+  later 999
+  later 999
+  redir END
+  call assert_equal([], split(result, "\n"))
+
+  set shortmess&
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

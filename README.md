@@ -1,21 +1,6 @@
-<div align="center" markdown="1">
-   <sup>Special thanks for supporting Vim by donating to the <a href="https://iccf-holland.org/">ICCF</a>:</sup>
-   <br>
-   <br>
-   <a href="https://go.warp.dev/vim">
-      <img alt="Warp sponsorship" width="400" src="https://raw.githubusercontent.com/warpdotdev/brand-assets/refs/heads/main/Github/Sponsor/Warp-Github-LG-03.png">
-   </a>
-
-### [Warp, built for coding with multiple AI agents.](https://www.warp.dev/vim)
-[Available for MacOS, Linux, & Windows](https://www.warp.dev/vim)<br>
-</div>
-<hr>
-
 # [![Vim The editor](https://github.com/vim/vim/raw/master/runtime/vimlogo.gif)](https://www.vim.org)
 
 [![Github Build status](https://github.com/vim/vim/workflows/GitHub%20CI/badge.svg)](https://github.com/vim/vim/actions?query=workflow%3A%22GitHub+CI%22)
-[![Appveyor Build status](https://ci.appveyor.com/api/projects/status/o2qht2kjm02sgghk?svg=true)](https://ci.appveyor.com/project/chrisbra/vim)
-[![Cirrus Build Status](https://api.cirrus-ci.com/github/vim/vim.svg)](https://cirrus-ci.com/github/vim/vim)
 [![Coverage Status](https://codecov.io/gh/vim/vim/coverage.svg?branch=master)](https://codecov.io/gh/vim/vim?branch=master)
 [![Coverity Scan](https://scan.coverity.com/projects/241/badge.svg)](https://scan.coverity.com/projects/vim)
 [![Debian CI](https://badges.debian.net/badges/debian/testing/vim/version.svg)](https://buildd.debian.org/vim)
@@ -25,7 +10,9 @@
 If you find a bug or want to discuss the best way to add a new feature, please
 [open an issue](https://github.com/vim/vim/issues/new/choose).
 If you have a question or want to discuss the best way to do something with
-Vim, you can use [StackExchange](https://vi.stackexchange.com/)
+Vim, you can join [`#vim`](https://web.libera.chat/#vim),
+[reddit.com/r/vim](https://reddit.com/r/vim),
+use [StackExchange](https://vi.stackexchange.com/),
 or one of the [Maillists](https://www.vim.org/community.php).
 
 ## What is Vim?
@@ -167,4 +154,4 @@ Most of Vim was created by Bram Moolenaar `<Bram@vim.org>`
 Send any other comments, patches, flowers and suggestions to the vim-dev mailing list:
 	`<vim-dev@vim.org>`
 
-This is `README.md` for version 9.1 of Vim: Vi IMproved.
+This is `README.md` for version 9.2 of Vim: Vi IMproved.

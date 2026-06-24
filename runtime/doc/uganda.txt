@@ -1,4 +1,4 @@
-*uganda.txt*	For Vim version 9.1.  Last change: 2025 Nov 13
+*uganda.txt*	For Vim version 9.2.  Last change: 2026 Jun 07
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -21,7 +21,7 @@ ICCF Holland and Kuwasha~
 
 |Bram| Moolenaar's charity, ICCF Holland, has long supported the education of
 children in Uganda through the Kibaale Children's Centre.  Following Bram's
-passing in 2023, ICCF Holland transfered all activities to its sister charity
+passing in 2023, ICCF Holland transferred all activities to its sister charity
 Kuwasha in Canada and dissolved at the end of 2025.
 
 Donations from Vim users are still welcome and will continue to go directly to
@@ -234,7 +234,7 @@ Check the Kuwasha web site for the latest information!
 Credit Card:	You can use PayPal to send money with a Credit card.  This is
 		the most widely used Internet based payment system.  It's
 		really simple to use.  Use this link to find more info:
-		    https://www.paypal.com/en_US/mrb/pal=XAC62PML3GF8Q
+		    https://www.paypal.com/ncp/payment/ZZPJ7XEYD3CZ2
 		The e-mail address for sending the money to is:
 		    info@kuwasha.net
 

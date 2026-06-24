@@ -162,13 +162,13 @@ compile_member(int is_slice, int *keeping_dict, cctx_T *cctx)
     if (vartype == VAR_STRING || vartype == VAR_LIST || vartype == VAR_BLOB
 						|| vartype == VAR_TUPLE)
     {
-	if (need_type(idxtype, &t_number, FALSE,
+	if (need_type(idxtype, &t_number, 0,
 					    -1, 0, cctx, FALSE, FALSE) == FAIL)
 	    return FAIL;
 	if (is_slice)
 	{
 	    idxtype = get_type_on_stack(cctx, 1);
-	    if (need_type(idxtype, &t_number, FALSE,
+	    if (need_type(idxtype, &t_number, 0,
 					    -2, 0, cctx, FALSE, FALSE) == FAIL)
 		return FAIL;
 	}
@@ -199,7 +199,7 @@ compile_member(int is_slice, int *keeping_dict, cctx_T *cctx)
 	}
 	else
 	{
-	    if (need_type(typep->type_curr, &t_dict_any, FALSE,
+	    if (need_type(typep->type_curr, &t_dict_any, 0,
 					    -2, 0, cctx, FALSE, FALSE) == FAIL)
 		return FAIL;
 	    typep->type_curr = &t_any;
@@ -496,7 +496,7 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	    // Trying to invoke an abstract method in a super class is not
 	    // allowed.
 	    semsg(_(e_abstract_method_str_direct), ufunc->uf_name,
-		    ufunc->uf_defclass->class_name);
+		    ufunc->uf_defclass->class_name.string);
 	    goto done;
 	}
 
@@ -508,7 +508,7 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 		((type->tt_type == VAR_OBJECT
 		  && !inside_class_hierarchy(cctx, cl))
 		 || (type->tt_type == VAR_CLASS
-		     && cctx->ctx_ufunc->uf_class != cl)))
+		     && cctx->ctx_ufunc->uf_defclass != cl)))
 	{
 	    semsg(_(e_cannot_access_protected_method_str), name);
 	    goto done;
@@ -551,7 +551,7 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	    if (*name == '_' && !inside_class(cctx, cl))
 	    {
 		emsg_var_cl_define(e_cannot_access_protected_variable_str,
-							m->ocm_name, 0, cl);
+							m->ocm_name.string, 0, cl);
 		goto done;
 	    }
 
@@ -596,7 +596,7 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	    if (*name == '_' && cctx->ctx_ufunc->uf_class != cl)
 	    {
 		emsg_var_cl_define(e_cannot_access_protected_variable_str,
-							m->ocm_name, 0, cl);
+							m->ocm_name.string, 0, cl);
 		goto done;
 	    }
 
@@ -946,7 +946,7 @@ compile_load(
 		case 'g': if (vim_strchr(name, AUTOLOAD_CHAR) == NULL)
 			  {
 			      if (is_expr && ASCII_ISUPPER(*name)
-				       && (find_func(name, FALSE) != NULL
+				       && (find_func(name, TRUE) != NULL
 					   || gfatab.gfat_args.ga_len > 0))
 				  res = generate_funcref(cctx, name, &gfatab,
 								TRUE);
@@ -1052,7 +1052,7 @@ compile_load(
 		else
 		{
 		    semsg(_(e_class_variable_str_accessible_only_inside_class_str),
-			    name, cl->class_name);
+			    name, cl->class_name.string);
 		    res = FAIL;
 		}
 	    }
@@ -1392,7 +1392,6 @@ compile_call(
     else
 	*arg += varlen + 1;
 
-    *arg = skipwhite(*arg);
     if (compile_arguments(arg, cctx, &argcount, special_fn) == FAIL)
 	goto theend;
 
@@ -1511,7 +1510,7 @@ compile_call(
 	    else
 	    {
 		semsg(_(e_class_method_str_accessible_only_inside_class_str),
-			name, cl->class_name);
+			name, cl->class_name.string);
 		res = FAIL;
 	    }
 	    goto theend;
@@ -1743,6 +1742,29 @@ compile_tuple(
 }
 
 /*
+ * Restore "*arg" from a temporary cmdline copy.
+ */
+    static void
+restore_cmdline_arg(evalarg_T *evalarg, char_u **arg, cctx_T *cctx)
+{
+    garray_T    *gap;
+    char_u	*line;
+    size_t	off;
+
+    if (!evalarg->eval_using_cmdline || cctx == NULL)
+	return;
+
+    gap = &evalarg->eval_tofree_ga;
+    if (gap->ga_len == 0)
+	return;
+
+    off = *arg - ((char_u **)gap->ga_data)[gap->ga_len - 1];
+    line = ((char_u **)cctx->ctx_ufunc->uf_lines.ga_data)[cctx->ctx_lnum];
+    *arg = line + off;
+    evalarg->eval_using_cmdline = FALSE;
+}
+
+/*
  * Parse a lambda: "(arg, arg) => expr"
  * "*arg" points to the '('.
  * Returns OK/FAIL when a lambda is recognized, NOTDONE if it's not a lambda.
@@ -1804,18 +1826,7 @@ compile_lambda(char_u **arg, cctx_T *cctx)
 	    compile_def_function(ufunc, FALSE, compile_type, cctx);
     }
 
-    // The last entry in evalarg.eval_tofree_ga is a copy of the last line and
-    // "*arg" may point into it.  Point into the original line to avoid a
-    // dangling pointer.
-    if (evalarg.eval_using_cmdline)
-    {
-	garray_T    *gap = &evalarg.eval_tofree_ga;
-	size_t	    off = *arg - ((char_u **)gap->ga_data)[gap->ga_len - 1];
-
-	*arg = ((char_u **)cctx->ctx_ufunc->uf_lines.ga_data)[cctx->ctx_lnum]
-									 + off;
-	evalarg.eval_using_cmdline = FALSE;
-    }
+    restore_cmdline_arg(&evalarg, arg, cctx);
 
     clear_evalarg(&evalarg, NULL);
 
@@ -2349,6 +2360,7 @@ skip_expr_cctx(char_u **arg, cctx_T *cctx)
     init_evalarg(&evalarg);
     evalarg.eval_cctx = cctx;
     skip_expr(arg, &evalarg);
+    restore_cmdline_arg(&evalarg, arg, cctx);
     clear_evalarg(&evalarg, NULL);
 }
 
@@ -2374,7 +2386,7 @@ bool_on_stack(cctx_T *cctx)
 	// This requires a runtime type check.
 	return generate_COND2BOOL(cctx);
 
-    return need_type(type, &t_bool, FALSE, -1, 0, cctx, FALSE, FALSE);
+    return need_type(type, &t_bool, 0, -1, 0, cctx, FALSE, FALSE);
 }
 
 /*
@@ -2408,7 +2420,7 @@ compile_leader(cctx_T *cctx, int numeric_only, char_u *start, char_u **end)
 	{
 	    type_T *type = get_type_on_stack(cctx, 0);
 	    if (type->tt_type != VAR_FLOAT && need_type(type, &t_number,
-				     FALSE, -1, 0, cctx, FALSE, FALSE) == FAIL)
+				     0, -1, 0, cctx, FALSE, FALSE) == FAIL)
 		return FAIL;
 
 	    // only '-' has an effect, for '+' we only check the type
@@ -2430,6 +2442,8 @@ compile_leader(cctx_T *cctx, int numeric_only, char_u *start, char_u **end)
 		    invert = !invert;
 		--p;
 	    }
+	    if (check_type_is_value(get_type_on_stack(cctx, 0)) == FAIL)
+		return FAIL;
 	    if (generate_2BOOL(cctx, invert, -1) == FAIL)
 		return FAIL;
 	}
@@ -2566,6 +2580,13 @@ compile_subscript(
 	    if (generate_ppconst(cctx, ppconst) == FAIL)
 		return FAIL;
 	    ppconst->pp_is_const = FALSE;
+
+	    type = get_type_on_stack(cctx, 0);
+	    if (type->tt_type == VAR_VOID)
+	    {
+		emsg(_(e_cannot_use_void_value));
+		return FAIL;
+	    }
 
 	    // Apply the '!', '-' and '+' first:
 	    //   -1.0->func() works like (-1.0)->func()
@@ -2839,9 +2860,8 @@ compile_subscript(
 		    return FAIL;
 		}
 		p = *arg;
-		if (eval_isdictc(*p))
-		    while (eval_isnamec(*p))
-			MB_PTR_ADV(p);
+		while (eval_isdictc(*p))
+		    MB_PTR_ADV(p);
 		if (p == *arg)
 		{
 		    semsg(_(e_syntax_error_at_str), *arg);
@@ -3196,8 +3216,8 @@ compile_expr8(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 	actual = get_type_on_stack(cctx, 0);
 	if (check_type_maybe(want_type, actual, FALSE, where) != OK)
 	{
-	    if (need_type_where(actual, want_type, FALSE, -1, where, cctx, FALSE, FALSE)
-		    == FAIL)
+	    if (need_type_where(actual, want_type, 0, -1, where, cctx, FALSE,
+							FALSE) == FAIL)
 		return FAIL;
 	}
     }
@@ -3354,7 +3374,7 @@ compile_expr6(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 		char_u *s2 = tv2->vval.v_string;
 		size_t len1 = STRLEN(s1);
 
-		tv1->vval.v_string = alloc((int)(len1 + STRLEN(s2) + 1));
+		tv1->vval.v_string = alloc(len1 + STRLEN(s2) + 1);
 		if (tv1->vval.v_string == NULL)
 		{
 		    clear_ppconst(ppconst);
@@ -3438,7 +3458,7 @@ compile_expr5(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 	{
 	    type_T	*t = get_type_on_stack(cctx, 0);
 
-	    if (need_type(t, &t_number, FALSE, 0, 0, cctx, FALSE, FALSE) == FAIL)
+	    if (need_type(t, &t_number, 0, 0, 0, cctx, FALSE, FALSE) == FAIL)
 	    {
 		emsg(_(e_bitshift_ops_must_be_number));
 		return FAIL;
@@ -3493,7 +3513,7 @@ compile_expr5(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 	}
 	else
 	{
-	    if (need_type(get_type_on_stack(cctx, 0), &t_number, FALSE,
+	    if (need_type(get_type_on_stack(cctx, 0), &t_number, 0,
 					     0, 0, cctx, FALSE, FALSE) == FAIL)
 	    {
 		emsg(_(e_bitshift_ops_must_be_number));
@@ -3948,7 +3968,11 @@ compile_expr1(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 	    generate_JUMP(cctx, op_falsy
 				   ? JUMP_AND_KEEP_IF_TRUE : JUMP_IF_FALSE, 0);
 	    if (op_falsy)
+	    {
 		type1 = get_type_on_stack(cctx, -1);
+		if (check_type_is_value(type1) == FAIL)
+		    return FAIL;
+	    }
 	}
 
 	// evaluate the second expression; any type is accepted

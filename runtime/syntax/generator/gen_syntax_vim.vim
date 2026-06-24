@@ -1,7 +1,7 @@
 " Vim syntax file generator
 " Language:		 Vim script
 " Maintainer:  Hirohito Higashi (h_east)
-" Last Change: 2025 Nov 13
+" Last Change: 2025 Dec 04
 
 let s:keepcpo= &cpo
 set cpo&vim
@@ -31,6 +31,9 @@ function s:parse_vim_option(opt, missing_opt, term_out_code)
 
 		for line in getline(1, line('$'))
 			let list = matchlist(line, '^\s*{\s*"\(\w\+\)"\s*,\s*\%("\(\w\+\)"\|NULL\)\s*,\s*\%([^,]*\(P_BOOL\)[^,]*\|[^,]*\)\s*,\s*\([^,]*NULL\)\?.*')
+			if list[1] == 'completefuzzycollect'
+				continue
+			endif
 			let item.name = list[1]
 			let item.short_name = list[2]
 			let item.is_bool = empty(list[3]) ? 0 : 1
@@ -305,6 +308,9 @@ function s:get_vim_command_type(cmd_name)
 		augroup
 		autocmd
 		behave
+		breakadd
+		breakdel
+		breaklist
 		browse
 		bufdo
 		call
@@ -318,6 +324,7 @@ function s:get_vim_command_type(cmd_name)
 		confirm
 		const
 		copy
+		debug
 		debuggreedy
 		def
 		defer
@@ -354,14 +361,17 @@ function s:get_vim_command_type(cmd_name)
 		function
 		grep
 		grepadd
+		help
 		helpgrep
 		highlight
+		history
 		if
 		import
 		interface
 		insert
 		join
 		k
+		language
 		let
 		ldo
 		lfdo

@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:		The Vim Project <https://github.com/vim/vim>
-" Last Change:		2025 Nov 11
+" Last Change:		2026 Jun 03
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " If the filetype can be detected from extension or file name(the final path component),
@@ -91,6 +91,9 @@ au BufNewFile,BufRead */.aptitude/config       setf aptconf
 " Arch Inventory file
 au BufNewFile,BufRead .arch-inventory,=tagging-method	setf arch
 
+" atlas or kawasaki_as
+au BufNewFile,BufRead *.as call dist#ft#FTas()
+
 " Active Server Pages (with Visual Basic Script)
 au BufNewFile,BufRead *.asa
 	\ if exists("g:filetype_asa") |
@@ -119,10 +122,13 @@ au BufNewFile,BufRead */boot/grub/menu.lst,*/boot/grub/grub.conf,*/etc/grub.conf
 " *.mc omitted - used by dist#ft#McSetf()
 au BufNewFile,BufRead *.demo,*.dm{1,2,3,t},*.wxm,maxima-init.mac setf maxima
 
+" ObjectScript routine or assembly
+au BufNewFile,BufRead *.mac			call dist#ft#FTmac()
+
 " Assembly (all kinds)
 " *.lst is not pure assembly, it has two extra columns (address, byte codes)
 " *.[sS], *.[aA] usually Assembly - GNU
-au BufNewFile,BufRead *.asm,*.[sS],*.[aA],*.mac,*.lst	call dist#ft#FTasm()
+au BufNewFile,BufRead *.asm,*.[sS],*.[aA],*.lst	call dist#ft#FTasm()
 
 " BASIC or Visual Basic
 au BufNewFile,BufRead *.bas			call dist#ft#FTbas()
@@ -427,11 +433,15 @@ au BufNewFile,BufRead *.e,*.E			call dist#ft#FTe()
 " Elm Filter Rules file
 au BufNewFile,BufRead filter-rules		setf elmfilt
 
+" Erlang Application Resource Files
+au BufNewFile,BufRead *.app.src			setf erlang
+au BufNewFile,BufRead *.app			call dist#ft#FTapp()
+
 " ESMTP rc file
 au BufNewFile,BufRead *esmtprc			setf esmtprc
 
 " Fennel
-au BufNewFile,BufRead *.fnl,{,.}fennelrc	setf fennel
+au BufNewFile,BufRead {,.}fennelrc	setf fennel
 
 " Flatpak config
 au BufNewFile,BufRead */flatpak/repo/config	setf dosini
@@ -531,7 +541,6 @@ au BufNewFile,BufRead init.trans,*/etc/translate-shell,.trans	setf clojure
 
 " HTML (.stm for server side, .shtml is server-side or superhtml)
 au BufNewFile,BufRead *.html,*.htm,*.shtml,*.stm  call dist#ft#FThtml()
-au BufNewFile,BufRead *.cshtml			setf html
 
 " Host config
 au BufNewFile,BufRead */etc/host.conf		setf hostconf
@@ -568,6 +577,9 @@ au BufNewFile,BufRead *.pro			call dist#ft#ProtoCheck('idlang')
 
 " Initng
 au BufNewFile,BufRead */etc/initng/*/*.i,*.ii	setf initng
+
+" Intel HEX or ObjectScript routine
+au BufNewFile,BufRead *.int			call dist#ft#FTint()
 
 " Innovation Data Processing
 au BufNewFile,BufRead upstream.dat\c,upstream.*.dat\c,*.upstream.dat\c	setf upstreamdat
@@ -881,7 +893,10 @@ au BufNewFile,BufRead requirements/*.txt	setf requirements
 au BufNewFile,BufRead requires/*.txt		setf requirements
 
 " Pkl
-au BufNewFile,BufRead *.pkl,*.pcf,pkl-lsp://*	setf pkl
+au BufNewFile,BufRead PklProject,*.pkl,*.pcf,pkl-lsp://*	setf pkl
+
+" WIC kickstarter files
+au BufNewFile,BufRead *.wks,*.wks.in,*.wks.inc	setf wks
 
 " Povray, Pascal, PHP or assembly
 au BufNewFile,BufRead *.inc			call dist#ft#FTinc()
@@ -1023,8 +1038,9 @@ au BufNewFile,BufRead *.decl,*.dcl,*.dec
 " Gentoo ebuilds and Arch Linux PKGBUILDs are actually bash scripts.
 " NOTE: Patterns ending in a star are further down, these have lower priority.
 au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,.bash[_-]history,bash-fc[-.],*.ebuild,*.bash,*.eclass,PKGBUILD,*.bats,*.cygport call dist#ft#SetFileTypeSH("bash")
+au BufNewFile,BufRead ~/.x{init,server}rc,/etc/X11/xinit/x{initrc{,.d/*},serverrc} setf sh
 au BufNewFile,BufRead .kshrc,*.ksh call dist#ft#SetFileTypeSH("ksh")
-au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.env{rc,} call dist#ft#SetFileTypeSH(getline(1))
+au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.envrc,.envrc.* call dist#ft#SetFileTypeSH(getline(1))
 " Shell script (Arch Linux) or PHP file (Drupal)
 au BufNewFile,BufRead *.install
 	\ if getline(1) =~ '<?php' |
@@ -1046,12 +1062,12 @@ au BufNewFile,BufRead .zshrc,.zshenv,.zlogin,.zlogout,.zcompdump,.zsh_history se
 au BufNewFile,BufRead *.zsh,*.zsh-theme,*.zunit		setf zsh
 
 " Scheme, Supertux configuration, Lips.js history, Guile init file ("racket" patterns are now separate, see above)
-au BufNewFile,BufRead *.scm,*.ss,*.sld,*.stsg,*/supertux2/config,.lips_repl_history,.guile	setf scheme
+au BufNewFile,BufRead *.scm,*.ss,*.sld,*.stwm,*.stl,*.stxt,*.sprite,*.strf,*.satc,*.stcd,*.stf,*.stcp,*.music,*.stsg,*/supertux2/config,supertux2/*/info,.lips_repl_history,.guile	setf scheme
 
 " SiSU
 au BufNewFile,BufRead *.sst.meta,*.-sst.meta,*._sst.meta setf sisu
 
-" Smalltalk (and Rexx, TeX, and Visual Basic)
+" Smalltalk (and ObjectScript, Rexx, TeX, and Visual Basic)
 au BufNewFile,BufRead *.cls			call dist#ft#FTcls()
 
 " SMIL or XML
@@ -1123,6 +1139,15 @@ au BufNewFile,BufRead */etc/systemd/system/*.d/.#*	setf systemd
 au BufNewFile,BufRead */etc/systemd/system/.#*		setf systemd
 au BufNewFile,BufRead */.config/systemd/user/*.d/.#*	setf systemd
 au BufNewFile,BufRead */.config/systemd/user/.#*	setf systemd
+" Podman Quadlet files
+au BufNewFile,BufRead */containers/systemd/*.{artifact,build,container,image,kube,network,pod,volume}	setf systemd
+" Podman Quadlet rootless files not already captured by previous line
+au BufNewFile,BufRead */etc/containers/systemd/users/*/*.{artifact,build,container,image,kube,network,pod,volume}	setf systemd
+au BufNewFile,BufRead */etc/containers/systemd/users/*.{artifact,build,container,image,kube,network,pod,volume}	setf systemd
+" Podman Quadlet overrides
+au BufNewFile,BufRead */containers/systemd/*.d/*.conf	setf systemd
+au BufNewFile,BufRead */etc/containers/systemd/users/*/*.d/*.conf		setf systemd
+au BufNewFile,BufRead */etc/containers/systemd/users/*.d/*.conf		setf systemd
 
 " Sudoers
 au BufNewFile,BufRead */etc/sudoers,sudoers.tmp	setf sudoers
@@ -1291,7 +1316,7 @@ au BufNewFile,BufRead *Xmodmap			setf xmodmap
 au BufNewFile,BufRead *.y			call dist#ft#FTy()
 
 " Yaml
-au BufNewFile,BufRead */.kube/config,*/.kube/kuberc	setf yaml
+au BufNewFile,BufRead buf.lock,*/.kube/config,*/.kube/kuberc	setf yaml
 
 " yum conf (close enough to dosini)
 au BufNewFile,BufRead */etc/yum.conf		setf dosini
@@ -1304,7 +1329,7 @@ au BufNewFile,BufRead *.dtml,*.pt,*.cpt		call dist#ft#FThtml()
 "   zsql (zope sql method)
 au BufNewFile,BufRead *.zsql			call dist#ft#SQL()
 
-" Detect by extention
+" Detect by extension
 au BufNewFile,BufRead *				call dist#ft#DetectFromExt()
 augroup END
 
@@ -1397,6 +1422,9 @@ au BufNewFile,BufRead drac.*			call s:StarSetf('dracula')
 
 " Execline (s6) scripts
 au BufNewFile,BufRead s6-*			call s:StarSetf('execline')
+
+" Env
+au BufNewFile,BufRead *.env,.env{.*,} setf env
 
 " Fvwm
 au BufNewFile,BufRead */.fvwm/*			call s:StarSetf('fvwm')
@@ -1535,6 +1563,9 @@ au BufNewFile,BufRead .tcshrc*	call dist#ft#SetFileTypeShell("tcsh")
 " csh scripts ending in a star
 au BufNewFile,BufRead .login*,.cshrc*  call dist#ft#CSH()
 
+" Tiltfile
+au BufNewFile,BufRead Tiltfile.*	call s:StarSetf('tiltfile')
+
 " tmux configuration with arbitrary extension
 au BufNewFile,BufRead {.,}tmux*.conf*		call s:StarSetf('tmux')
 
@@ -1552,6 +1583,9 @@ au BufNewFile,BufRead *vimrc*			call s:StarSetf('vim')
 
 " Subversion commit file
 au BufNewFile,BufRead svn-commit*.tmp		setf svn
+
+" Wireguard config
+au BufNewFile,BufRead */etc/wireguard/*.conf    setf dosini
 
 " X resources file
 au BufNewFile,BufRead Xresources*,*/app-defaults/*,*/Xresources/* call s:StarSetf('xdefaults')
@@ -1587,6 +1621,10 @@ au BufNewFile,BufRead *.txt
 	\|   setf text
 	\| endif
 
+" Ghostty configuration
+au BufNewFile,BufRead */ghostty/config                      setf ghostty
+au BufNewFile,BufRead */ghostty/themes/*                    call s:StarSetf('ghostty')
+au BufNewFile,BufRead */com.mitchellh.ghostty/config        setf ghostty
 
 
 " Generic log file

@@ -104,6 +104,14 @@ EXTERN int redrawing_for_callback INIT(= 0);
  */
 EXTERN short	*TabPageIdxs INIT(= NULL);
 
+// Click regions for 'tabline' (%[FuncName]).
+EXTERN stl_click_region_T *tabline_stl_click INIT(= NULL);
+EXTERN int	tabline_stl_click_count INIT(= 0);
+
+// Click regions for 'tabpanel' (%[FuncName]).
+EXTERN stl_click_region_T *tabpanel_stl_click INIT(= NULL);
+EXTERN int	tabpanel_stl_click_count INIT(= 0);
+
 #ifdef FEAT_PROP_POPUP
 // Array with size Rows x Columns containing zindex of popups.
 EXTERN short	*popup_mask INIT(= NULL);
@@ -120,7 +128,27 @@ EXTERN tabpage_T *popup_mask_tab INIT(= NULL);
 // Zindex in for screen_char(): if lower than the value in "popup_mask"
 // drawing the character is skipped.
 EXTERN int	screen_zindex INIT(= 0);
+
+// Currently drawing popup with opacity window, or NULL.
+EXTERN win_T	*screen_opacity_popup INIT(= NULL);
 #endif
+
+// Pum opacity level (0 = fully transparent, 100 = fully opaque).
+// Set via 'pumopt' opacity: key.
+EXTERN long	p_po INIT(= 100);
+
+// Blend value for popup menu opacity (0 = off, 1-99 = blend level).
+// Set during pum drawing when pum opacity is active.
+EXTERN int	screen_pum_blend INIT(= 0);
+
+// Saved background screen content for pum opacity blending.
+EXTERN sattr_T	*pum_bg_attrs INIT(= NULL);
+EXTERN schar_T	*pum_bg_lines INIT(= NULL);
+EXTERN u8char_T	*pum_bg_linesUC INIT(= NULL);
+EXTERN u8char_T	*pum_bg_linesC[MAX_MCO];
+EXTERN int	pum_bg_top INIT(= 0);
+EXTERN int	pum_bg_bot INIT(= 0);
+EXTERN int	pum_bg_cols INIT(= 0);
 
 EXTERN int	screen_Rows INIT(= 0);	    // actual size of ScreenLines[]
 EXTERN int	screen_Columns INIT(= 0);   // actual size of ScreenLines[]
@@ -405,161 +433,161 @@ EXTERN int	garbage_collect_at_exit INIT(= FALSE);
 
 // t_unknown - used for when the type is really unknown, e.g. global variables.
 // Also for when a function may or may not return something.
-#define t_unknown		(static_types[0])
-#define t_const_unknown		(static_types[1])
+# define t_unknown		(static_types[0])
+# define t_const_unknown		(static_types[1])
 
 // t_any -  used for when the type can be anything, but excludes "void".
-#define t_any			(static_types[2])
-#define t_const_any		(static_types[3])
+# define t_any			(static_types[2])
+# define t_const_any		(static_types[3])
 
 // t_void - used for a function not returning anything.
-#define t_void			(static_types[4])
-#define t_const_void		(static_types[5])
+# define t_void			(static_types[4])
+# define t_const_void		(static_types[5])
 
-#define t_bool			(static_types[6])
-#define t_const_bool		(static_types[7])
+# define t_bool			(static_types[6])
+# define t_const_bool		(static_types[7])
 
-#define t_null			(static_types[8])
-#define t_const_null		(static_types[9])
+# define t_null			(static_types[8])
+# define t_const_null		(static_types[9])
 
-#define t_none			(static_types[10])
-#define t_const_none		(static_types[11])
+# define t_none			(static_types[10])
+# define t_const_none		(static_types[11])
 
-#define t_number		(static_types[12])
-#define t_const_number		(static_types[13])
+# define t_number		(static_types[12])
+# define t_const_number		(static_types[13])
 
 // t_number_bool - number that can be used as a bool
-#define t_number_bool		(static_types[14])
-#define t_const_number_bool	(static_types[15])
+# define t_number_bool		(static_types[14])
+# define t_const_number_bool	(static_types[15])
 
 // t_number_float - number that can be used as a float
-#define t_number_float		(static_types[16])
-#define t_const_number_float	(static_types[17])
+# define t_number_float		(static_types[16])
+# define t_const_number_float	(static_types[17])
 
-#define t_float			(static_types[18])
-#define t_const_float		(static_types[19])
+# define t_float			(static_types[18])
+# define t_const_float		(static_types[19])
 
-#define t_string		(static_types[20])
-#define t_const_string		(static_types[21])
+# define t_string		(static_types[20])
+# define t_const_string		(static_types[21])
 
-#define t_blob			(static_types[22])
-#define t_const_blob		(static_types[23])
+# define t_blob			(static_types[22])
+# define t_const_blob		(static_types[23])
 
-#define t_blob_null		(static_types[24])
-#define t_const_blob_null	(static_types[25])
+# define t_blob_null		(static_types[24])
+# define t_const_blob_null	(static_types[25])
 
-#define t_job			(static_types[26])
-#define t_const_job		(static_types[27])
+# define t_job			(static_types[26])
+# define t_const_job		(static_types[27])
 
-#define t_channel		(static_types[28])
-#define t_const_channel		(static_types[29])
+# define t_channel		(static_types[28])
+# define t_const_channel		(static_types[29])
 
 // t_number_or_string - Special value used for @#.
-#define t_number_or_string	(static_types[30])
-#define t_const_number_or_string (static_types[31])
+# define t_number_or_string	(static_types[30])
+# define t_const_number_or_string (static_types[31])
 
 // t_func_unknown - function with any arguments and no or unknown return value
-#define t_func_unknown		(static_types[32])
-#define t_const_func_unknown	(static_types[33])
+# define t_func_unknown		(static_types[32])
+# define t_const_func_unknown	(static_types[33])
 
 // t_func_void - function with any arguments and no return value
-#define t_func_void		(static_types[34])
-#define t_const_func_void	(static_types[35])
+# define t_func_void		(static_types[34])
+# define t_const_func_void	(static_types[35])
 
-#define t_func_any		(static_types[36])
-#define t_const_func_any	(static_types[37])
+# define t_func_any		(static_types[36])
+# define t_const_func_any	(static_types[37])
 
-#define t_func_number		(static_types[38])
-#define t_const_func_number	(static_types[39])
+# define t_func_number		(static_types[38])
+# define t_const_func_number	(static_types[39])
 
-#define t_func_string		(static_types[40])
-#define t_const_func_string	(static_types[41])
+# define t_func_string		(static_types[40])
+# define t_const_func_string	(static_types[41])
 
-#define t_func_bool		(static_types[42])
-#define t_const_func_bool	(static_types[43])
+# define t_func_bool		(static_types[42])
+# define t_const_func_bool	(static_types[43])
 
 // t_func_0_void - function without arguments and nor return value
-#define t_func_0_void		(static_types[44])
-#define t_const_func_0_void	(static_types[45])
+# define t_func_0_void		(static_types[44])
+# define t_const_func_0_void	(static_types[45])
 
-#define t_func_0_any		(static_types[46])
-#define t_const_func_0_any	(static_types[47])
+# define t_func_0_any		(static_types[46])
+# define t_const_func_0_any	(static_types[47])
 
-#define t_func_0_number		(static_types[48])
-#define t_const_func_0_number	(static_types[49])
+# define t_func_0_number		(static_types[48])
+# define t_const_func_0_number	(static_types[49])
 
-#define t_func_0_string		(static_types[50])
-#define t_const_func_0_string	(static_types[51])
+# define t_func_0_string		(static_types[50])
+# define t_const_func_0_string	(static_types[51])
 
-#define t_list_any		(static_types[52])
-#define t_const_list_any	(static_types[53])
+# define t_list_any		(static_types[52])
+# define t_const_list_any	(static_types[53])
 
-#define t_dict_any		(static_types[54])
-#define t_const_dict_any	(static_types[55])
+# define t_dict_any		(static_types[54])
+# define t_const_dict_any	(static_types[55])
 
-#define t_list_empty		(static_types[56])
-#define t_const_list_empty	(static_types[57])
+# define t_list_empty		(static_types[56])
+# define t_const_list_empty	(static_types[57])
 
-#define t_dict_empty		(static_types[58])
-#define t_const_dict_empty	(static_types[59])
+# define t_dict_empty		(static_types[58])
+# define t_const_dict_empty	(static_types[59])
 
-#define t_list_bool		(static_types[60])
-#define t_const_list_bool	(static_types[61])
+# define t_list_bool		(static_types[60])
+# define t_const_list_bool	(static_types[61])
 
-#define t_list_number		(static_types[62])
-#define t_const_list_number	(static_types[63])
+# define t_list_number		(static_types[62])
+# define t_const_list_number	(static_types[63])
 
-#define t_list_string		(static_types[64])
-#define t_const_list_string	(static_types[65])
+# define t_list_string		(static_types[64])
+# define t_const_list_string	(static_types[65])
 
-#define t_list_job		(static_types[66])
-#define t_const_list_job	(static_types[67])
+# define t_list_job		(static_types[66])
+# define t_const_list_job	(static_types[67])
 
-#define t_list_dict_any		(static_types[68])
-#define t_const_list_dict_any	(static_types[69])
+# define t_list_dict_any		(static_types[68])
+# define t_const_list_dict_any	(static_types[69])
 
-#define t_list_list_any		(static_types[70])
-#define t_const_list_list_any	(static_types[71])
+# define t_list_list_any		(static_types[70])
+# define t_const_list_list_any	(static_types[71])
 
-#define t_list_list_number	(static_types[72])
-#define t_const_list_list_number (static_types[73])
+# define t_list_list_number	(static_types[72])
+# define t_const_list_list_number (static_types[73])
 
-#define t_list_list_string	(static_types[74])
-#define t_const_list_list_string (static_types[75])
+# define t_list_list_string	(static_types[74])
+# define t_const_list_list_string (static_types[75])
 
-#define t_list_list_list_number	(static_types[76])
-#define t_const_list_list_list_number (static_types[77])
+# define t_list_list_list_number	(static_types[76])
+# define t_const_list_list_list_number (static_types[77])
 
-#define t_dict_bool		(static_types[78])
-#define t_const_dict_bool	(static_types[79])
+# define t_dict_bool		(static_types[78])
+# define t_const_dict_bool	(static_types[79])
 
-#define t_dict_number		(static_types[80])
-#define t_const_dict_number	(static_types[81])
+# define t_dict_number		(static_types[80])
+# define t_const_dict_number	(static_types[81])
 
-#define t_dict_string		(static_types[82])
-#define t_const_dict_string	(static_types[83])
+# define t_dict_string		(static_types[82])
+# define t_const_dict_string	(static_types[83])
 
-#define t_super			(static_types[84])
-#define t_const_super		(static_types[85])
+# define t_super			(static_types[84])
+# define t_const_super		(static_types[85])
 
-#define t_object_any		(static_types[86])
-#define t_const_object_any	(static_types[87])
+# define t_object_any		(static_types[86])
+# define t_const_object_any	(static_types[87])
 
-#define t_class			(static_types[88])
-#define t_const_class		(static_types[89])
+# define t_class			(static_types[88])
+# define t_const_class		(static_types[89])
 
-#define t_typealias		(static_types[90])
-#define t_const_typealias	(static_types[91])
+# define t_typealias		(static_types[90])
+# define t_const_typealias	(static_types[91])
 
-#define t_tuple_any		(static_types[92])
-#define t_const_tuple_any	(static_types[93])
+# define t_tuple_any		(static_types[92])
+# define t_const_tuple_any	(static_types[93])
 
-#define t_tuple_empty		(static_types[94])
-#define t_const_tuple_empty	(static_types[95])
+# define t_tuple_empty		(static_types[94])
+# define t_const_tuple_empty	(static_types[95])
 
 
 EXTERN type_T static_types[96]
-#ifdef DO_INIT
+# ifdef DO_INIT
 = {
     // 0: t_unknown
     {VAR_UNKNOWN, 0, 0, TTFLAG_STATIC, NULL, NULL, NULL},
@@ -753,7 +781,7 @@ EXTERN type_T static_types[96]
     {VAR_TUPLE, 0, 0, TTFLAG_STATIC, NULL, NULL, NULL},
     {VAR_TUPLE, 0, 0, TTFLAG_STATIC|TTFLAG_CONST, NULL, NULL, NULL},
 }
-#endif
+# endif
 ;
 
 EXTERN int	did_source_packages INIT(= FALSE);
@@ -825,6 +853,8 @@ EXTERN guicolor_T cterm_normal_fg_gui_color INIT(= INVALCOLOR);
 EXTERN guicolor_T cterm_normal_bg_gui_color INIT(= INVALCOLOR);
 EXTERN guicolor_T cterm_normal_ul_gui_color INIT(= INVALCOLOR);
 #endif
+EXTERN guicolor_T fallback_fg_rgb INIT(= INVALCOLOR); // RGB fallback foreground color from guifg, ctermfg or deduced from 'background'
+EXTERN guicolor_T fallback_bg_rgb INIT(= INVALCOLOR); // RGB fallback background color from guibg, ctermbg or deduced from 'background'
 #ifdef FEAT_TERMRESPONSE
 EXTERN int	is_mac_terminal INIT(= FALSE);  // recognized Terminal.app
 #endif
@@ -875,12 +905,12 @@ EXTERN int	gui_prev_topfill INIT(= 0);
 # endif
 #endif
 
-# ifdef FEAT_MOUSESHAPE
+#ifdef FEAT_MOUSESHAPE
 EXTERN int	drag_status_line INIT(= FALSE);	// dragging the status line
 EXTERN int	postponed_mouseshape INIT(= FALSE); // postponed updating the
 						    // mouse pointer shape
 EXTERN int	drag_sep_line INIT(= FALSE);	// dragging vert separator
-# endif
+#endif
 
 
 #ifdef FEAT_DIFF
@@ -980,18 +1010,27 @@ EXTERN Clipboard_T clip_plus;	// CLIPBOARD selection in X11/Wayland
 #  define clip_plus clip_star	// there is only one clipboard
 #  define ONE_CLIPBOARD
 # endif
+#endif
 
+#ifdef HAVE_CLIPMETHOD
 # define CLIP_UNNAMED      1
 # define CLIP_UNNAMED_PLUS 2
 EXTERN int	clip_unnamed INIT(= 0); // above two values or'ed
 
+# ifdef FEAT_CLIPBOARD
 EXTERN int	clip_autoselect_star INIT(= FALSE);
 EXTERN int	clip_autoselect_plus INIT(= FALSE);
 EXTERN int	clip_autoselectml INIT(= FALSE);
 EXTERN int	clip_html INIT(= FALSE);
 EXTERN regprog_T *clip_exclude_prog INIT(= NULL);
 EXTERN int	clip_unnamed_saved INIT(= 0);
+# endif
 #endif
+
+#ifdef FEAT_CLIPBOARD_PROVIDER
+EXTERN char_u	*clip_provider INIT(= NULL);
+#endif
+
 
 /*
  * All regular windows are linked in a list. "firstwin" points to the first
@@ -1057,6 +1096,7 @@ EXTERN tabpage_T    *first_tabpage;
 EXTERN tabpage_T    *curtab;
 EXTERN tabpage_T    *lastused_tabpage;
 EXTERN int	    redraw_tabline INIT(= FALSE);  // need to redraw tabline
+EXTERN int	    redraw_vseps INIT(= FALSE);	   // need to redraw vseps
 
 #if defined(FEAT_TABPANEL)
 EXTERN int	    redraw_tabpanel INIT(= FALSE);  // need to redraw tabpanel
@@ -1342,14 +1382,14 @@ EXTERN int (*mb_ptr2char)(char_u *p) INIT(= latin_ptr2char);
 // terminated.
 EXTERN int (*mb_head_off)(char_u *base, char_u *p) INIT(= latin_head_off);
 
-# if defined(USE_ICONV) && defined(DYNAMIC_ICONV)
+#if defined(USE_ICONV) && defined(DYNAMIC_ICONV)
 // Pointers to functions and variables to be loaded at runtime
 EXTERN size_t (*iconv) (iconv_t cd, const char **inbuf, size_t *inbytesleft, char **outbuf, size_t *outbytesleft);
 EXTERN iconv_t (*iconv_open) (const char *tocode, const char *fromcode);
 EXTERN int (*iconv_close) (iconv_t cd);
 EXTERN int (*iconvctl) (iconv_t cd, int request, void *argument);
 EXTERN int* (*iconv_errno) (void);
-# endif
+#endif
 
 
 #ifdef FEAT_XIM
@@ -1618,9 +1658,9 @@ EXTERN int	aucmd_cmdline_changed_count INIT(= 0);
 
 EXTERN int	did_cursorhold INIT(= TRUE);  // set when CursorHold t'gerd
 EXTERN pos_T	last_cursormoved	      // for CursorMoved event
-# ifdef DO_INIT
+#ifdef DO_INIT
 		    = {0, 0, 0}
-# endif
+#endif
 		    ;
 
 EXTERN int	postponed_split INIT(= 0);  // for CTRL-W CTRL-] command
@@ -1725,17 +1765,17 @@ EXTERN win_T	*cmdwin_win INIT(= NULL); // window of cmdline window or NULL
 EXTERN char_u no_lines_msg[]	INIT(= N_("--No lines in buffer--"));
 
 EXTERN char typename_unknown[]	INIT(= N_("unknown"));
-EXTERN char typename_int[]	INIT(= N_("int"));
-EXTERN char typename_longint[]	INIT(= N_("long int"));
-EXTERN char typename_longlongint[]	INIT(= N_("long long int"));
-EXTERN char typename_unsignedint[]	INIT(= N_("unsigned int"));
-EXTERN char typename_unsignedlongint[]	INIT(= N_("unsigned long int"));
-EXTERN char typename_unsignedlonglongint[]	INIT(= N_("unsigned long long int"));
+EXTERN char typename_int[]	INIT(= "int");
+EXTERN char typename_longint[]	INIT(= "long int");
+EXTERN char typename_longlongint[]	INIT(= "long long int");
+EXTERN char typename_unsignedint[]	INIT(= "unsigned int");
+EXTERN char typename_unsignedlongint[]	INIT(= "unsigned long int");
+EXTERN char typename_unsignedlonglongint[]	INIT(= "unsigned long long int");
 EXTERN char typename_pointer[]	INIT(= N_("pointer"));
 EXTERN char typename_percent[]	INIT(= N_("percent"));
-EXTERN char typename_char[] INIT(= N_("char"));
+EXTERN char typename_char[] INIT(= "char");
 EXTERN char typename_string[]	INIT(= N_("string"));
-EXTERN char typename_float[]	INIT(= N_("float"));
+EXTERN char typename_float[]	INIT(= "float");
 
 /*
  * When ":global" is used to number of substitutions and changed lines is
@@ -1967,6 +2007,7 @@ EXTERN int  disable_char_avail_for_testing INIT(= FALSE);
 EXTERN int  disable_redraw_for_testing INIT(= FALSE);
 EXTERN int  ignore_redraw_flag_for_testing INIT(= FALSE);
 EXTERN int  nfa_fail_for_testing INIT(= FALSE);
+EXTERN int  disable_syn_idlist_cache_for_testing INIT(= FALSE);
 EXTERN int  no_query_mouse_for_testing INIT(= FALSE);
 EXTERN int  ui_delay_for_testing INIT(= 0);
 EXTERN int  reset_term_props_on_termresponse INIT(= FALSE);
@@ -2016,7 +2057,7 @@ EXTERN listitem_T range_list_item;
 EXTERN evalarg_T EVALARG_EVALUATE
 # ifdef DO_INIT
 	= {EVAL_EVALUATE, 0, NULL, NULL, NULL, NULL, GA_EMPTY, GA_EMPTY, NULL,
-			 {0, 0, (int)sizeof(char_u *), 20, NULL}, 0, NULL}
+			 {0, 0, (int)sizeof(char_u *), 20, NULL}, 0, NULL, NULL}
 # endif
 	;
 #endif
@@ -2067,7 +2108,10 @@ EXTERN char_u showcmd_buf[SHOWCMD_BUFLEN];
 EXTERN int	p_tgc_set INIT(= FALSE);
 #endif
 
-#ifdef FEAT_CLIPBOARD
+// If we've already warned about missing/unavailable clipboard
+EXTERN bool did_warn_clipboard INIT(= FALSE);
+
+#ifdef HAVE_CLIPMETHOD
 EXTERN clipmethod_T clipmethod INIT(= CLIPMETHOD_NONE);
 #endif
 
@@ -2076,36 +2120,33 @@ EXTERN clipmethod_T clipmethod INIT(= CLIPMETHOD_NONE);
 // Wayland display name for global connection (ex. wayland-0). Can be NULL
 EXTERN char *wayland_display_name INIT(= NULL);
 
-// Special mime type used to identify selection events that came from us setting
-// the selection. Is in format of "application/x-vim-instance-<pid>" where <pid>
-// is the PID of the Vim process. Set in main.c
-EXTERN char wayland_vim_special_mime[
-    sizeof("application/x-vim-instance-") + NUMBUFLEN - 1]; // Includes NUL
-
 // Don't connect to Wayland compositor if TRUE
 EXTERN int wayland_no_connect INIT(= FALSE);
 
 #endif
 
-#if defined(FEAT_CLIENTSERVER) && !defined(MSWIN)
+#if defined(FEAT_CLIENTSERVER)
 
 // Backend for clientserver functionality
 typedef enum {
     CLIENTSERVER_METHOD_NONE,
+# ifdef FEAT_X11
     CLIENTSERVER_METHOD_X11,
+# endif
+# ifdef MSWIN
+    CLIENTSERVER_METHOD_MSWIN,
+# endif
+# ifdef FEAT_SOCKETSERVER
     CLIENTSERVER_METHOD_SOCKET
+# endif
 } clientserver_method_T;
 
-// Default to X11 if compiled with support for it, else use socket server.
-# if defined(FEAT_X11) && defined(FEAT_SOCKETSERVER)
 EXTERN clientserver_method_T clientserver_method
-# else
-// Since we aren't going to be changing clientserver_method, make it constant to
-// allow compiler optimizations.
-EXTERN const clientserver_method_T clientserver_method
-# endif
+
 # ifdef FEAT_X11
 INIT(= CLIENTSERVER_METHOD_X11);
+# elif defined(MSWIN)
+INIT(= CLIENTSERVER_METHOD_MSWIN);
 # elif defined(FEAT_SOCKETSERVER)
 INIT(= CLIENTSERVER_METHOD_SOCKET);
 # else
@@ -2117,4 +2158,24 @@ INIT(= CLIENTSERVER_METHOD_NONE);
 #ifdef FEAT_SOCKETSERVER
 // Path to socket of last client that communicated with us
 EXTERN char_u *client_socket INIT(= NULL);
+#endif
+
+// If the <xOSC> key should be propagated from vgetc()
+EXTERN int allow_osc_key INIT(= 0);
+
+#ifdef FEAT_EVAL
+// Global singly linked list of redraw listeners
+EXTERN redraw_listener_T *redraw_listeners INIT(= NULL);
+EXTERN bool inside_redraw_on_start_cb INIT(= false);
+#endif
+
+// If greater than zero, then silence the W23/W24 warning.
+EXTERN int silence_w23_w24_msg INIT( = 0);
+
+#ifdef FEAT_EVAL
+// Used by TextPutPost/TextPutPre autocommands for the '.' register. If
+// "add_last_insert" is == 1, then "stuff_inserted" will add the last inserted
+// text to "last_insert_ga".
+EXTERN garray_T last_insert_ga INIT5(0, 0, 1, 64, NULL);
+EXTERN int	add_last_insert INIT(= 0);
 #endif

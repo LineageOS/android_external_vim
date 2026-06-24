@@ -50,6 +50,7 @@ TEST_VIM9 = \
 	test_vim9_func \
 	test_vim9_generics \
 	test_vim9_import \
+	test_vim9_interface \
 	test_vim9_python3 \
 	test_vim9_script \
 	test_vim9_typealias
@@ -66,6 +67,7 @@ TEST_VIM9_RES = \
 	test_vim9_func.res \
 	test_vim9_generics.res \
 	test_vim9_import.res \
+	test_vim9_interface.res \
 	test_vim9_python3.res \
 	test_vim9_script.res \
 	test_vim9_typealias.res
@@ -110,7 +112,6 @@ NEW_TESTS = \
 	test_cmdline \
 	test_cmdmods \
 	test_cmdwin \
-	test_codestyle \
 	test_command_count \
 	test_comments \
 	test_comparators \
@@ -244,14 +245,19 @@ NEW_TESTS = \
 	test_perl \
 	test_plugin_comment \
 	test_plugin_glvs \
+	test_plugin_helpcurwin \
 	test_plugin_helptoc \
 	test_plugin_man \
+	test_plugin_matchit \
 	test_plugin_matchparen \
 	test_plugin_netrw \
+	test_plugin_python3complete \
+	test_plugin_osc52 \
 	test_plugin_tar \
 	test_plugin_termdebug \
 	test_plugin_tohtml \
 	test_plugin_tutor \
+	test_plugin_vimball \
 	test_plugin_zip \
 	test_plus_arg_edit \
 	test_popup \
@@ -308,6 +314,7 @@ NEW_TESTS = \
 	test_startup_utf8 \
 	test_stat \
 	test_statusline \
+	test_statuslineopt \
 	test_substitute \
 	test_suspend \
 	test_swap \
@@ -332,6 +339,7 @@ NEW_TESTS = \
 	test_textformat \
 	test_textobjects \
 	test_textprop \
+	test_textprop2 \
 	test_timers \
 	test_true_false \
 	test_trycatch \
@@ -401,7 +409,6 @@ NEW_TESTS_RES = \
 	test_cmdline.res \
 	test_cmdmods.res \
 	test_cmdwin.res \
-	test_codestyle.res \
 	test_command_count.res \
 	test_comments.res \
 	test_comparators.res \
@@ -518,14 +525,19 @@ NEW_TESTS_RES = \
 	test_perl.res \
 	test_plugin_comment.res \
 	test_plugin_glvs.res \
+	test_plugin_helpcurwin.res \
 	test_plugin_helptoc.res \
 	test_plugin_man.res \
+	test_plugin_matchit.res \
 	test_plugin_matchparen.res \
 	test_plugin_netrw.res \
+	test_plugin_python3complete.res \
+	test_plugin_osc52.res \
 	test_plugin_tar.res \
 	test_plugin_termdebug.res \
 	test_plugin_tohtml.res \
 	test_plugin_tutor.res \
+	test_plugin_vimball.res \
 	test_plugin_zip.res \
 	test_plus_arg_edit.res \
 	test_popup.res \
@@ -572,6 +584,7 @@ NEW_TESTS_RES = \
 	test_startup.res \
 	test_stat.res \
 	test_statusline.res \
+	test_statuslineopt.res \
 	test_substitute.res \
 	test_suspend.res \
 	test_swap.res \
@@ -593,6 +606,7 @@ NEW_TESTS_RES = \
 	test_textformat.res \
 	test_textobjects.res \
 	test_textprop.res \
+	test_textprop2.res \
 	test_timers.res \
 	test_true_false.res \
 	test_trycatch.res \

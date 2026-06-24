@@ -4,11 +4,24 @@ source util/screendump.vim
 
 func Test_ex_delete()
   new
+
   call setline(1, ['a', 'b', 'c'])
   2
   " :dl is :delete with the "l" flag, not :dlist
   .dl
   call assert_equal(['a', 'c'], getline(1, 2))
+  %delete _
+
+  " :delete # used to clobber "0
+  call setreg('#', '')
+  call setreg('0', '')
+  call setline(1, ['a', 'b', 'c'])
+  call assert_fails("1delete #", 'E488:')
+  call assert_equal(['a', 'b', 'c'], getline(1, '$'))
+  call assert_equal('', getreg('#'))
+  call assert_equal('', getreg('0'))
+
+  bw!
 endfunc
 
 func Test_range_error()
@@ -61,7 +74,7 @@ func Test_copy()
   exe "normal! gg4:yank\<CR>"
   call assert_equal("L1\nL2\nL1\nL2\n", @")
 
-  close!
+  bw!
 endfunc
 
 " Test for the :file command
@@ -105,7 +118,7 @@ func Test_drop_cmd()
   call assert_equal(1, winnr('$'))
   " Check for setting the argument list
   call assert_equal(['Xdropfile'], argv())
-  enew | only!
+  enew | only! | bw! Xdropfile
 endfunc
 
 " Test for the :append command
@@ -133,7 +146,7 @@ func Test_append_cmd()
   call assert_equal(['  L1', '  L2', '  L3'], getline(1, '$'))
   call assert_true(&autoindent)
   set autoindent&
-  close!
+  bw!
 endfunc
 
 func Test_append_cmd_empty_buf()
@@ -181,7 +194,7 @@ func Test_insert_cmd()
   call assert_equal(['  L2', '  L3', '  L1'], getline(1, '$'))
   call assert_true(&autoindent)
   set autoindent&
-  close!
+  bw!
 endfunc
 
 func Test_insert_cmd_empty_buf()
@@ -229,15 +242,22 @@ func Test_change_cmd()
   call assert_equal(['  L4', '  L5', 'L2', 'L3'], getline(1, '$'))
   call assert_true(&autoindent)
   set autoindent&
-  close!
+  bw!
 endfunc
 
 " Test for the :language command
 func Test_language_cmd()
   CheckFeature multi_lang
 
-  call assert_fails('language ctype non_existing_lang', 'E197:')
-  call assert_fails('language time non_existing_lang', 'E197:')
+  " OpenBSD allows nearly arbitrary locale names, since it largely ignores them
+  " (see setlocale(3)). One useful exception for this test is that in doesn't
+  " allow names containing dots unless they end in '.UTF-8'.
+  "
+  " Windows also allows nonsensical locale names, though it seems to reject
+  " names with multiple underscores (possibly expecting 'language_region', but
+  " not 'language_region_additional').
+  call assert_fails('language ctype non_existing_lang.bad', 'E197:')
+  call assert_fails('language time non_existing_lang.bad', 'E197:')
 endfunc
 
 " Test for the :confirm command dialog
@@ -530,14 +550,14 @@ func Test_read_cmd()
   edit Xcmdfile
   read
   call assert_equal(['one', 'one'], getline(1, '$'))
-  close!
+  bw!
   new
   read Xcmdfile
   call assert_equal(['', 'one'], getline(1, '$'))
   call deletebufline('', 1, '$')
   call feedkeys("Qr Xcmdfile\<CR>visual\<CR>", 'xt')
   call assert_equal(['one'], getline(1, '$'))
-  close!
+  bw!
 endfunc
 
 " Test for running Ex commands when text is locked.
@@ -604,7 +624,7 @@ func Test_excmd_delete()
   call assert_equal(['        bar'], split(execute('deletp'), "\n"))
   call setline(1, ['foo', "\tbar"])
   call assert_equal(['        bar'], split(execute('deletep'), "\n"))
-  close!
+  bw!
 endfunc
 
 " Test for commands that are blocked in a sandbox
@@ -666,6 +686,13 @@ func Sandbox_tests()
   if has('unix')
     call assert_fails('cd `pwd`', 'E48:')
   endif
+  call assert_fails("call echoraw('test')", 'E48:')
+  call assert_fails("echoconsole 'test'", 'E48:')
+  call assert_fails("call readfile('Xsomefile')", 'E48:')
+  call assert_fails("call readblob('Xsomefile')", 'E48:')
+  call assert_fails("call readdir('.')", 'E48:')
+  call assert_fails("call readdirex('.')", 'E48:')
+  call assert_fails("call chdir('.')", 'E48:')
   " some options cannot be changed in a sandbox
   call assert_fails('set exrc', 'E48:')
   call assert_fails('set cdpath', 'E48:')

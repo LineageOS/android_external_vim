@@ -1592,12 +1592,17 @@ def Test_assignment_failure()
   v9.CheckDefFailure(['var $VAR = 5'], 'E1016: Cannot declare an environment variable:')
   v9.CheckScriptFailure(['vim9script', 'var $ENV = "xxx"'], 'E1016:')
 
+  # read-only registers
+  v9.CheckDefAndScriptFailure(['var @. = 5'], ['E354:', 'E1066:'], 1)
+  v9.CheckDefAndScriptFailure(['var @. = 5'], ['E354:', 'E1066:'], 1)
+  v9.CheckDefAndScriptFailure(['var @% = 5'], ['E354:', 'E1066:'], 1)
+  v9.CheckDefAndScriptFailure(['var @: = 5'], ['E354:', 'E1066:'], 1)
   if has('dnd')
-    v9.CheckDefFailure(['var @~ = 5'], 'E1066:')
+    v9.CheckDefAndScriptFailure(['var @~ = 5'], ['E354:', 'E1066:'], 1)
   else
-    v9.CheckDefFailure(['var @~ = 5'], 'E354:')
-    v9.CheckDefFailure(['@~ = 5'], 'E354:')
+    v9.CheckDefAndScriptFailure(['var @~ = 5'], ['E354:', 'E1066:'], 1)
   endif
+
   v9.CheckDefFailure(['var @a = 5'], 'E1066:')
   v9.CheckDefFailure(['var @/ = "x"'], 'E1066:')
   v9.CheckScriptFailure(['vim9script', 'var @a = "abc"'], 'E1066:')
@@ -2558,6 +2563,52 @@ def Test_var_type_check()
     defcompile
   END
   v9.CheckScriptSuccess(lines)
+
+  # Modifying a variable type using the legacy command at script level
+  lines =<< trim END
+    vim9script
+    var l: list<number> = [1, 2]
+    legacy let s:l[0] = 'x'
+  END
+  v9.CheckSourceFailure(lines, 'E1012: Type mismatch; expected number but got string', 3)
+
+  # try with dict type
+  lines =<< trim END
+    vim9script
+    var d: dict<number>
+    legacy let s:d['a'] = 'x'
+  END
+  v9.CheckSourceFailure(lines, 'E1012: Type mismatch; expected number but got string', 3)
+
+  # Modifying a variable type using the legacy command in a def function
+  lines =<< trim END
+    vim9script
+    var l: list<number> = [1, 2]
+    def Fn()
+      legacy let s:l[0] = 'x'
+    enddef
+    Fn()
+  END
+  v9.CheckSourceFailure(lines, 'E1012: Type mismatch; expected number but got string', 1)
+
+  # try with dict type
+  lines =<< trim END
+    vim9script
+    var d: dict<string>
+    def Fn()
+      legacy let s:d['a'] = 10
+    enddef
+    Fn()
+  END
+  v9.CheckSourceFailure(lines, 'E1012: Type mismatch; expected string but got number', 1)
+
+  # after the first error, the assignment should be aborted
+  lines =<< trim END
+    vim9script
+    var l: list<number> = [1, 2]
+    legacy let [s:l[0], s:l[1]] = ['x', 1.0]
+  END
+  v9.CheckSourceFailureList(lines, ['', 'E1012: Type mismatch; expected number but got string'], 3)
 enddef
 
 let g:dict_number = #{one: 1, two: 2}
@@ -2818,6 +2869,26 @@ def Test_unlet()
   END
   v9.CheckScriptFailure(lines, 'E1260:', 1)
 
+  # unlet imported item at script level
+  lines =<< trim END
+    vim9script
+    import './XunletExport.vim' as exp
+    unlet exp.svar
+  END
+  v9.CheckScriptFailure(lines, 'E1260:', 3)
+
+  # unlet imported item in legacy function
+  lines =<< trim END
+    vim9script
+    import './XunletExport.vim' as exp
+    function F()
+      unlet exp.svar
+    endfunction
+    call F()
+  END
+  # error in line 1 of the F()
+  v9.CheckScriptFailure(lines, 'E1260:', 1)
+
   $ENVVAR = 'foobar'
   assert_equal('foobar', $ENVVAR)
   unlet $ENVVAR
@@ -3060,6 +3131,28 @@ def Test_type_specification_in_assignment()
     Foo()
   END
   v9.CheckSourceFailure(lines, "E476: Invalid command: MyVar: string = 'abc'", 1)
+
+  # redeclare an existing def local variable with a type
+  lines =<< trim END
+    vim9script
+    def Foo()
+      var n: number = 10
+      var n: number = 20
+    enddef
+    Foo()
+  END
+  v9.CheckSourceFailure(lines, 'E1017: Variable already declared: n', 2)
+
+  # redeclare an existing def local constant with a type
+  lines =<< trim END
+    vim9script
+    def Foo()
+      const x: number = 1
+      const x: number = 2
+    enddef
+    Foo()
+  END
+  v9.CheckSourceFailure(lines, 'E1017: Variable already declared: x', 2)
 enddef
 
 let g:someVar = 'X'

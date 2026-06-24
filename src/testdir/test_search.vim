@@ -700,6 +700,27 @@ func Test_search_cmdline7()
   call feedkeys("//e\<c-g>\<cr>", 'tx')
   call assert_equal('1 bbvimb', getline('.'))
   call assert_equal(4, col('.'))
+  call cursor(1, 1)
+  call feedkeys("//+1\<c-g>\<cr>", 'tx')
+  call assert_equal(' 2 bbvimb', getline('.'))
+  call assert_equal([0, 2, 1, 0], getpos('.'))
+  call setline(1, 'blah blah blah')
+  call feedkeys("gg0/blah/e\<C-G>\<CR>", 'tx')
+  call assert_equal([0, 1, 9, 0], getpos('.'))
+  call feedkeys("gg0/blah/e\<C-G>\<C-G>\<CR>", 'tx')
+  call assert_equal([0, 1, 14, 0], getpos('.'))
+  call feedkeys("gg0/blah/e\<C-G>\<C-G>\<C-T>\<CR>", 'tx')
+  call assert_equal([0, 1, 9, 0], getpos('.'))
+  call cursor(1, col('$'))
+  call feedkeys("?blah?e\<C-G>\<CR>", 'tx')
+  call assert_equal([0, 1, 9, 0], getpos('.'))
+  call feedkeys("gg0/blah/e+1\<C-G>\<CR>", 'tx')
+  call assert_equal([0, 1, 10, 0], getpos('.'))
+  call feedkeys("gg0/blah/e-2\<C-G>\<CR>", 'tx')
+  call assert_equal([0, 1, 7, 0], getpos('.'))
+  call setline(1, 'a/b a/b a/b')
+  call feedkeys("gg0/a\\/b/e\<C-G>\<CR>", 'tx')
+  call assert_equal([0, 1, 7, 0], getpos('.'))
 
   set noincsearch
   call test_override("char_avail", 0)
@@ -1032,6 +1053,7 @@ func Test_hlsearch_and_visual()
 	\ ], 'Xhlvisual_script', 'D')
   let buf = RunVimInTerminal('-S Xhlvisual_script', {'rows': 6, 'cols': 40})
   call term_sendkeys(buf, "vjj")
+  call WaitForAssert({-> assert_match('VISUAL.*-\d', term_getline(buf, 6))}, 1000)
   call VerifyScreenDump(buf, 'Test_hlsearch_visual_1', {})
   call term_sendkeys(buf, "\<Esc>")
 
@@ -1314,6 +1336,31 @@ func Test_incsearch_sort_dump()
 
   call term_sendkeys(buf, ':sort! /on')
   call VerifyScreenDump(buf, 'Test_incsearch_sort_02', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  call StopVimInTerminal(buf)
+endfunc
+
+" Similar to Test_incsearch_sort_dump() for :uniq
+func Test_incsearch_uniq_dump()
+  CheckOption incsearch
+  CheckScreendump
+
+  call writefile([
+	\ 'set incsearch hlsearch scrolloff=0',
+	\ 'call setline(1, ["another one 2", "that one 3", "the one 1"])',
+	\ ], 'Xis_uniq_script', 'D')
+  let buf = RunVimInTerminal('-S Xis_uniq_script', {'rows': 9, 'cols': 70})
+  " Give Vim a chance to redraw to get rid of the spaces in line 2 caused by
+  " the 'ambiwidth' check.
+  sleep 100m
+
+  call term_sendkeys(buf, ':uniq /on')
+  call VerifyScreenDump(buf, 'Test_incsearch_uniq_01', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  call term_sendkeys(buf, ':uniq! /on')
+  call VerifyScreenDump(buf, 'Test_incsearch_uniq_02', {})
   call term_sendkeys(buf, "\<Esc>")
 
   call StopVimInTerminal(buf)
@@ -2154,6 +2201,7 @@ func Test_incsearch_highlighting_newline()
   [CODE]
   call writefile(commands, 'Xincsearch_nl', 'D')
   let buf = RunVimInTerminal('-S Xincsearch_nl', {'rows': 5, 'cols': 10})
+  call TermWait(buf, 100)
   call term_sendkeys(buf, '/test')
   call VerifyScreenDump(buf, 'Test_incsearch_newline1', {})
   " Need to send one key at a time to force a redraw

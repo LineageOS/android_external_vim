@@ -1270,32 +1270,35 @@ gui_mch_browse(int saving,
 
 	gfilter = gtk_file_filter_new();
 	patt = alloc(STRLEN(filter));
-	while (p != NULL && *p != NUL)
+	if (patt != NULL)
 	{
-	    if (*p == '\n' || *p == ';' || *p == '\t')
+	    while (p != NULL && *p != NUL)
 	    {
-		STRNCPY(patt, filter, i);
-		patt[i] = '\0';
-		if (*p == '\t')
-		    gtk_file_filter_set_name(gfilter, (gchar *)patt);
+		if (*p == '\n' || *p == ';' || *p == '\t')
+		{
+		    STRNCPY(patt, filter, i);
+		    patt[i] = '\0';
+		    if (*p == '\t')
+			gtk_file_filter_set_name(gfilter, (gchar *)patt);
+		    else
+		    {
+			gtk_file_filter_add_pattern(gfilter, (gchar *)patt);
+			if (*p == '\n')
+			{
+			    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(fc),
+				    gfilter);
+			    if (*(p + 1) != NUL)
+				gfilter = gtk_file_filter_new();
+			}
+		    }
+		    filter = ++p;
+		    i = 0;
+		}
 		else
 		{
-		    gtk_file_filter_add_pattern(gfilter, (gchar *)patt);
-		    if (*p == '\n')
-		    {
-			gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(fc),
-								     gfilter);
-			if (*(p + 1) != NUL)
-			    gfilter = gtk_file_filter_new();
-		    }
+		    p++;
+		    i++;
 		}
-		filter = ++p;
-		i = 0;
-	    }
-	    else
-	    {
-		p++;
-		i++;
 	    }
 	}
 	vim_free(patt);
@@ -1863,12 +1866,12 @@ gui_mch_show_popupmenu(vimmenu_T *menu)
 	gtk_menu_popup_at_pointer(GTK_MENU(menu->submenu_id),
 				  (GdkEvent *)&trigger);
     }
-#else
+# else
     gtk_menu_popup(GTK_MENU(menu->submenu_id),
 		   NULL, NULL,
 		   (GtkMenuPositionFunc)NULL, NULL,
 		   3U, gui.event_time);
-#endif
+# endif
 }
 
 // Ugly global variable to pass "mouse_pos" flag from gui_make_popup() to
@@ -2132,7 +2135,7 @@ find_replace_dialog_create(char_u *arg, int do_replace)
     int		wword = FALSE;
     int		mcase = !p_ic;
     char_u	*conv_buffer = NULL;
-#   define CONV(message) convert_localized_message(&conv_buffer, (message))
+#define CONV(message) convert_localized_message(&conv_buffer, (message))
 
     frdp = (do_replace) ? (&repl_widgets) : (&find_widgets);
 
@@ -2611,3 +2614,12 @@ recent_func_log_func(const gchar *log_domain UNUSED,
     // http://bugzilla.gnome.org/show_bug.cgi?id=664587
 }
 #endif
+
+    void
+gui_mch_set_fullscreen(int flag)
+{
+    if (flag)
+	gtk_window_fullscreen(GTK_WINDOW(gui.mainwin));
+    else
+	gtk_window_unfullscreen(GTK_WINDOW(gui.mainwin));
+}

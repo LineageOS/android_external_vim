@@ -1,4 +1,4 @@
-*terminal.txt*	For Vim version 9.1.  Last change: 2025 Oct 14
+*terminal.txt*	For Vim version 9.2.  Last change: 2026 Jun 24
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -232,7 +232,7 @@ Command syntax ~
 			keys in the terminal window.  For MS-Windows see the
 			++eof argument below.
 
-						*term++close* *term++open*
+					    *term++close* *term++noclose* *term++open*
 			Supported [options] are:
 			++close		The terminal window will close
 					automatically when the job terminates.
@@ -490,8 +490,8 @@ On more recent versions of MS-Windows 10 (beginning with the "October 2018
 Update"), winpty is no longer required.  On those versions, |:terminal| will use
 Windows' built-in support for hosting terminal applications, "ConPTY".  When
 ConPTY is in use, there may be rendering artifacts regarding ambiguous-width
-characters.  If you encounter any such issues, install "winpty".  Until the
-ConPTY problems have been fixed "winpty" will be preferred.
+characters.  If you encounter any such issues, install "winpty".  ConPTY
+support is considered stable with the first release of Windows 11.
 
 Environment variables are used to pass information to the running job:
     VIM_SERVERNAME	v:servername
@@ -525,10 +525,12 @@ term_dumpdiff({filename}, {filename} [, {options}])
 				     of the first file name.
 		   "term_rows"	     vertical size to use for the terminal,
 				     instead of using 'termwinsize', but
-				     respecting the minimal size
+				     respecting the minimal size; valid range
+				     is from 0 to 1000
 		   "term_cols"	     horizontal size to use for the terminal,
 				     instead of using 'termwinsize', but
-				     respecting the minimal size
+				     respecting the minimal size; valid range
+				     is from 0 to 1000
 		   "vertical"	     split the window vertically
 		   "curwin"	     use the current window, do not split the
 				     window; fails if the current buffer
@@ -594,7 +596,7 @@ term_dumpwrite({buf}, {filename} [, {options}])		*term_dumpwrite()*
 		name: >
 			GetFilename()->term_dumpwrite(bufnr)
 <
-		Return type: |Number|
+		Return type: void
 
 
 term_getaltscreen({buf})				*term_getaltscreen()*
@@ -815,7 +817,7 @@ term_sendkeys({buf}, {keys})				*term_sendkeys()*
 		Can also be used as a |method|: >
 			GetBufnr()->term_sendkeys(keys)
 <
-		Return type: |Number|
+		Return type: void
 
 
 term_setansicolors({buf}, {colors})			*term_setansicolors()*
@@ -850,7 +852,7 @@ term_setansicolors({buf}, {colors})			*term_setansicolors()*
 		Can also be used as a |method|: >
 			GetBufnr()->term_setansicolors(colors)
 <
-		Return type: |Number|
+		Return type: void
 
 		{only available with GUI enabled and/or the |+termguicolors|
 		feature}
@@ -868,7 +870,7 @@ term_setapi({buf}, {expr})				*term_setapi()*
 		When used as a method the base is used for {buf}: >
 			GetBufnr()->term_setapi({expr})
 <
-		Return type: |Number|
+		Return type: void
 
 
 term_setkill({buf}, {how})				*term_setkill()*
@@ -886,7 +888,7 @@ term_setkill({buf}, {how})				*term_setkill()*
 		Can also be used as a |method|: >
 			GetBufnr()->term_setkill(how)
 <
-		Return type: |Number|
+		Return type: void
 
 
 term_setrestore({buf}, {command})			*term_setrestore()*
@@ -901,7 +903,7 @@ term_setrestore({buf}, {command})			*term_setrestore()*
 		Can also be used as a |method|: >
 			GetBufnr()->term_setrestore(command)
 <
-		Return type: |Number|
+		Return type: void
 
 
 term_setsize({buf}, {rows}, {cols})		*term_setsize()* *E955*
@@ -917,7 +919,7 @@ term_setsize({buf}, {rows}, {cols})		*term_setsize()* *E955*
 		Can also be used as a |method|: >
 			GetBufnr()->term_setsize(rows, cols)
 <
-		Return type: |Number|
+		Return type: void
 
 
 term_start({cmd} [, {options}])			*term_start()*
@@ -942,18 +944,50 @@ term_start({cmd} [, {options}])			*term_start()*
 		   "in_io", "in_top", "in_bot", "in_name", "in_buf"
 		   "out_io", "out_name", "out_buf", "out_modifiable", "out_msg"
 		   "err_io", "err_name", "err_buf", "err_modifiable", "err_msg"
-		However, at least one of stdin, stdout or stderr must be
-		connected to the terminal.  When I/O is connected to the
-		terminal then the callback function for that part is not used.
+		On Unix:
+		stdin, stdout, and stderr are connected to a pty by default,
+		since bidirectional communication with the terminal is
+		required.  Setting "out_cb" does not switch stdout from the
+		pty to a pipe.  Only setting "err_cb" switches stderr to a
+		pipe.
+		Note: Since a pty is line-buffered and a pipe is
+		block-buffered, the order of output between stdout and stderr
+		may not be preserved.  Without "err_cb", stderr uses the same
+		pty as stdout, so the output order is preserved but stdout and
+		stderr cannot be distinguished.
 
+		On MS-Windows with |ConPTY|:
+		stdin, stdout, and stderr are always connected through pipes
+		to the pseudo console, regardless of callback settings.
+		Since stdout and stderr share the same pipe, they cannot be
+		separated by "err_cb".
+		This is because the CreatePseudoConsole() API only accepts one
+		input and one output handle, with no separate handle for
+		stderr.
+
+		Note: term_start() always uses RAW mode for its callbacks.
+		"out_cb" and "err_cb" receive the raw chunk of data as read
+		from the OS.  A single callback invocation may contain
+		multiple lines separated by NL, and (for stdout via a pty)
+		each line may have a trailing CR from the line discipline
+		(ONLCR).  If per-line handling is desired, the callback must
+		split "msg" on NL and strip the trailing CR itself.
+		Example: >
+			func Handle(ch, msg)
+			  for line in split(a:msg, "\n")
+			    echom substitute(line, '\r$', '', '')
+			  endfor
+			endfunc
+<
 		There are extra options:
 		   "term_name"	     name to use for the buffer name, instead
 				     of the command name.
 		   "term_rows"	     vertical size to use for the terminal,
 				     instead of using 'termwinsize'; valid
-				     range is from zero to 1000
+				     range is from 0 to 1000
 		   "term_cols"	     horizontal size to use for the terminal,
-				     instead of using 'termwinsize'
+				     instead of using 'termwinsize'; valid
+				     range is from 0 to 1000
 		   "vertical"	     split the window vertically; note that
 				     other window position can be defined with
 				     command modifiers, such as |:belowright|.
@@ -967,9 +1001,11 @@ term_start({cmd} [, {options}])			*term_start()*
 				     terminal window, see |term_setkill()|
 		   "term_finish"     What to do when the job is finished:
 					"close": close any windows
+					"noclose": window will not be opened
 					"open": open window if needed
 				     Note that "open" can be interruptive.
-				     See |term++close| and |term++open|.
+				     See |term++close|, |term++noclose| and
+				     |term++open|.
 		   "term_opencmd"    command to use for opening the window
 				     when "open" is used for "term_finish";
 				     must have "%d" where the buffer number
@@ -1007,7 +1043,7 @@ term_wait({buf} [, {time}])					*term_wait()*
 		Can also be used as a |method|: >
 			GetBufnr()->term_wait()
 <
-		Return type: |Number|
+		Return type: void
 
 ==============================================================================
 3. Terminal communication			 *terminal-communication*
@@ -1263,7 +1299,8 @@ Alternatively, press "s" to swap the first and second dump.  Do this several
 times so that you can spot the difference in the context of the text.
 
 ==============================================================================
-6. Debugging	*terminal-debug* *terminal-debugger* *package-termdebug*
+6. Debugging				*terminal-debug* *terminal-debugger*
+					*package-termdebug* *termdebug*
 
 The Terminal debugging plugin can be used to debug a program with gdb and view
 the source code in a Vim window.  Since this is completely contained inside
@@ -1423,11 +1460,25 @@ gdb:
  `:Arguments` {args}  set arguments for the next `:Run`
 
  *:Break*	set a breakpoint at the cursor position
- :Break {position}
+ :Break [{position}] [thread {nr}] [if {expr}]
 		set a breakpoint at the specified position
+		if {position} is omitted, use the current file and line
+		thread {nr} limits the breakpoint to one thread
+		if {expr} sets a conditional breakpoint
+		Examples: >
+			:Break if argc == 1
+			:Break 42 thread 3 if x > 10
+			:Break main
+<
  *:Tbreak*	set a temporary breakpoint at the cursor position
- :Tbreak {position}
-		set a temporary breakpoint at the specified position
+ :Tbreak [{position}] [thread {nr}] [if {expr}]
+		like `:Break`, but the breakpoint is deleted after
+		it is hit once
+		Examples: >
+			:Tbreak if argc == 1
+			:Tbreak 42 thread 3 if x > 10
+			:Tbreak main
+<
  *:Clear*	delete the breakpoint at the cursor position
  *:ToggleBreak*	set a breakpoint at the cursor position or delete all
 		breakpoints at the cursor position
@@ -1877,7 +1928,7 @@ Contributions for termdebug improvements are welcome.
 However, it is fairly common that during the development process you need some
 mechanisms like `echo` statements (or similar) to help you in your job.
 For this reason, you can set: >
-    let g:termdebug_config['debug'] = true
+    let g:termdebug_config['debug'] = v:true
 <
 This sets the `DEBUG` variable to `true`, which can be referenced in the
 source code.  An example of its usage follows: >

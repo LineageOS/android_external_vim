@@ -774,6 +774,22 @@ func Test_terminal_finish_open_close()
   call assert_equal('opened the buffer in a window', g:result)
   unlet g:result
   bwipe
+
+  " Test "noclose" for term_start()
+  let cmd = Get_cat_123_cmd()
+
+  let buf = term_start(cmd, {
+        \ 'term_finish': 'noclose',
+        \ 'hidden': v:true
+        \ })
+
+  call WaitForAssert({-> assert_equal('finished', term_getstatus(buf))})
+
+  let info = getbufinfo(buf)[0]
+  call assert_equal(1, info.hidden)
+  call assert_equal(1, info.listed)
+  call assert_equal(1, info.loaded)
+  call WaitForAssert({-> assert_equal(['123'], getbufline(buf, 1, 1))})
 endfunc
 
 func Test_terminal_cwd()
@@ -942,7 +958,9 @@ func Test_terminal_eof_arg()
     call WaitFor({-> getline('$') =~ 'hello'})
     call assert_equal('hello', getline('$'))
   endif
-  let exitval = bufnr()->term_getjob()->job_info().exitval
+  let job = bufnr()->term_getjob()
+  call WaitForAssert({-> assert_equal('dead', job_status(job))})
+  let exitval = job->job_info().exitval
   if !has('win32')
     call assert_equal(123, exitval)
   else
@@ -984,7 +1002,9 @@ func Test_terminal_duplicate_eof_arg()
     call WaitFor({-> getline('$') =~ 'hello'})
     call assert_equal('hello', getline('$'))
   endif
-  let exitval = bufnr()->term_getjob()->job_info().exitval
+  let job = bufnr()->term_getjob()
+  call WaitForAssert({-> assert_equal('dead', job_status(job))})
+  let exitval = job->job_info().exitval
   if !has('win32')
     call assert_equal(123, exitval)
   else
@@ -1150,7 +1170,11 @@ func Test_terminal_composing_unicode()
   endif
 
   enew
-  let buf = term_start(cmd, {'curwin': 1})
+  let term_opts = {'curwin': 1}
+  if has('sun')
+    let term_opts.env = {'LC_ALL': 'C.UTF-8'}
+  endif
+  let buf = term_start(cmd, term_opts)
   let g:job = term_getjob(buf)
   call WaitFor({-> term_getline(buf, 1) !=# ''}, 1000)
 
@@ -1334,7 +1358,7 @@ endfunc
 
 " Run Vim, start a terminal in that Vim with the kill argument,
 " :qall works.
-func Run_terminal_qall_kill(line1, line2)
+func Run_terminal_qall_kill_int(line1, line2, cmd)
   " 1. Open a terminal window and wait for the prompt to appear
   " 2. set kill using term_setkill()
   " 3. make Vim exit, it will kill the shell
@@ -1346,13 +1370,18 @@ func Run_terminal_qall_kill(line1, line2)
 	\ 'endwhile',
 	\ a:line2,
 	\ 'au VimLeavePre * call writefile(["done"], "Xdone")',
-	\ 'qall',
+	\ a:cmd,
 	\ ]
   if !RunVim([], after, '')
     return
   endif
   call assert_equal("done", readfile("Xdone")[0])
   call delete("Xdone")
+endfunc
+
+func Run_terminal_qall_kill(line1, line2)
+  call Run_terminal_qall_kill_int(a:line1, a:line2, 'qall')
+  call Run_terminal_qall_kill_int(a:line1, a:line2, 'wqall')
 endfunc
 
 " Run Vim in a terminal, then start a terminal in that Vim with a kill
@@ -1368,7 +1397,7 @@ func Test_terminal_qall_kill_func()
 endfunc
 
 " Run Vim, start a terminal in that Vim without the kill argument,
-" check that :qall does not exit, :qall! does.
+" check that :qall does not exit.
 func Test_terminal_qall_exit()
   let after =<< trim [CODE]
     term
@@ -1388,6 +1417,28 @@ func Test_terminal_qall_exit()
   endif
   call assert_equal("done", readfile("Xdone")[0])
   call delete("Xdone")
+endfunc
+
+" :qall! and :wqall! should exit when there is a terminal buffer.
+func Test_terminal_qall_wqall_bang_exit()
+  for cmd in ['qall!', 'wqall!']
+    let after =<< trim eval [CODE]
+      term
+      let buf = bufnr("%")
+      while term_getline(buf, 1) =~ "^\\s*$"
+        sleep 10m
+      endwhile
+      set nomore
+      au VimLeavePre * call writefile(["done"], "Xdone")
+      {cmd}
+    [CODE]
+
+    if !RunVim([], after, '')
+      continue
+    endif
+    call assert_equal("done", readfile("Xdone")[0])
+    call delete("Xdone")
+  endfor
 endfunc
 
 " Run Vim in a terminal, then start a terminal in that Vim without a kill
@@ -2417,6 +2468,41 @@ func Test_term_TextChangedT_close()
   augroup TermTest
     au!
   augroup END
+endfunc
+
+func Test_terminal_disable_kitty_keyboard()
+  CheckRunVimInTerminal
+  let cmd = ['sh', '-c', 'printf ''\033[>1u\033[?u\033[<u\033[?u''; sleep 1']
+  let buf = term_start(cmd)
+  let job = term_getjob(buf)
+  call WaitForAssert({-> assert_equal('dead', job_status(job))})
+  call WaitForAssert({-> assert_equal('^[[?1u^[[?0u', term_getline(buf, 1))})
+  bwipe!
+endfunc
+
+func Test_terminal_unwraps()
+  CheckNotMSWindows
+
+  30vnew
+
+  redraw
+  let buf = term_start("echo 1+2+3+4+5+6+7+8+9+10+11+12+13+14+15")
+  " Wait until both wrapped lines have appeared in the terminal
+  call WaitForAssert({-> assert_equal('14+15', term_getline(buf, 2))})
+
+  " A long wrapped line appears as 2 lines in libvterm
+  let l = term_getline(buf, 1)
+  call assert_equal('1+2+3+4+5+6+7+8+9+10+11+12+13+', l)
+
+  let l = term_getline(buf, 2)
+  call assert_equal('14+15', l)
+
+  call TermWait(buf)
+  " It should appear as a single buffer line in vim
+  let lastline = getline('$')
+  call assert_equal('1+2+3+4+5+6+7+8+9+10+11+12+13+14+15', lastline)
+
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

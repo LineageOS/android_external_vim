@@ -121,8 +121,11 @@ garbage_collect(int testing)
 
     // buffer-local variables
     FOR_ALL_BUFFERS(buf)
+    {
 	abort = abort || set_ref_in_item(&buf->b_bufvar.di_tv, copyID,
 							NULL, NULL, NULL);
+	abort = abort || set_ref_in_list(buf->b_recorded_changes, copyID);
+    }
 
     // window-local variables
     FOR_ALL_TAB_WINDOWS(tp, wp)
@@ -204,6 +207,9 @@ garbage_collect(int testing)
 #endif
 #ifdef FEAT_NETBEANS_INTG
     abort = abort || set_ref_in_nb_channel(copyID);
+#endif
+#ifdef FEAT_SOCKETSERVER
+    abort = abort || set_ref_in_socketserver_channel(copyID);
 #endif
 
 #ifdef FEAT_TIMERS

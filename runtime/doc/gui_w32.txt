@@ -1,4 +1,4 @@
-*gui_w32.txt*	For Vim version 9.1.  Last change: 2025 Nov 09
+*gui_w32.txt*	For Vim version 9.2.  Last change: 2026 May 25
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -425,8 +425,8 @@ simulating the keystrokes Alt, F. >
 This maps Alt-Space to pop down the system menu for the Vim window.  Note that
 ~ is used by simalt to represent the <Space> character. >
 	:map <C-n> :simalt ~n<CR>
-Maps Control-N to produce the keys Alt-Space followed by N.  This minimizes the
-Vim window via the system menu.
+Maps Control-N to produce the keys Alt-Space followed by N.  This minimizes
+the Vim window via the system menu.
 
 Note that the key changes depending on the language you are using.
 
@@ -504,4 +504,5 @@ To use the system's default title bar colors, set highlighting groups to
 	hi TitleBar guibg=NONE guifg=NONE
 	hi TitleBarNC guibg=NONE guifg=NONE
 <
+
  vim:tw=78:sw=4:ts=8:noet:ft=help:norl:

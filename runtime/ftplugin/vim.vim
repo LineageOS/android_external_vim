@@ -6,11 +6,7 @@
 "                    @Konfekt
 "                    @tpope (s:Help())
 "                    @lacygoill
-" Last Change:       2025 Aug 07
-" 2025 Aug 06 by Vim Project (add gf maps #17881)
-" 2025 Aug 08 by Vim Project (add Vim script complete function #17871)
-" 2025 Aug 12 by Vim Project (improve vimgoto script #17970))
-" 2025 Aug 16 by Vim Project set com depending on Vim9 or legacy script
+" Last Change:       2026 May 31
 
 " Only do this when not done yet for this buffer
 if exists("b:did_ftplugin")
@@ -25,7 +21,7 @@ set cpo&vim
 
 if !exists('*VimFtpluginUndo')
   func VimFtpluginUndo()
-    setl fo< isk< com< tw< commentstring< include< define< keywordprg< omnifunc<
+    setl fo< isk< com< tw< commentstring< include< define< keywordprg< omnifunc< path<
     sil! delc -buffer VimKeywordPrg
     if exists('b:did_add_maps')
       silent! nunmap <buffer> [[
@@ -88,7 +84,9 @@ if !exists("*" .. expand("<SID>") .. "Help")
       endif
     endif
 
-    if pre =~# '^\s*:\=$' || pre =~# '\%(\\\||\)\@<!|\s*:\=$'
+    if stridx(post, '(') == 0
+      return topic .. '()'
+    elseif pre =~# '^\s*:\=$' || pre =~# '\%(\\\||\)\@<!|\s*:\=$'
       return ':' .. topic
     elseif pre =~# '\<v:$'
       return 'v:' .. topic
@@ -134,6 +132,10 @@ endif
 if &tw == 0
   setlocal tw=78
 endif
+
+" set 'path' to common Vim directories
+setlocal path-=/usr/include
+setlocal path+=pack/**,runtime/**,autoload/**,colors/**,compiler/**,ftplugin/**,indent/**,keymap/**,macros/**,plugin/**,syntax/**,after/**
 
 if !exists("no_plugin_maps") && !exists("no_vim_maps")
   let b:did_add_maps = 1
@@ -196,15 +198,17 @@ if exists("loaded_matchit")
   \ '\<aug\%[roup]\s\+\%(END\>\)\@!\S:\<aug\%[roup]\s\+END\>,' ..
   \ '\<class\>:\<endclass\>,' ..
   \ '\<interface\>:\<endinterface\>,' ..
-  \ '\<enum\>:\<endenum\>'
+  \ '\<enum\>:\<endenum\>,' ..
+  "\ :let-heredoc
+  \ '\%(=<<\s\+\%(\%(trim\s\+eval\|eval\s\+trim\|trim\|eval\)\s\+\)\=\)\@16<=\(\l\@!\S\+\):\%(^\s*\)\@<=\1$'
 
   " Ignore syntax region commands and settings, any 'en*' would clobber
   " if-endif.
   " - set spl=de,en
   " - au! FileType javascript syntax region foldBraces start=/{/ end=/}/ …
-  " Also ignore here-doc and dictionary keys (vimVar).
+  " Also ignore heredoc content and dictionary keys (vimVar).
   let b:match_skip = 'synIDattr(synID(line("."), col("."), 1), "name")
-                    \ =~? "comment\\|string\\|vimSynReg\\|vimSet\\|vimLetHereDoc\\|vimVar"'
+                    \ =~? "comment\\|string\\|vimSynReg\\|vimSet\\|vimLetHeredoc$\\|vimVar"'
 endif
 
 let &cpo = s:cpo_save

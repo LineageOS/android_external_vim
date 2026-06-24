@@ -67,17 +67,19 @@ func Test_xxd()
   exe '0r ' man_page '| set ff=unix | $d | w' man_copy '| bwipe!' man_copy
 
   " Test 5: Print 120 bytes as continuous hexdump with 20 octets per line
+  "         skip the first 30 bytes, it contains the date of the manpage
+  "         which can change
   let s:test += 1
   %d
-  exe '0r! ' . s:xxd_cmd . ' -l 120 -ps -c20 ' . man_copy
+  exe '0r! ' . s:xxd_cmd . ' -s 30 -l 120 -ps -c20 ' . man_copy
   $d
   let expected = [
-      \ '2e544820585844203120224d6179203230323422',
-      \ '20224d616e75616c207061676520666f72207878',
-      \ '64220a2e5c220a2e5c222032317374204d617920',
-      \ '313939360a2e5c22204d616e2070616765206175',
-      \ '74686f723a0a2e5c2220202020546f6e79204e75',
-      \ '67656e74203c746f6e79407363746e7567656e2e']
+      \ '61676520666f7220787864220a2e5c220a2e5c22',
+      \ '2032317374204d617920313939360a2e5c22204d',
+      \ '616e207061676520617574686f723a0a2e5c2220',
+      \ '202020546f6e79204e7567656e74203c746f6e79',
+      \ '407363746e7567656e2e7070702e67752e656475',
+      \ '2e61753e203c542e4e7567656e74407363742e67']
   call assert_equal(expected, getline(1,'$'), s:Mess(s:test))
 
   " Test 6: Print the date from xxd.1
@@ -284,6 +286,37 @@ func Test_xxd()
 
   call assert_equal(expected, getline(1,'$'), s:Mess(s:test))
 
+  " Test 20: Print C include with terminating null
+  let s:test += 1
+  call writefile(['TESTabcd09'], 'XXDfile')
+  %d
+  exe '0r! ' . s:xxd_cmd . ' -i -t XXDfile'
+  $d
+  let expected =<< trim [CODE]
+    unsigned char XXDfile[] = {
+      0x54, 0x45, 0x53, 0x54, 0x61, 0x62, 0x63, 0x64, 0x30, 0x39, 0x0a, 0x00
+    };
+    unsigned int XXDfile_len = 11;
+  [CODE]
+
+  call assert_equal(expected, getline(1,'$'), s:Mess(s:test))
+
+  " Test 21: Print C include in binary format
+  let s:test += 1
+  call writefile(['TESTabcd09'], 'XXDfile')
+  %d
+  exe '0r! ' . s:xxd_cmd . ' -i -b -t XXDfile'
+  $d
+  let expected =<< trim [CODE]
+    unsigned char XXDfile[] = {
+      0b01010100, 0b01000101, 0b01010011, 0b01010100, 0b01100001, 0b01100010,
+      0b01100011, 0b01100100, 0b00110000, 0b00111001, 0b00001010, 0b00000000
+    };
+    unsigned int XXDfile_len = 11;
+  [CODE]
+
+  call assert_equal(expected, getline(1,'$'), s:Mess(s:test))
+
 
   %d
   bwipe!
@@ -443,7 +476,7 @@ func Test_xxd_buffer_overflow()
   endif
   new
   let input = repeat('A', 256)
-  call writefile(['-9223372036854775808: ' . repeat("\e[1;32m41\e[0m ", 256) . ' ' . "\e[1;32m" . repeat('A', 256) . "\e[0m"], 'Xxdexpected', 'D')
+  call writefile(['9223372036854775808: ' . repeat("\e[1;32m41\e[0m ", 256) . ' ' . "\e[1;32m" . repeat('A', 256) . "\e[0m"], 'Xxdexpected', 'D')
   exe 'r! printf ' . input . '| ' . s:xxd_cmd . ' -Ralways -g1 -c256 -d -o 9223372036854775808 > Xxdout'
   call assert_equalfile('Xxdexpected', 'Xxdout')
   call delete('Xxdout')
@@ -630,6 +663,22 @@ call writefile(data,'Xinput')
 
 endfunc
 
+func Test_xxd_color_bits()
+  " Binary output (-b) should be colored per byte like the hex output,
+  " see issue #20385.  Bytes cover the white/yellow/green/blue color groups.
+  let s:test = 1
+  call writefile(0z000941FF, 'Xxxdbits')
+
+  %d
+  exe '0r! ' . s:xxd_cmd . ' -b -R always -c 4 Xxxdbits'
+  $d
+  let expected = [
+      \ "00000000: \e[1;37m00000000\e[0m \e[1;33m00001001\e[0m \e[1;32m01000001\e[0m \e[1;34m11111111\e[0m  \e[1;37m.\e[0m\e[1;33m.\e[0m\e[1;32mA\e[0m\e[1;34m.\e[0m"]
+  call assert_equal(expected, getline(1, '$'), s:Mess(s:test))
+
+  call delete('Xxxdbits')
+endfunc
+
 func Test_xxd_color2()
   CheckScreendump
   CheckUnix
@@ -663,7 +712,7 @@ func Test_xxd_color2()
 
   let $PS1='$ '
   " This needs dash, plain bashs sh does not seem to work :(
-  let buf = RunVimInTerminal('', #{rows: 20, cmd: 'sh'})
+  let buf = RunVimInTerminal('', #{rows: 20, cmd: 'dash'})
   call term_sendkeys(buf,  s:xxd_cmd .. " -R never  < XXDfile_colors\<cr>")
   call TermWait(buf)
   redraw
@@ -723,6 +772,83 @@ func Test_xxd_null_dereference()
   %s/^\x\+: \zs.*//g
   call assert_equal(expected, getline(1, 5))
   bw!
+endfunc
+
+func Test_xxd_color_outfile_no_color()
+  CheckUnix
+
+  " When output goes to a file (two-argument form), auto color should be
+  " disabled and produce the same result as redirect to file.
+  let input = 'Xxd_color_input'
+  let outfile = 'Xxd_color_outfile'
+  let outredir = 'Xxd_color_outredir'
+
+  call writefile([repeat('A', 100)], input)
+
+  " Two-argument form: xxd infile outfile
+  silent exe '!' . s:xxd_cmd . ' ' . input . ' ' . outfile
+
+  " Redirect form: xxd infile > outfile
+  silent exe '!' . s:xxd_cmd . ' ' . input . ' > ' . outredir
+
+  call assert_equal(readfile(outredir), readfile(outfile))
+
+  call delete(input)
+  call delete(outfile)
+  call delete(outredir)
+endfunc
+
+func Test_xxd_color_term_dumb()
+  CheckUnix
+
+  " When TERM is 'dumb', auto color should be disabled.
+  let input = 'Xxd_term_input'
+  let outfile = 'Xxd_term_outfile'
+
+  call writefile([repeat('A', 100)], input)
+
+  silent exe '!' . 'TERM=dumb ' . s:xxd_cmd . ' ' . input . ' > ' . outfile
+  let result = readfile(outfile)
+  " Output should not contain escape sequences
+  for line in result
+    call assert_equal(-1, stridx(line, "\e"), 'Unexpected color escape in: ' . line)
+  endfor
+
+  call delete(input)
+  call delete(outfile)
+endfunc
+
+func Test_xxd_color_term_unset()
+  CheckUnix
+
+  " When TERM is not set, auto color should be disabled.
+  let input = 'Xxd_unset_input'
+  let outfile = 'Xxd_unset_outfile'
+
+  call writefile([repeat('A', 100)], input)
+
+  silent exe '!' . 'env -u TERM ' . s:xxd_cmd . ' ' . input . ' > ' . outfile
+  let result = readfile(outfile)
+  " Output should not contain escape sequences
+  for line in result
+    call assert_equal(-1, stridx(line, "\e"), 'Unexpected color escape in: ' . line)
+  endfor
+
+  call delete(input)
+  call delete(outfile)
+endfunc
+
+func Test_xxd_reverse_long_input()
+  " triggered UB in huntype()
+  let input = 'Xxd_reverse_input'
+  call writefile([repeat('1', 515)], input, 'D')
+
+  " When this triggers undefined behaviour, there will be a warning output
+  " from the system() command
+  let out = system(s:xxd_cmd . ' -r ' . input)
+  call assert_equal('', out)
+  let out = system(s:xxd_cmd . ' -b -r ' . input)
+  call assert_equal('', out)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

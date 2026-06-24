@@ -188,51 +188,74 @@ estack_sfile(estack_arg_T which UNUSED)
 	entry = ((estack_T *)exestack.ga_data) + idx;
 	if (entry->es_name != NULL)
 	{
-	    long    lnum = 0;
-	    char_u  *type_name = (char_u *)"";
-	    char_u  *class_name = (char_u *)"";
+	    long	lnum = 0;
+	    size_t	added = 0;
+	    string_T	type_name = {(char_u *)"", 0};
+	    string_T	class_name = {(char_u *)"", 0};
+	    string_T	es_name = {entry->es_name, STRLEN(entry->es_name)};
 
 	    if (entry->es_type != last_type)
 	    {
 		switch (entry->es_type)
 		{
-		    case ETYPE_SCRIPT: type_name = (char_u *)"script "; break;
-		    case ETYPE_UFUNC: type_name = (char_u *)"function "; break;
-		    default: type_name = (char_u *)""; break;
+		    case ETYPE_SCRIPT:
+			STR_LITERAL_SET(type_name, "script ");
+			break;
+		    case ETYPE_UFUNC:
+			STR_LITERAL_SET(type_name, "function ");
+			break;
+		    default:
+			break;
 		}
 		last_type = entry->es_type;
 	    }
 	    if (entry->es_type == ETYPE_UFUNC && entry->es_info.ufunc->uf_class != NULL)
-		class_name = entry->es_info.ufunc->uf_class->class_name;
+	    {
+		class_name.string = entry->es_info.ufunc->uf_class->class_name.string;
+		class_name.length = entry->es_info.ufunc->uf_class->class_name.length;
+	    }
 	    if (idx == exestack.ga_len - 1)
 		lnum = which == ESTACK_STACK ? SOURCING_LNUM : 0;
 	    else
 		lnum = entry->es_lnum;
-	    len = STRLEN(entry->es_name) + STRLEN(type_name) + STRLEN(class_name) + 26;
+
+	    len = es_name.length + type_name.length + class_name.length + 26;
 	    if (ga_grow(&ga, (int)len) == FAIL)
 		break;
-	    ga_concat(&ga, type_name);
-	    if (*class_name != NUL)
+	    ga_concat_len(&ga, type_name.string, type_name.length);
+	    // For class methods prepend "<class name>." to the function name.
+	    if (*class_name.string != NUL)
 	    {
-		// For class methods prepend "<class name>." to the function name.
-		ga_concat(&ga, (char_u *)"<SNR>");
-		ga.ga_len += vim_snprintf((char *)ga.ga_data + ga.ga_len, 23,
-		       "%d_", entry->es_info.ufunc->uf_script_ctx.sc_sid);
-		ga_concat(&ga, class_name);
-		ga_append(&ga, '.');
+		added = vim_snprintf_safelen(
+		    (char *)ga.ga_data + ga.ga_len,
+		    ga.ga_maxlen - ga.ga_len,
+		    "<SNR>%d_%s.",
+		    entry->es_info.ufunc->uf_script_ctx.sc_sid,
+		    class_name.string);
+
+		ga.ga_len += (int)added;
 	    }
-	    ga_concat(&ga, entry->es_name);
+	    ga_concat_len(&ga, es_name.string, es_name.length);
 	    // For the bottom entry of <sfile>: do not add the line number, it is used in
 	    // <slnum>.  Also leave it out when the number is not set.
 	    if (lnum != 0)
-		ga.ga_len += vim_snprintf((char *)ga.ga_data + ga.ga_len, 23, "[%ld]",
-			lnum);
+	    {
+		added = vim_snprintf_safelen(
+		    (char *)ga.ga_data + ga.ga_len,
+		    ga.ga_maxlen - ga.ga_len,
+		    "[%ld]",
+		    lnum);
+
+		ga.ga_len += (int)added;
+	    }
 	    if (idx != exestack.ga_len - 1)
-		ga_concat(&ga, (char_u *)"..");
+		GA_CONCAT_LITERAL(&ga, "..");
 	}
     }
 
-    ga_append(&ga, '\0');
+    // Only NUL-terminate when not returning NULL.
+    if (ga.ga_data != NULL)
+	ga_append(&ga, NUL);
     return (char_u *)ga.ga_data;
 #endif
 }
@@ -565,10 +588,8 @@ do_in_path(
     void	*cookie)
 {
     char_u	*rtp;
-    char_u	*np;
-    char_u	*buf;
+    string_T	buf;
     char_u	*rtp_copy;
-    char_u	*tail;
     int		num_files;
     char_u	**files;
     int		i;
@@ -584,36 +605,42 @@ do_in_path(
     // Make a copy of 'runtimepath'.  Invoking the callback may change the
     // value.
     rtp_copy = vim_strsave(path);
-    buf = alloc(MAXPATHL);
-    if (buf != NULL && rtp_copy != NULL)
+    buf.string = alloc(MAXPATHL);
+    if (buf.string != NULL && rtp_copy != NULL)
     {
-	if (p_verbose > 10 && name != NULL)
+	size_t	prefixlen = 0;
+	size_t	namelen = 0;
+
+	if (name != NULL)
 	{
-	    verbose_enter();
-	    if (*prefix != NUL)
-		smsg(_("Searching for \"%s\" under \"%s\" in \"%s\""),
-					   (char *)name, prefix, (char *)path);
-	    else
-		smsg(_("Searching for \"%s\" in \"%s\""),
-						   (char *)name, (char *)path);
-	    verbose_leave();
+	    prefixlen = STRLEN(prefix);
+	    namelen = STRLEN(name);
+
+	    if (p_verbose > 10)
+	    {
+		verbose_enter();
+		if (*prefix != NUL)
+		    smsg(_("Searching for \"%s\" under \"%s\" in \"%s\""),
+					       (char *)name, prefix, (char *)path);
+		else
+		    smsg(_("Searching for \"%s\" in \"%s\""),
+						       (char *)name, (char *)path);
+		verbose_leave();
+	    }
 	}
 
 	// Loop over all entries in 'runtimepath'.
 	rtp = rtp_copy;
 	while (*rtp != NUL && ((flags & DIP_ALL) || !did_one))
 	{
-	    size_t buflen;
-
 	    // Copy the path from 'runtimepath' to buf[].
-	    copy_option_part(&rtp, buf, MAXPATHL, ",");
-	    buflen = STRLEN(buf);
+	    buf.length = (size_t)copy_option_part(&rtp, buf.string, MAXPATHL, ",");
 
 	    // Skip after or non-after directories.
 	    if (flags & (DIP_NOAFTER | DIP_AFTER))
 	    {
-		int is_after = buflen >= 5
-				     && STRCMP(buf + buflen - 5, "after") == 0;
+		int is_after = buf.length >= 5
+		    && STRCMP(buf.string + buf.length - 5, "after") == 0;
 
 		if ((is_after && (flags & DIP_NOAFTER))
 			|| (!is_after && (flags & DIP_AFTER)))
@@ -622,33 +649,42 @@ do_in_path(
 
 	    if (name == NULL)
 	    {
-		(*callback)(buf, (void *) &cookie);
+		(*callback)(buf.string, (void *)&cookie);
 		if (!did_one)
 		    did_one = (cookie == NULL);
 	    }
-	    else if (buflen + 2 + STRLEN(prefix) + STRLEN(name) < MAXPATHL)
+	    else if (buf.length + 2 + prefixlen + namelen < MAXPATHL)
 	    {
-		add_pathsep(buf);
-		STRCAT(buf, prefix);
-		tail = buf + STRLEN(buf);
+		char_u	*np;
+		char_u	*tail;
+
+		if (*buf.string != NUL
+		    && !after_pathsep(buf.string, buf.string + buf.length))
+		{
+		    STRCPY(buf.string + buf.length, PATHSEPSTR);
+		    buf.length += STRLEN_LITERAL(PATHSEPSTR);
+		}
+		STRCPY(buf.string + buf.length, prefix);
+		buf.length += prefixlen;
+		tail = buf.string + buf.length;
 
 		// Loop over all patterns in "name"
 		np = name;
 		while (*np != NUL && ((flags & DIP_ALL) || !did_one))
 		{
 		    // Append the pattern from "name" to buf[].
-		    copy_option_part(&np, tail, (int)(MAXPATHL - (tail - buf)),
+		    copy_option_part(&np, tail, (int)(MAXPATHL - (tail - buf.string)),
 								       "\t ");
 
 		    if (p_verbose > 10)
 		    {
 			verbose_enter();
-			smsg(_("Searching for \"%s\""), buf);
+			smsg(_("Searching for \"%s\""), buf.string);
 			verbose_leave();
 		    }
 
 		    // Expand wildcards, invoke the callback for each match.
-		    if (gen_expand_wildcards(1, &buf, &num_files, &files,
+		    if (gen_expand_wildcards(1, &buf.string, &num_files, &files,
 				  (flags & DIP_DIR) ? EW_DIR : EW_FILE) == OK)
 		    {
 			for (i = 0; i < num_files; ++i)
@@ -664,7 +700,7 @@ do_in_path(
 	    }
 	}
     }
-    vim_free(buf);
+    vim_free(buf.string);
     vim_free(rtp_copy);
     if (!did_one && name != NULL)
     {
@@ -803,19 +839,14 @@ add_pack_dir_to_rtp(char_u *fname)
     char_u  *entry;
     char_u  *insp = NULL;
     int	    c;
-    char_u  *new_rtp;
-    int	    keep;
-    size_t  oldlen;
-    size_t  addlen;
-    size_t  new_rtp_len;
-    char_u  *afterdir = NULL;
-    size_t  afterlen = 0;
+    string_T  new_rtp;
+    size_t  keep;
+    size_t  p_rtp_len;
+    string_T  afterdir = {NULL, 0};
     char_u  *after_insp = NULL;
     char_u  *ffname = NULL;
     size_t  fname_len;
-    char_u  *buf = NULL;
-    char_u  *rtp_ffname;
-    int	    match;
+    string_T	buf = {NULL, 0};
     int	    retval = FAIL;
 
     p4 = p3 = p2 = p1 = get_past_head(fname);
@@ -840,17 +871,22 @@ add_pack_dir_to_rtp(char_u *fname)
     // Find "ffname" in "p_rtp", ignoring '/' vs '\' differences.
     // Also stop at the first "after" directory.
     fname_len = STRLEN(ffname);
-    buf = alloc(MAXPATHL);
-    if (buf == NULL)
+    buf.string = alloc(MAXPATHL);
+    if (buf.string == NULL)
 	goto theend;
+
+    p_rtp_len = 0;
     for (entry = p_rtp; *entry != NUL; )
     {
 	char_u *cur_entry = entry;
 
-	copy_option_part(&entry, buf, MAXPATHL, ",");
+	buf.length = (size_t)copy_option_part(&entry, buf.string, MAXPATHL, ",");
 
-	if ((p = (char_u *)strstr((char *)buf, "after")) != NULL
-		&& p > buf
+	// keep track of p_rtp length as we go to make the STRLEN() below have less work to do
+	p_rtp_len += (*(cur_entry + buf.length) == ',') ? buf.length + 1 : buf.length;
+
+	if ((p = (char_u *)strstr((char *)buf.string, "after")) != NULL
+		&& p > buf.string
 		&& vim_ispathsep(p[-1])
 		&& (vim_ispathsep(p[5]) || p[5] == NUL || p[5] == ','))
 	{
@@ -864,8 +900,12 @@ add_pack_dir_to_rtp(char_u *fname)
 
 	if (insp == NULL)
 	{
-	    add_pathsep(buf);
-	    rtp_ffname = fix_fname(buf);
+	    char_u  *rtp_ffname;
+	    int	    match;
+
+	    if (*buf.string != NUL && !after_pathsep(buf.string, buf.string + buf.length))
+		STRCPY(buf.string + buf.length, PATHSEPSTR);
+	    rtp_ffname = fix_fname(buf.string);
 	    if (rtp_ffname == NULL)
 		goto theend;
 	    match = vim_fnamencmp(rtp_ffname, ffname, fname_len) == 0;
@@ -876,69 +916,76 @@ add_pack_dir_to_rtp(char_u *fname)
 	}
     }
 
+    // finish measuring the length of p_rtp
+    p_rtp_len += STRLEN(p_rtp + p_rtp_len);
     if (insp == NULL)
 	// Both "fname" and "after" not found, append at the end.
-	insp = p_rtp + STRLEN(p_rtp);
+	insp = p_rtp + p_rtp_len;
 
     // check if rtp/pack/name/start/name/after exists
-    afterdir = concat_fnames(fname, (char_u *)"after", TRUE);
-    if (afterdir != NULL && mch_isdir(afterdir))
-	afterlen = STRLEN(afterdir) + 1; // add one for comma
+    fname_len = STRLEN(fname);
+    concat_fnames(fname, fname_len, (char_u *)"after", STRLEN_LITERAL("after"), TRUE, &afterdir);
+    if (afterdir.string == NULL || !mch_isdir(afterdir.string))
+	afterdir.length = 0;
 
-    oldlen = STRLEN(p_rtp);
-    addlen = STRLEN(fname) + 1; // add one for comma
-    new_rtp = alloc(oldlen + addlen + afterlen + 1); // add one for NUL
-    if (new_rtp == NULL)
+    new_rtp.string = alloc(p_rtp_len + fname_len + afterdir.length + 3); // add two for commas and one for NUL
+    if (new_rtp.string == NULL)
 	goto theend;
 
     // We now have 'rtp' parts: {keep}{keep_after}{rest}.
     // Create new_rtp, first: {keep},{fname}
-    keep = (int)(insp - p_rtp);
-    mch_memmove(new_rtp, p_rtp, keep);
-    new_rtp_len = keep;
+    keep = (size_t)(insp - p_rtp);
+    mch_memmove(new_rtp.string, p_rtp, keep);
+    new_rtp.length = keep;
     if (*insp == NUL)
-	new_rtp[new_rtp_len++] = ',';  // add comma before
-    mch_memmove(new_rtp + new_rtp_len, fname, addlen - 1);
-    new_rtp_len += addlen - 1;
+	new_rtp.string[new_rtp.length++] = ',';  // add comma before
+    mch_memmove(new_rtp.string + new_rtp.length, fname, fname_len);
+    new_rtp.length += fname_len;
     if (*insp != NUL)
-	new_rtp[new_rtp_len++] = ',';  // add comma after
+	new_rtp.string[new_rtp.length++] = ',';  // add comma after
 
-    if (afterlen > 0 && after_insp != NULL)
+    if (afterdir.length > 0 && after_insp != NULL)
     {
-	int keep_after = (int)(after_insp - p_rtp);
+	size_t keep_after = (size_t)(after_insp - p_rtp);
+	size_t append_len = keep_after - keep;
 
 	// Add to new_rtp: {keep},{fname}{keep_after},{afterdir}
-	mch_memmove(new_rtp + new_rtp_len, p_rtp + keep,
-							keep_after - keep);
-	new_rtp_len += keep_after - keep;
-	mch_memmove(new_rtp + new_rtp_len, afterdir, afterlen - 1);
-	new_rtp_len += afterlen - 1;
-	new_rtp[new_rtp_len++] = ',';
+	mch_memmove(new_rtp.string + new_rtp.length, p_rtp + keep,
+							append_len);
+	new_rtp.length += append_len;
+	mch_memmove(new_rtp.string + new_rtp.length, afterdir.string, afterdir.length);
+	new_rtp.length += afterdir.length;
+	new_rtp.string[new_rtp.length++] = ',';
 	keep = keep_after;
     }
 
     if (p_rtp[keep] != NUL)
-	// Append rest: {keep},{fname}{keep_after},{afterdir}{rest}
-	mch_memmove(new_rtp + new_rtp_len, p_rtp + keep, oldlen - keep + 1);
-    else
-	new_rtp[new_rtp_len] = NUL;
+    {
+	size_t	append_len = p_rtp_len - keep;
 
-    if (afterlen > 0 && after_insp == NULL)
+	// Append rest: {keep},{fname}{keep_after},{afterdir}{rest}
+	mch_memmove(new_rtp.string + new_rtp.length, p_rtp + keep, append_len + 1);	// add one for NUL
+	new_rtp.length += append_len;
+    }
+    else
+	new_rtp.string[new_rtp.length] = NUL;
+
+    if (afterdir.length > 0 && after_insp == NULL)
     {
 	// Append afterdir when "after" was not found:
 	// {keep},{fname}{rest},{afterdir}
-	STRCAT(new_rtp, ",");
-	STRCAT(new_rtp, afterdir);
+	new_rtp.string[new_rtp.length++] = ',';
+	STRCPY(new_rtp.string + new_rtp.length, afterdir.string);
     }
 
-    set_option_value_give_err((char_u *)"rtp", 0L, new_rtp, 0);
-    vim_free(new_rtp);
+    set_option_value_give_err((char_u *)"rtp", 0L, new_rtp.string, 0);
+    vim_free(new_rtp.string);
     retval = OK;
 
 theend:
-    vim_free(buf);
+    vim_free(buf.string);
     vim_free(ffname);
-    vim_free(afterdir);
+    vim_free(afterdir.string);
     return retval;
 }
 
@@ -1759,9 +1806,9 @@ do_source_ext(
     sticky_cmdmod_flags = 0;
 
     save_current_sctx = current_sctx;
-    if (cmdmod.cmod_flags & CMOD_VIM9CMD)
-	// When the ":vim9cmd" command modifier is used, source the script as a
-	// Vim9 script.
+    if ((cmdmod.cmod_flags & CMOD_VIM9CMD) && cookie.source_from_buf)
+	// When the ":vim9cmd" command modifier is used, source buffer lines as
+	// Vim9 script
 	current_sctx.sc_version = SCRIPT_VERSION_VIM9;
     else
 	current_sctx.sc_version = 1;  // default script version
@@ -2533,7 +2580,7 @@ getsourceline(
 		ga_concat(&ga, p + 1);
 	    else if (*p == '|')
 	    {
-		ga_concat(&ga, (char_u *)" ");
+		GA_CONCAT_LITERAL(&ga, " ");
 		ga_concat(&ga, p);
 	    }
 	    for (;;)
@@ -2558,7 +2605,7 @@ getsourceline(
 			ga_concat(&ga, p + 1);
 		    else
 		    {
-			ga_concat(&ga, (char_u *)" ");
+			GA_CONCAT_LITERAL(&ga, " ");
 			ga_concat(&ga, p);
 		    }
 		}

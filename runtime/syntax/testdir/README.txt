@@ -26,9 +26,12 @@ Creating a syntax plugin test
 -----------------------------
 
 Create a source file in the language you want to test in the "input"
-directory.  Use the filetype name as the base and a file name extension
+directory.  Use the filetype name as the base and a filename extension
 matching the filetype.  Let's use Java as an example.  The file would then be
-"input/java.java".
+"input/java.java".  As another example, consider Gitignore.  Since there is no
+established filename extension for this filetype, use the filetype name for
+its base AND filename extension, "input/gitignore.gitignore", as the first
+step.
 
 Make sure to include some interesting constructs with plenty of complicated
 highlighting.  Optionally, pre-configure the testing environment by including
@@ -48,6 +51,10 @@ Continuing the Java example:
 	// VIM_TEST_SETUP let g:java_minlines = 5
 	class Test { }
 
+Continuing the Gitignore example, give the file a valid name as the last step:
+
+	# VIM_TEST_SETUP call DeferRenamingTestFileTo('.gitignore')
+
 As an alternative, setup commands can be included in an external Vim script
 file in the "input/setup" directory.  This script file must have the same base
 name as the input file.
@@ -60,6 +67,8 @@ an "input/setup/java.vim" script file with the following lines:
 
 Both inline setup commands and setup scripts may be used at the same time, the
 script file will be sourced before any VIM_TEST_SETUP commands are executed.
+
+Every line of a source file must not be longer than 1425 (19 x 75) characters.
 
 If there is no further setup required, you can now run all tests:
 
@@ -110,20 +119,6 @@ If they look OK, move them to the "dumps" directory:
 If you now run the test again, it will succeed.
 
 
-Limitations for syntax plugin tests
------------------------------------
-
-Do not compose ASCII lines that do not fit a 19 by 75 window (1425 columns).
-
-Use multibyte characters, if at all, sparingly (see #16559).  When possible,
-move multibyte characters closer to the end of a line and keep the line short:
-no more than a 75-byte total of displayed characters.  A poorly rendered line
-may otherwise become wrapped when enough of spurious U+FFFD (0xEF 0xBF 0xBD)
-characters claim more columns than are available (75) and then invalidate line
-correspondence under test.  Refrain from mixing non-spurious U+FFFD characters
-with other multibyte characters in the same line.
-
-
 Adjusting a syntax plugin test
 ------------------------------
 
@@ -158,6 +153,9 @@ is covered by the test.  You can follow these steps:
 	- Vim setup file:   syntax/testdir/input/setup/{name}.vim (if any)
 	- test input file:  syntax/testdir/input/{name}.{ext}
 	- test dump files:  syntax/testdir/dumps/{name}_*.dump
+   Since no input file is ever executed when you run the tests, review and
+   revoke each previously granted permission to execute such a file before
+   publishing it; e.g. "chmod -x input/java.java; git add input/java.java".
 
 As an extra check you can temporarily put back the old syntax plugin and
 verify that the tests fail.  Then you know your changes are covered by the

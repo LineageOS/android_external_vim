@@ -754,6 +754,11 @@ block_insert(
 	    // the insert in the first line.
 	    curbuf->b_op_end.lnum = oap->end.lnum;
 	    curbuf->b_op_end.col = offset;
+	    if (curbuf->b_visual.vi_end.coladd)
+	    {
+		curbuf->b_visual.vi_end.col += curbuf->b_visual.vi_end.coladd;
+		curbuf->b_visual.vi_end.coladd = 0;
+	    }
 	}
     } // for all lnum
 
@@ -795,7 +800,7 @@ op_delete(oparg_T *oap)
 	// use register given with CTRL_R, defaults to zero
 	oap->regname = VIsual_select_reg;
 
-#ifdef FEAT_CLIPBOARD
+#ifdef HAVE_CLIPMETHOD
     adjust_clip_reg(&oap->regname);
 #endif
 
@@ -852,12 +857,18 @@ op_delete(oparg_T *oap)
      */
     if (oap->regname != '_')
     {
+#ifdef FEAT_CLIPBOARD_PROVIDER
+	inc_clip_provider();
+#endif
 	if (oap->regname != 0)
 	{
 	    // check for read-only register
 	    if (!valid_yank_reg(oap->regname, TRUE))
 	    {
 		beep_flush();
+#ifdef FEAT_CLIPBOARD_PROVIDER
+		dec_clip_provider();
+#endif
 		return OK;
 	    }
 	    get_yank_register(oap->regname, TRUE); // yank into specif'd reg.
@@ -883,7 +894,7 @@ op_delete(oparg_T *oap)
 	// Yank into small delete register when no named register specified
 	// and the delete is within one line.
 	if ((
-#ifdef FEAT_CLIPBOARD
+#ifdef HAVE_CLIPMETHOD
 	    ((clip_unnamed & CLIP_UNNAMED) && oap->regname == '*') ||
 	    ((clip_unnamed & CLIP_UNNAMED_PLUS) && oap->regname == '+') ||
 #endif
@@ -913,6 +924,9 @@ op_delete(oparg_T *oap)
 	    if (n != 'y')
 	    {
 		emsg(_(e_command_aborted));
+#ifdef FEAT_CLIPBOARD_PROVIDER
+		dec_clip_provider();
+#endif
 		return FAIL;
 	    }
 	}
@@ -920,6 +934,9 @@ op_delete(oparg_T *oap)
 #if defined(FEAT_EVAL)
 	if (did_yank && has_textyankpost())
 	    yank_do_autocmd(oap, get_y_current());
+#endif
+#ifdef FEAT_CLIPBOARD_PROVIDER
+	dec_clip_provider();
 #endif
     }
 
@@ -1702,7 +1719,7 @@ op_insert(oparg_T *oap, long count1)
 	if (oap->block_mode && curwin->w_cursor.coladd == 0)
 	{
 	    // Move the cursor to the character right of the block.
-	    curwin->w_set_curswant = TRUE;
+	    curwin->w_set_curswant = true;
 	    while (*ml_get_cursor() != NUL
 		    && (curwin->w_cursor.col < bd.textcol + bd.textlen))
 		++curwin->w_cursor.col;
@@ -2034,6 +2051,7 @@ adjust_cursor_eol(void)
     int adj_cursor = (curwin->w_cursor.col > 0
 				&& gchar_cursor() == NUL
 				&& (cur_ve_flags & VE_ONEMORE) == 0
+				&& (cur_ve_flags & VE_ALL) == 0
 				&& !(restart_edit || (State & MODE_INSERT)));
     if (!adj_cursor)
 	return;
@@ -2046,7 +2064,7 @@ adjust_cursor_eol(void)
 	colnr_T	    scol, ecol;
 
 	// Coladd is set to the width of the last character.
-	getvcol(curwin, &curwin->w_cursor, &scol, NULL, &ecol);
+	getvcol(curwin, &curwin->w_cursor, &scol, NULL, &ecol, 0);
 	curwin->w_cursor.coladd = ecol - scol + 1;
     }
 }
@@ -2154,10 +2172,6 @@ do_join(
     int		remove_comments = (use_formatoptions == TRUE)
 				  && has_format_option(FO_REMOVE_COMS);
     int		prev_was_comment;
-#ifdef FEAT_PROP_POPUP
-    int		propcount = 0;	// number of props over all joined lines
-    int		props_remaining;
-#endif
 
     if (save_undo && u_save((linenr_T)(curwin->w_cursor.lnum - 1),
 			    (linenr_T)(curwin->w_cursor.lnum + count)) == FAIL)
@@ -2187,10 +2201,6 @@ do_join(
     for (t = 0; t < count; ++t)
     {
 	curr = curr_start = ml_get((linenr_T)(curwin->w_cursor.lnum + t));
-#ifdef FEAT_PROP_POPUP
-	propcount += count_props((linenr_T) (curwin->w_cursor.lnum + t),
-							t > 0, t + 1 == count);
-#endif
 	if (t == 0 && setmark && (cmdmod.cmod_flags & CMOD_LOCKMARKS) == 0)
 	{
 	    // Set the '[ mark.
@@ -2277,9 +2287,6 @@ do_join(
 
     // allocate the space for the new line
     newp_len = sumsize + 1;
-#ifdef FEAT_PROP_POPUP
-    newp_len += propcount * sizeof(textprop_T);
-#endif
     newp = alloc(newp_len);
     if (newp == NULL)
     {
@@ -2298,8 +2305,15 @@ do_join(
      * should not really be a problem.
      */
 #ifdef FEAT_PROP_POPUP
-    props_remaining = propcount;
+    unpacked_memline_T um = um_open_at_no_props(
+				curwin->w_buffer, curwin->w_cursor.lnum, 0);
+    // um_open_at_no_props may have invalidated "curr".
+    int curr_off = (int)(curr - curr_start);
+
+    curr = curr_start = ml_get((linenr_T)(curwin->w_cursor.lnum + count - 1));
+    curr += curr_off;
 #endif
+
     for (t = count - 1; ; --t)
     {
 	int spaces_removed;
@@ -2320,9 +2334,8 @@ do_join(
 	mark_col_adjust(curwin->w_cursor.lnum + t, (colnr_T)0, -t,
 			 (long)(cend - newp - spaces_removed), spaces_removed);
 #ifdef FEAT_PROP_POPUP
-	prepend_joined_props(newp + sumsize + 1, propcount, &props_remaining,
-		curwin->w_cursor.lnum + t, t == count - 1,
-		(long)(cend - newp), spaces_removed);
+	prepend_joined_props(&um, curwin->w_cursor.lnum + t,
+		t == count - 1, (long)(cend - newp), spaces_removed);
 #endif
 	if (t == 0)
 	    break;
@@ -2334,6 +2347,16 @@ do_join(
 	currsize = (int)STRLEN(curr);
     }
 
+#ifdef FEAT_PROP_POPUP
+    if (um.buf != NULL)
+    {
+	um_set_text(&um, newp);
+	um_reverse_props(&um);
+	um_close(&um);
+	newp = NULL;  // um_set_text took ownership
+    }
+    else
+#endif
     ml_replace_len(curwin->w_cursor.lnum, newp, (colnr_T)newp_len, TRUE, FALSE);
 
     if (setmark && (cmdmod.cmod_flags & CMOD_LOCKMARKS) == 0)
@@ -2367,7 +2390,7 @@ do_join(
     check_cursor_col();
 
     curwin->w_cursor.coladd = 0;
-    curwin->w_set_curswant = TRUE;
+    curwin->w_set_curswant = true;
 
 theend:
     vim_free(spaces);
@@ -2378,10 +2401,13 @@ theend:
 
 #ifdef FEAT_LINEBREAK
 /*
+ * TODO: consider using "tailp" of win_lbr_chartabsize() instead of temporarily
+ * resetting 'linebreak'.
+ *
  * Reset 'linebreak' and take care of side effects.
  * Returns the previous value, to be passed to restore_lbr().
  */
-    static int
+    int
 reset_lbr(void)
 {
     if (!curwin->w_p_lbr)
@@ -2395,7 +2421,7 @@ reset_lbr(void)
 /*
  * Restore 'linebreak' and take care of side effects.
  */
-    static void
+    void
 restore_lbr(int lbr_saved)
 {
     if (curwin->w_p_lbr || !lbr_saved)
@@ -2599,7 +2625,7 @@ charwise_block_prep(
 	startcol = start.col;
 	if (virtual_op)
 	{
-	    getvcol(curwin, &start, &cs, NULL, &ce);
+	    getvcol(curwin, &start, &cs, NULL, &ce, 0);
 	    if (ce != cs && start.coladd > 0)
 	    {
 		// Part of a tab selected -- but don't
@@ -2618,7 +2644,7 @@ charwise_block_prep(
 	endcol = end.col;
 	if (virtual_op)
 	{
-	    getvcol(curwin, &end, &cs, NULL, &ce);
+	    getvcol(curwin, &end, &cs, NULL, &ce, 0);
 	    if (p[endcol] == NUL || (cs + end.coladd < ce
 			// Don't add space for double-wide
 			// char; endcol will be on last byte
@@ -3247,7 +3273,7 @@ theend:
     if (visual)
 	curwin->w_cursor = save_cursor;
     else if (did_change)
-	curwin->w_set_curswant = TRUE;
+	curwin->w_set_curswant = true;
     else if (virtual_active())
 	curwin->w_cursor.coladd = save_coladd;
 
@@ -3391,7 +3417,7 @@ cursor_pos_info(dict_T *dict)
 		oparg.block_mode = TRUE;
 		oparg.op_type = OP_NOP;
 		getvcols(curwin, &min_pos, &max_pos,
-					  &oparg.start_vcol, &oparg.end_vcol);
+					&oparg.start_vcol, &oparg.end_vcol, 0);
 #ifdef FEAT_LINEBREAK
 		p_sbr = saved_sbr;
 		curwin->w_p_sbr = saved_w_sbr;
@@ -3493,8 +3519,8 @@ cursor_pos_info(dict_T *dict)
 	    {
 		if (VIsual_mode == Ctrl_V && curwin->w_curswant < MAXCOL)
 		{
-		    getvcols(curwin, &min_pos, &max_pos, &min_pos.col,
-								    &max_pos.col);
+		    getvcols(curwin, &min_pos, &max_pos,
+						&min_pos.col, &max_pos.col, 0);
 		    vim_snprintf((char *)buf1, sizeof(buf1), _("%ld Cols; "),
 			    (long)(oparg.end_vcol - oparg.start_vcol + 1));
 		}
@@ -3780,11 +3806,11 @@ get_op_vcol(
     if (has_mbyte)
 	mb_adjustpos(curwin->w_buffer, &oap->end);
 
-    getvvcol(curwin, &(oap->start), &oap->start_vcol, NULL, &oap->end_vcol);
+    getvvcol(curwin, &(oap->start), &oap->start_vcol, NULL, &oap->end_vcol, 0);
 
     if (!redo_VIsual_busy)
     {
-	getvvcol(curwin, &(oap->end), &start, NULL, &end);
+	getvvcol(curwin, &(oap->end), &start, NULL, &end, 0);
 
 	if (start < oap->start_vcol)
 	    oap->start_vcol = start;
@@ -3807,7 +3833,7 @@ get_op_vcol(
 		curwin->w_cursor.lnum <= oap->end.lnum;
 					++curwin->w_cursor.lnum)
 	{
-	    getvvcol(curwin, &curwin->w_cursor, NULL, NULL, &end);
+	    getvvcol(curwin, &curwin->w_cursor, NULL, NULL, &end, 0);
 	    if (end > oap->end_vcol)
 		oap->end_vcol = end;
 	}
@@ -4112,12 +4138,12 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 		{
 		    if (VIsual_mode != Ctrl_V)
 			getvvcol(curwin, &(oap->end),
-						  NULL, NULL, &oap->end_vcol);
+						NULL, NULL, &oap->end_vcol, 0);
 		    if (VIsual_mode == Ctrl_V || oap->line_count <= 1)
 		    {
 			if (VIsual_mode != Ctrl_V)
 			    getvvcol(curwin, &(oap->start),
-						&oap->start_vcol, NULL, NULL);
+					      &oap->start_vcol, NULL, NULL, 0);
 			resel_VIsual_vcol = oap->end_vcol - oap->start_vcol + 1;
 		    }
 		    else
@@ -4244,7 +4270,7 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 	    if (l > 1)
 		oap->end.col += l - 1;
 	}
-	curwin->w_set_curswant = TRUE;
+	curwin->w_set_curswant = true;
 
 	// oap->empty is set when start and end are the same.  The inclusive
 	// flag affects this too, unless yanking and the end is on a NUL.

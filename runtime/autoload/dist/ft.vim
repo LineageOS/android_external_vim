@@ -3,13 +3,25 @@ vim9script
 # Vim functions for file type detection
 #
 # Maintainer:		The Vim Project <https://github.com/vim/vim>
-# Last Change:		2025 Nov 11
+# Last Change:		2026 Jun 14
 # Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 # These functions are moved here from runtime/filetype.vim to make startup
 # faster.
 
 var prolog_pattern = '^\s*\(:-\|%\+\(\s\|$\)\|\/\*\)\|\.\s*$'
+
+def IsObjectScriptRoutine(): bool
+  var line1 = getline(1)
+  line1 = substitute(line1, '^\ufeff', '', '')
+  if line1 =~? '^\s*routine\>'
+    return true
+  endif
+  if line1 =~? '\<iris\>'
+    return true
+  endif
+  return join(getline(1, 3), '') =~# '%RO'
+enddef
 
 export def Check_inp()
   if getline(1) =~ '%%'
@@ -27,6 +39,43 @@ export def Check_inp()
       n += 1
     endwhile
   endif
+enddef
+
+# Erlang Application Resource Files (*.app.src is matched by extension)
+# See: https://erlang.org/doc/system/applications
+export def FTapp()
+  if exists("g:filetype_app")
+    exe "setf " .. g:filetype_app
+    return
+  endif
+  const pat = '^\s*{\s*application\s*,\s*\(''\=\)' .. expand("%:t:r:r") .. '\1\s*,'
+  var line: string
+  for lnum in range(1, min([line("$"), 100]))
+    line = getline(lnum)
+    # skip Erlang comments, might be something else
+    if line =~ '^\s*%' || line =~ '^\s*$'
+      continue
+    elseif line =~ '^\s*{' &&
+	getline(lnum, lnum + 9)->filter((_, v) => v !~ '^\s*%')->join(' ') =~# pat
+      setf erlang
+    endif
+    return
+  endfor
+enddef
+
+# This function checks for Kawasaki robots AS file or atlas file type.
+export def FTas()
+  if exists("g:filetype_as")
+    exe "setf " .. g:filetype_as
+    return
+  endif
+  for lnum in range(1, min([line("$"), 30]))
+    if getline(lnum) =~ '^\.NETCONF'
+      setf kawasaki_as
+      return
+    endif
+  endfor
+  setf atlas
 enddef
 
 # This function checks for the kind of assembly that is wanted by the user, or
@@ -53,6 +102,18 @@ export def FTasm()
   exe "setf " .. fnameescape(b:asmsyntax)
 enddef
 
+export def FTmac()
+  if exists("g:filetype_mac")
+    exe "setf " .. g:filetype_mac
+  else
+    if IsObjectScriptRoutine()
+      setf objectscript_routine
+    else
+      FTasm()
+    endif
+  endif
+enddef
+
 export def FTasmsyntax()
   # see if the file contains any asmsyntax=foo overrides. If so, change
   # b:asmsyntax appropriately
@@ -76,7 +137,7 @@ export def FTasmsyntax()
       b:asmsyntax = "masm"
       return
     elseif line =~ 'Texas Instruments Incorporated' || (line =~ '^\*' && !is_slash_star_encountered)
-      # tiasm uses `* commment`, but detection is unreliable if '/*' is seen
+      # tiasm uses `* comment`, but detection is unreliable if '/*' is seen
       b:asmsyntax = "tiasm"
       return
     elseif ((line =~? '\.title\>\|\.ident\>\|\.macro\>\|\.subtitle\>\|\.library\>'))
@@ -173,6 +234,7 @@ export def FTcl()
   endif
 enddef
 
+# Determines whether a *.cls file is ObjectScript, TeX, Rexx, Visual Basic, or Smalltalk.
 export def FTcls()
   if exists("g:filetype_cls")
     exe "setf " .. g:filetype_cls
@@ -189,7 +251,20 @@ export def FTcls()
   endif
 
   var nonblank1 = getline(nextnonblank(1))
-  if nonblank1 =~ '^\v%(\%|\\)'
+  var lnum = nextnonblank(1)
+  while lnum > 0 && lnum <= line("$")
+    var line = getline(lnum)
+    if line =~? '^\s*\%(import\|include\|includegenerator\)\>'
+      lnum = nextnonblank(lnum + 1)
+    else
+      nonblank1 = line
+      break
+    endif
+  endwhile
+
+  if nonblank1 =~? '^\s*class\>\s\+[%A-Za-z][%A-Za-z0-9_.]*\%(\s\+extends\>\|\s*\[\|\s*{\|$\)'
+    setf objectscript
+  elseif nonblank1 =~ '^\v%(\%|\\)'
     setf tex
   elseif nonblank1 =~ '^\s*\%(/\*\|::\w\)'
     setf rexx
@@ -451,12 +526,19 @@ def IsHareModule(dir: string, depth: number): bool
   endif
 
   # Check all files in the directory before recursing into subdirectories.
-  return glob(dir .. '/*', true, true)
+  const items = glob(dir .. '/*', true, true)
     ->sort((a, b) => isdirectory(a) - isdirectory(b))
-    ->reduce((acc, n) => acc
-      || n =~ '\.ha$'
-      || isdirectory(n) && IsHareModule(n, depth - 1),
-    false)
+  for n in items
+    if isdirectory(n)
+      if IsHareModule(n, depth - 1)
+        return true
+      endif
+    elseif n =~ '\.ha$'
+      return true
+    endif
+  endfor
+
+  return false
 enddef
 
 # Determines whether a README file is inside a Hare module and should receive
@@ -480,7 +562,7 @@ export def FThtml()
 
   while n < 40 && n <= line("$")
     # Check for Angular
-    if getline(n) =~ '@\(if\|for\|defer\|switch\)\|\*\(ngIf\|ngFor\|ngSwitch\|ngTemplateOutlet\)\|ng-template\|ng-content'
+    if getline(n) =~ '@\(if\|for\|defer\|switch\)\|\*\(ngIf\|ngFor\|ngSwitch\|ngTemplateOutlet\)\|\<ng-template\|\<ng-content'
       setf htmlangular
       return
     endif
@@ -731,9 +813,14 @@ export def FTnroff(): number
 enddef
 
 export def FTmm()
+  if exists("g:filetype_mm")
+    exe "setf " .. g:filetype_mm
+    return
+  endif
+
   var n = 1
   while n < 20
-    if getline(n) =~ '^\s*\(#\s*\(include\|import\)\>\|@import\>\|/\*\)'
+    if getline(n) =~ '^\s*\(//\|#\s*\(include\|import\)\>\|@import\>\|/\*\)'
       setf objcpp
       return
     endif
@@ -828,6 +915,10 @@ export def FTinc()
   if exists("g:filetype_inc")
     exe "setf " .. g:filetype_inc
   else
+    if IsObjectScriptRoutine()
+      setf objectscript_routine
+      return
+    endif
     for lnum in range(1, min([line("$"), 20]))
       var line = getline(lnum)
       if line =~? "perlscript"
@@ -844,7 +935,7 @@ export def FTinc()
       elseif line =~ '^\s*\%({\|(\*\)' || line =~? ft_pascal_keywords
         setf pascal
         return
-      elseif line =~# '\<\%(require\|inherit\)\>' || line =~# '[A-Z][A-Za-z0-9_:${}/]*\s\+\%(??\|[?:+.]\)\?=.\? '
+      elseif line =~# '^\s*\<\%(require\|inherit\)\>' || line =~# '^\s*[A-Z][A-Za-z0-9_:${}/]*\%(\[[A-Za-z0-9_:/]\+\]\)*\s\+\%(??=\|[?:+.]=\|=[+.]\?\)\s\+'
         setf bitbake
         return
       endif
@@ -895,6 +986,16 @@ export def FTi()
     lnum += 1
   endwhile
   setf progress
+enddef
+
+export def FTint()
+  if exists("g:filetype_int")
+    exe "setf " .. g:filetype_int
+  elseif IsObjectScriptRoutine()
+    setf objectscript_routine
+  else
+    setf hex
+  endif
 enddef
 
 var ft_pascal_comments = '^\s*\%({\|(\*\|//\)'
@@ -1397,14 +1498,25 @@ enddef
 
 # Determine if a *.tf file is TF mud client or terraform
 export def FTtf()
-  var numberOfLines = line('$')
-  for i in range(1, numberOfLines)
-    var currentLine = trim(getline(i))
-    var firstCharacter = currentLine[0]
-    if firstCharacter !=? ";" && firstCharacter !=? "/" && firstCharacter !=? ""
-      setf terraform
-      return
+  if exists("g:filetype_tf")
+    exe "setf " .. g:filetype_tf
+    return
+  endif
+
+  var continuation: bool = false
+  for lnum in range(1, min([line("$"), 100]))
+    var line = getline(lnum)
+    # TF supports backslash line continuation, so a continued line may begin
+    # with any character.  Only test the first character of a line that does
+    # not continue a previous one.
+    if !continuation
+      var firstchar = trim(line)[0]
+      if firstchar !=? ";" && firstchar !=? "/" && firstchar !=? ""
+        setf terraform
+        return
+      endif
     endif
+    continuation = line =~ '\\$'
   endfor
   setf tf
 enddef
@@ -1484,7 +1596,7 @@ export def FTdsp()
 
   # Test the file contents
   for line in getline(1, 200)
-    # Chech for comment style
+    # Check for comment style
     if line =~ '^#.*'
       setf make
       return
@@ -1645,6 +1757,8 @@ const ft_from_ext = {
   "tdf": "ahdl",
   # AIDL
   "aidl": "aidl",
+  # Algol 68
+  "a68": "algol68",
   # AMPL
   "run": "ampl",
   # ANTLR / PCCTS
@@ -1683,7 +1797,6 @@ const ft_from_ext = {
   "astro": "astro",
   # Atlas
   "atl": "atlas",
-  "as": "atlas",
   # Atom is based on XML
   "atom": "xml",
   # Authzed
@@ -1717,6 +1830,7 @@ const ft_from_ext = {
   # BDF font
   "bdf": "bdf",
   # Beancount
+  "bean": "beancount",
   "beancount": "beancount",
   # BibTeX bibliography database file
   "bib": "bib",
@@ -1724,7 +1838,7 @@ const ft_from_ext = {
   "bst": "bst",
   # Bicep
   "bicep": "bicep",
-  "bicepparam": "bicep",
+  "bicepparam": "bicep-params",
   # BIND zone
   "zone": "bindzone",
   # Blank
@@ -1736,6 +1850,8 @@ const ft_from_ext = {
   # BSDL
   "bsd": "bsdl",
   "bsdl": "bsdl",
+  # Bpftrace
+  "bt": "bpftrace",
   # C3
   "c3": "c3",
   "c3i": "c3",
@@ -1744,6 +1860,8 @@ const ft_from_ext = {
   "cairo": "cairo",
   # Cap'n Proto
   "capnp": "capnp",
+  # Common Package Specification
+  "cps": "json",
   # C#
   "cs": "cs",
   "csx": "cs",
@@ -1801,6 +1919,8 @@ const ft_from_ext = {
   "tlh": "cpp",
   # Cascading Style Sheets
   "css": "css",
+  # Common Expression Language (CEL) - https://cel.dev
+  "cel": "cel",
   # Century Term Command Scripts (*.cmd too)
   "con": "cterm",
   # ChordPro
@@ -1839,6 +1959,8 @@ const ft_from_ext = {
   "cr": "crystal",
   # CSV Files
   "csv": "csv",
+  # Concertor
+  "cto": "concerto",
   # CUDA Compute Unified Device Architecture
   "cu": "cuda",
   "cuh": "cuda",
@@ -1852,6 +1974,9 @@ const ft_from_ext = {
   "elv": "elvish",
   # Faust
   "lib": "faust",
+  # Fennel
+  "fnl": "fennel",
+  "fnlm": "fennel",
   # Libreoffice config files
   "xcu": "xml",
   "xlb": "xml",
@@ -1890,6 +2015,9 @@ const ft_from_ext = {
   # Diff files
   "diff": "diff",
   "rej": "diff",
+  # Djot
+  "dj": "djot",
+  "djot": "djot",
   # DOT
   "dot": "dot",
   "gv": "dot",
@@ -1952,6 +2080,8 @@ const ft_from_ext = {
   "fish": "fish",
   # Flix
   "flix": "flix",
+  # Fluent
+  "ftl": "fluent",
   # Focus Executable
   "fex": "focexec",
   "focexec": "focexec",
@@ -2094,6 +2224,8 @@ const ft_from_ext = {
   "tmpl": "template",
   # Hurl
   "hurl": "hurl",
+  # Hylo
+  "hylo": "hylo",
   # Hyper Builder
   "hb": "hb",
   # Httest
@@ -2193,6 +2325,8 @@ const ft_from_ext = {
   # KAREL
   "kl": "karel",
   "KL": "karel",
+  # Kawasaki AS
+  "pg": "kawasaki_as",
   # KDL
   "kdl": "kdl",
   # KerML
@@ -2203,12 +2337,18 @@ const ft_from_ext = {
   "k": "kwt",
   # Kivy
   "kv": "kivy",
+  # Koka
+  "kk": "koka",
+  # Kos
+  "kos": "kos",
   # Kotlin
   "kt": "kotlin",
   "ktm": "kotlin",
   "kts": "kotlin",
   # KDE script
   "ks": "kscript",
+  # Kaitai struct
+  "ksy": "yaml",
   # Kyaml
   "kyaml": "yaml",
   "kyml": "yaml",
@@ -2226,6 +2366,8 @@ const ft_from_ext = {
   "ldg": "ledger",
   "ledger": "ledger",
   "journal": "ledger",
+  # Leex
+  "xrl": "leex",
   # Leo
   "leo": "leo",
   # Less
@@ -2333,6 +2475,13 @@ const ft_from_ext = {
   # N1QL
   "n1ql": "n1ql",
   "nql": "n1ql",
+  # Neon
+  "neon": "neon",
+  # NetLinx
+  "axs": "netlinx",
+  "axi": "netlinx",
+  # Nickel
+  "ncl": "nickel",
   # Nim file
   "nim": "nim",
   "nims": "nim",
@@ -2345,6 +2494,8 @@ const ft_from_ext = {
   "norg": "norg",
   # Novell netware batch files
   "ncf": "ncf",
+  # N-Quads
+  "nq": "nq",
   # Not Quite C
   "nqc": "nqc",
   # NSE - Nmap Script Engine - uses Lua syntax
@@ -2499,6 +2650,8 @@ const ft_from_ext = {
   "qmd": "quarto",
   # QuickBms
   "bms": "quickbms",
+  # Popcap Reanimation files
+  "reanim": "xml",
   # Racket (formerly detected as "scheme")
   "rkt": "racket",
   "rktd": "racket",
@@ -2515,6 +2668,9 @@ const ft_from_ext = {
   "rakumod": "raku",
   "rakudoc": "raku",
   "rakutest": "raku",
+  # Razor
+  "cshtml": "razor",
+  "razor": "razor",
   # Renderman Interface Bytestream
   "rib": "rib",
   # Rego Policy Language
@@ -2558,6 +2714,8 @@ const ft_from_ext = {
   "rst": "rst",
   # RTF
   "rtf": "rtf",
+  # ObjectScript Routine
+  "rtn": "objectscript_routine",
   # Ruby
   "rb": "ruby",
   "rbw": "ruby",
@@ -2588,6 +2746,8 @@ const ft_from_ext = {
   "mill": "scala",
   # SBT - Scala Build Tool
   "sbt": "sbt",
+  # SGF, Smart Game Format
+  "sgf": "sgf",
   # Slang Shading Language
   "slang": "shaderslang",
   # Slint
@@ -2616,6 +2776,8 @@ const ft_from_ext = {
   "sieve": "sieve",
   # TriG
   "trig": "trig",
+  # Tolk
+  "tolk": "tolk",
   # Zig and Zig Object Notation (ZON)
   "zig": "zig",
   "zon": "zig",
@@ -2705,6 +2867,7 @@ const ft_from_ext = {
   "nut": "squirrel",
   # Starlark
   "ipd": "starlark",
+  "sky": "starlark",
   "star": "starlark",
   "starlark": "starlark",
   # OpenVPN configuration
@@ -2782,6 +2945,8 @@ const ft_from_ext = {
   "txi": "texinfo",
   # Thrift (Apache)
   "thrift": "thrift",
+  # Tiger
+  "tig": "tiger",
   # TLA+
   "tla": "tla",
   # TPP - Text Presentation Program
@@ -2955,6 +3120,9 @@ const ft_from_ext = {
   "raml": "raml",
   # YANG
   "yang": "yang",
+  # YARA, YARA-X
+  "yara": "yara",
+  "yar": "yara",
   # Yuck
   "yuck": "yuck",
   # Zimbu
@@ -2971,6 +3139,7 @@ const ft_from_ext = {
   "usd": "usd",
   # Rofi stylesheet
   "rasi": "rasi",
+  "rasinc": "rasi",
   # Zsh module
   # mdd: https://github.com/zsh-users/zsh/blob/57248b88830ce56adc243a40c7773fb3825cab34/Etc/zsh-development-guide#L285-L288
   # mdh, pro: https://github.com/zsh-users/zsh/blob/57248b88830ce56adc243a40c7773fb3825cab34/Etc/zsh-development-guide#L268-L271
@@ -2985,6 +3154,11 @@ const ft_from_ext = {
   "blp": "blueprint",
   # Blueprint build system file
   "bp": "bp",
+  # Tiltfile
+  "Tiltfile": "tiltfile",
+  "tiltfile": "tiltfile",
+  # Ghostty
+  "ghostty": "ghostty",
 }
 # Key: file name (the final path component, excluding the drive and root)
 # Value: filetype
@@ -3071,6 +3245,8 @@ const ft_from_name = {
   ".editorconfig": "editorconfig",
   # Elinks configuration
   "elinks.conf": "elinks",
+  # Erlang
+  "rebar.config": "erlang",
   # Exim
   "exim.conf": "exim",
   # Exports
@@ -3249,6 +3425,9 @@ const ft_from_name = {
   # Screen RC
   ".screenrc": "screen",
   "screenrc": "screen",
+  # skhd (simple hotkey daemon for macOS)
+  ".skhdrc": "skhd",
+  "skhdrc": "skhd",
   # SLRN
   ".slrnrc": "slrnrc",
   # Squid
@@ -3269,6 +3448,9 @@ const ft_from_name = {
   # TF (TinyFugue) mud client
   ".tfrc": "tf",
   "tfrc": "tf",
+  # Tilefile
+  "Tiltfile": "tiltfile",
+  "tiltfile": "tiltfile",
   # Trustees
   "trustees.conf": "trustees",
   # Vagrant (uses Ruby syntax)

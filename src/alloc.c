@@ -297,10 +297,10 @@ theend:
     void *
 lalloc_id(size_t size, int message, alloc_id_T id UNUSED)
 {
-#ifdef FEAT_EVAL
+# ifdef FEAT_EVAL
     if (alloc_fail_id == id && alloc_does_fail(size))
 	return NULL;
-#endif
+# endif
     return (lalloc(size, message));
 }
 #endif
@@ -475,6 +475,10 @@ free_all_mem(void)
     free_quickfix();
 # endif
 
+# ifdef FEAT_IMAGE_SIXEL
+    sixel_free_all();
+# endif
+
     // Close all script inputs.
     close_all_scripts();
 
@@ -496,7 +500,9 @@ free_all_mem(void)
 
 	set_bufref(&bufref, buf);
 	nextbuf = buf->b_next;
-	close_buffer(NULL, buf, DOBUF_WIPE, FALSE, FALSE);
+	// All windows were freed.  Reset b_nwindows so buffers can be wiped.
+	buf->b_nwindows = 0;
+	close_buffer(NULL, buf, DOBUF_WIPE, FALSE, FALSE, FALSE);
 	if (bufref_valid(&bufref))
 	    buf = nextbuf;	// didn't work, try next one
 	else
@@ -744,6 +750,8 @@ ga_grow_inner(garray_T *gap, int n)
     if (n < gap->ga_len / 2)
 	n = gap->ga_len / 2;
 
+    if (n > 0 && (size_t)(gap->ga_len + n) > SIZE_MAX / gap->ga_itemsize)
+	return FAIL;
     new_len = (size_t)gap->ga_itemsize * (gap->ga_len + n);
     pp = vim_realloc(gap->ga_data, new_len);
     if (pp == NULL)

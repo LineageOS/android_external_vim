@@ -128,7 +128,7 @@ check_changed(buf_T *buf, int flags)
 
 #if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
 
-#if defined(FEAT_BROWSE)
+# if defined(FEAT_BROWSE)
 /*
  * When wanting to write a file without a file name, ask the user for a name.
  */
@@ -141,7 +141,7 @@ browse_save_fname(buf_T *buf)
     char_u *fname;
 
     fname = do_browse(BROWSE_SAVE, (char_u *)_("Save As"),
-	    NULL, NULL, NULL, NULL, buf);
+	    (char_u *)"Untitled", NULL, NULL, NULL, buf);
     if (fname == NULL)
 	return;
 
@@ -149,7 +149,7 @@ browse_save_fname(buf_T *buf)
 	buf->b_flags |= BF_NOTEDITED;
     vim_free(fname);
 }
-#endif
+# endif
 
 /*
  * Ask the user what to do when abandoning a changed buffer.
@@ -179,10 +179,14 @@ dialog_changed(
     {
 	int	empty_bufname;
 
-#ifdef FEAT_BROWSE
+# ifdef FEAT_BROWSE
 	// May get file name, when there is none
 	browse_save_fname(buf);
-#endif
+
+	// User cancelled the file dialog; keep the buffer modified.
+	if (buf->b_fname == NULL)
+	    return;
+# endif
 	empty_bufname = buf->b_fname == NULL ? TRUE : FALSE;
 	if (empty_bufname)
 	    buf_set_name(buf->b_fnum, (char_u *)"Untitled");
@@ -194,13 +198,12 @@ dialog_changed(
 		return;
 	}
 
-	// restore to empty when write failed
+	// restore to empty when write failed or was cancelled
 	if (empty_bufname)
 	{
 	    buf->b_fname = NULL;
 	    VIM_CLEAR(buf->b_ffname);
 	    VIM_CLEAR(buf->b_sfname);
-	    unchanged(buf, TRUE, FALSE);
 	}
     }
     else if (ret == VIM_NO)
@@ -218,9 +221,9 @@ dialog_changed(
 	{
 	    if (bufIsChanged(buf2)
 		    && (buf2->b_ffname != NULL
-#ifdef FEAT_BROWSE
+# ifdef FEAT_BROWSE
 			|| (cmdmod.cmod_flags & CMOD_BROWSE)
-#endif
+# endif
 			)
 		    && !bt_dontwrite(buf2)
 		    && !buf2->b_p_ro)
@@ -228,10 +231,10 @@ dialog_changed(
 		bufref_T bufref;
 
 		set_bufref(&bufref, buf2);
-#ifdef FEAT_BROWSE
+# ifdef FEAT_BROWSE
 		// May get file name, when there is none
 		browse_save_fname(buf2);
-#endif
+# endif
 		if (buf2->b_fname != NULL && check_overwrite(&ea, buf2,
 				  buf2->b_fname, buf2->b_ffname, FALSE) == OK)
 		    // didn't hit Cancel
@@ -475,7 +478,11 @@ ex_listdo(exarg_T *eap)
     buf_T	*buf = curbuf;
     int		next_fnum = 0;
 
-    if (curwin->w_p_wfb)
+    // ":windo" and ":tabdo" only visit existing windows/tabpages, they don't
+    // change the current window's buffer, so they can't escape a 'winfixbuf'
+    // window (which would create a split).
+    if (curwin->w_p_wfb && eap->cmdidx != CMD_windo &&
+	    eap->cmdidx != CMD_tabdo)
     {
 	if ((eap->cmdidx == CMD_ldo || eap->cmdidx == CMD_lfdo) &&
 		!eap->forceit)
@@ -535,6 +542,9 @@ ex_listdo(exarg_T *eap)
 #endif
 #ifdef FEAT_CLIPBOARD
     start_global_changes();
+#endif
+#ifdef FEAT_CLIPBOARD_PROVIDER
+    inc_clip_provider();
 #endif
 
     if (eap->cmdidx == CMD_windo
@@ -759,6 +769,9 @@ ex_listdo(exarg_T *eap)
 #endif
 #ifdef FEAT_CLIPBOARD
     end_global_changes();
+#endif
+#ifdef FEAT_CLIPBOARD_PROVIDER
+    dec_clip_provider();
 #endif
 }
 

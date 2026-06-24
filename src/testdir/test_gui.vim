@@ -154,6 +154,24 @@ func Test_quoteplus()
   let @+ = quoteplus_saved
 endfunc
 
+" Test that legacy script menu files are sourced when :gui is executed with
+" the :vim9cmd modifier
+func Test_vim9cmd_gui()
+  CheckX11BasedGui
+
+  let lines =<< trim END
+    " Ignore the "failed to create input context" error.
+    call test_ignore_error("E285")
+    vim9cmd gui -f
+    call writefile([!empty(menu_info("Help"))], "XguimenuOK")
+    qa!
+  END
+  call writefile(lines, 'Xguimenuscript', 'D')
+  call system(GetVimCommand() .. ' --noplugin -S Xguimenuscript')
+  call assert_equal(['1'], readfile('XguimenuOK'))
+  call delete('XguimenuOK')
+endfunc
+
 func Test_gui_read_stdin()
   CheckUnix
 
@@ -664,10 +682,17 @@ func Test_set_guioptions()
     set guioptions&
     call assert_equal('egmrLtT', &guioptions)
 
-    set guioptions+=C
+    set guioptions+=s
     exec 'sleep' . duration
-    call assert_equal('egmrLtTC', &guioptions)
-    set guioptions-=C
+    call assert_equal('egmrLtTs', &guioptions)
+    set guioptions-=s
+    exec 'sleep' . duration
+    call assert_equal('egmrLtT', &guioptions)
+
+    set guioptions+=d
+    exec 'sleep' . duration
+    call assert_equal('egmrLtTd', &guioptions)
+    set guioptions-=d
     exec 'sleep' . duration
     call assert_equal('egmrLtT', &guioptions)
 
@@ -950,6 +975,34 @@ func Test_gui_run_cmd_in_terminal()
   exe "silent !" . cmd . " test_gui.vim"
   " TODO: how to check that the command ran in a separate terminal?
   " Maybe check for $TERM (dumb vs xterm) in the spawned shell?
+  let &guioptions = save_guioptions
+endfunc
+
+" Test that :! with guioptions+=! doesn't scroll more than necessary.
+" With ConPTY on Windows 11, the terminal may damage all rows on init,
+" which previously caused the entire screen to scroll up.
+func Test_gui_system_term_scroll()
+  CheckFeature terminal
+  CheckFeature conpty
+  let save_guioptions = &guioptions
+  set guioptions+=!
+
+  enew
+  call setline(1, repeat(['AAAA'], &lines + 5))
+  redraw
+
+  if has('win32')
+    !echo.
+  else
+    !echo
+  endif
+
+  " With the ConPTY scroll bug, the screen scrolled up entirely and row 1
+  " became blank.  With the fix, only the output lines scroll and the buffer
+  " content remains visible near the top of the screen.
+  call assert_equal('A', screenstring(1, 1))
+
+  %bwipe!
   let &guioptions = save_guioptions
 endfunc
 
@@ -1240,6 +1293,19 @@ func Test_gui_mouse_event()
   call feedkeys("\<Esc>", 'Lx!')
   call assert_equal([0, 2, 7, 0], getpos('.'))
   call assert_equal('wo thrfour five sixteen', getline(2))
+
+  " Test P option (use '+' register for modeless)
+  set guioptions+=AP
+  call cursor(1, 6)
+  redraw!
+  let @+ = ''
+  let args = #{button: 2, row: 1, col: 11, multiclick: 0, modifiers: 0}
+  call test_gui_event('mouse', args)
+  let args.button = 3
+  call test_gui_event('mouse', args)
+  call feedkeys("\<Esc>", 'Lx!')
+  call assert_equal([0, 1, 6, 0], getpos('.'))
+  call assert_equal('wo thr', @+)
 
   set mouse&
   let &guioptions = save_guioptions
@@ -1805,6 +1871,118 @@ func Test_Buffers_Menu()
   endfor
 
   %bw!
+endfunc
+
+" Test if 'guioptions=a' only copies to the primary selection and
+" 'guioptions=aP' only copies to the regular selection.
+func Test_guioptions_clipboard()
+  CheckX11BasedGui
+
+  set mouse=
+  let save_guioptions = &guioptions
+  set guioptions=a
+
+  let @+ = ""
+  let @* = ""
+
+  call setline(1, ['one two three', 'four five six'])
+  call cursor(1, 1)
+  call feedkeys("\<Esc>vee\<Esc>", "Lx!")
+
+  call assert_equal("one two", @*)
+  call assert_equal("", @+)
+
+  set guioptions=aP
+
+  let @+ = ""
+  let @* = ""
+
+  call cursor(1, 1)
+  call feedkeys("\<Esc>veee\<Esc>", "Lx!")
+
+  call assert_equal("one two three", @+)
+  call assert_equal("", @*)
+
+  set mouse&
+  let &guioptions = save_guioptions
+endfunc
+
+" Tests for GUI window geometry: initial size from -geometry option and
+" size stability after :tabnew / :tabclose.
+"
+" Background: on GTK3 with client-side decorations (Wayland), the window
+" compositor subtracts the CSD frame from the requested size, causing the
+" window to open a few pixels too small (wrong &columns/&lines) and to shrink
+" further with each :tabnew/:tabclose cycle.
+
+" Test that a GUI window opened with -geometry=WxH has exactly W columns
+" and H lines.
+"
+" Without the CSD fix, on GTK3/Wayland the compositor subtracts the frame
+" margin from the requested pixel size, so the window is a character cell too
+" narrow and too short.
+func Test_geometry_exact_size()
+  CheckCanRunGui
+  CheckFeature gui_gtk
+
+  let after =<< trim [CODE]
+    call writefile([string(&columns), string(&lines)], 'Xtest_geomsize')
+    qall
+  [CODE]
+
+  " Hide the menu bar so it does not widen the minimum window size.
+  if RunVim(['set guioptions-=m'], after, '-f -g -geometry 40x15')
+    let result = readfile('Xtest_geomsize')
+    call assert_equal('40', result[0], 'columns should match -geometry width')
+    call assert_equal('15', result[1], 'lines should match -geometry height')
+  endif
+
+  call delete('Xtest_geomsize')
+endfunc
+
+" Test that the window size is unchanged after opening and closing a tab.
+"
+" Each :tabnew/:tabclose cycle triggers a tabline show/hide, which causes
+" asynchronous GTK layout events.  Without the fix, stale configure events
+" from these layout passes are mis-interpreted as user resizes, reducing
+" &columns and &lines with every cycle.  Three cycles are performed to
+" amplify any drift.
+func Test_tabnew_tabclose_size_stable()
+  CheckCanRunGui
+  CheckFeature gui_gtk
+
+  let after =<< trim [CODE]
+    let cols0 = &columns
+    let rows0 = &lines
+    tabnew
+    sleep 300m
+    tabclose
+    sleep 300m
+    tabnew
+    sleep 300m
+    tabclose
+    sleep 300m
+    tabnew
+    sleep 300m
+    tabclose
+    sleep 300m
+    call writefile([string(cols0), string(rows0), string(&columns), string(&lines)], 'Xtest_tabsize')
+    qall
+  [CODE]
+
+  if RunVim(['set guioptions-=m'], after, '-f -g -geometry 40x15')
+    let result = readfile('Xtest_tabsize')
+    call assert_equal('40', result[0], 'initial columns should match -geometry width')
+    call assert_equal('15', result[1], 'initial lines should match -geometry height')
+    call assert_equal(result[0], result[2],
+          \ 'columns changed after 3x tabnew/tabclose: '
+          \ .. result[0] .. ' -> ' .. result[2])
+    call assert_equal(result[1], result[3],
+          \ 'lines changed after 3x tabnew/tabclose: '
+          \ .. result[1] .. ' -> ' .. result[3])
+  endif
+
+  call delete('Xtest_tabsize')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

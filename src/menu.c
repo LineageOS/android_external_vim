@@ -721,19 +721,19 @@ add_menu_path(
 		if (tearpath != NULL)
 		{
 		    char_u  *s;
-		    int	    idx;
+		    int	    len;
 
 		    STRCPY(tearpath, menu_path);
-		    idx = (int)(next_name - path_name - 1);
-		    for (s = tearpath; *s && s < tearpath + idx; MB_PTR_ADV(s))
+		    len = (int)(next_name - path_name - 1);
+		    for (s = tearpath; *s && s < tearpath + len; MB_PTR_ADV(s))
 		    {
 			if ((*s == '\\' || *s == Ctrl_V) && s[1])
 			{
-			    ++idx;
+			    ++len;
 			    ++s;
 			}
 		    }
-		    tearpath[idx] = NUL;
+		    tearpath[len] = NUL;
 		    gui_add_tearoff(tearpath, pri_tab, pri_idx);
 		    vim_free(tearpath);
 		}
@@ -1787,10 +1787,10 @@ get_menu_index(vimmenu_T *menu, int state)
 	idx = MENU_INDEX_INSERT;
     else if (state & MODE_CMDLINE)
 	idx = MENU_INDEX_CMDLINE;
-#ifdef FEAT_TERMINAL
+# ifdef FEAT_TERMINAL
     else if (term_use_loop())
 	idx = MENU_INDEX_TERMINAL;
-#endif
+# endif
     else if (VIsual_active)
     {
 	if (VIsual_select)
@@ -1948,10 +1948,10 @@ menu_is_tearoff(char_u *name UNUSED)
     static int
 get_menu_mode(void)
 {
-#ifdef FEAT_TERMINAL
+# ifdef FEAT_TERMINAL
     if (term_use_loop())
 	return MENU_INDEX_TERMINAL;
-#endif
+# endif
     if (VIsual_active)
     {
 	if (VIsual_select)
@@ -2020,12 +2020,12 @@ show_popupmenu(void)
 	gui_mch_show_popupmenu(menu);
     }
 # endif
-#  if defined(FEAT_GUI) && defined(FEAT_TERM_POPUP_MENU)
+# if defined(FEAT_GUI) && defined(FEAT_TERM_POPUP_MENU)
     else
-#  endif
-#  if defined(FEAT_TERM_POPUP_MENU)
+# endif
+# if defined(FEAT_TERM_POPUP_MENU)
 	pum_show_popupmenu(menu);
-#  endif
+# endif
 }
 #endif
 
@@ -2102,9 +2102,9 @@ gui_update_menus_recurse(vimmenu_T *menu, int mode)
 	// Never hide a toplevel menu, it may make the menubar resize or
 	// disappear. Same problem for ToolBar items.
 	if (vim_strchr(p_go, GO_GREY) != NULL || menu->parent == NULL
-#  ifdef FEAT_TOOLBAR
+# ifdef FEAT_TOOLBAR
 		|| menu_is_toolbar(menu->parent->name)
-#  endif
+# endif
 		   )
 	    gui_mch_menu_grey(menu, grey);
 	else
@@ -2271,11 +2271,11 @@ gui_add_tearoff(char_u *tearpath, int *pri_tab, int pri_idx)
     t = pri_tab[pri_idx + 1];
     pri_tab[pri_idx + 1] = 1;
 
-#ifdef FEAT_TOOLBAR
+# ifdef FEAT_TOOLBAR
     menuarg.iconfile = NULL;
     menuarg.iconidx = -1;
     menuarg.icon_builtin = FALSE;
-#endif
+# endif
     menuarg.noremap[0] = REMAP_NONE;
     menuarg.silent[0] = TRUE;
 
@@ -2892,15 +2892,17 @@ menuitem_getinfo(char_u *menu_name, vimmenu_T *menu, int modes, dict_T *dict)
     if (status == OK)
     {
 	char_u	buf[NUMBUFLEN];
+	int	buflen;
 
 	if (has_mbyte)
-	    buf[utf_char2bytes(menu->mnemonic, buf)] = NUL;
+	    buflen = utf_char2bytes(menu->mnemonic, buf);
 	else
 	{
 	    buf[0] = (char_u)menu->mnemonic;
-	    buf[1] = NUL;
+	    buflen = (buf[0] == NUL) ? 0 : 1;
 	}
-	status = dict_add_string(dict, "shortcut", buf);
+	buf[buflen] = NUL;
+	status = dict_add_string_len(dict, "shortcut", buf, buflen);
     }
     if (status == OK && menu->children == NULL)
     {
@@ -2913,14 +2915,17 @@ menuitem_getinfo(char_u *menu_name, vimmenu_T *menu, int modes, dict_T *dict)
 	{
 	    if (menu->strings[bit] != NULL)
 	    {
-		char_u *tofree = NULL;
+		if (*menu->strings[bit] == NUL)
+		    status = dict_add_string_len(dict, "rhs",
+			(char_u *)"<Nop>", STRLEN_LITERAL("<Nop>"));
+		else
+		{
+		    char_u *tofree = NULL;
 
-		status = dict_add_string(dict, "rhs",
-			*menu->strings[bit] == NUL
-				? (char_u *)"<Nop>"
-				: (tofree = str2special_save(
-					menu->strings[bit], FALSE, FALSE)));
-		vim_free(tofree);
+		    status = dict_add_string(dict, "rhs",
+			tofree = str2special_save(menu->strings[bit], FALSE, FALSE));
+		    vim_free(tofree);
+		}
 	    }
 	    if (status == OK)
 		status = dict_add_bool(dict, "noremenu",

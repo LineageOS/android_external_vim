@@ -866,7 +866,7 @@ get_number_indent(linenr_T lnum)
 
     if (pos.lnum == 0 || *ml_get_pos(&pos) == NUL)
 	return -1;
-    getvcol(curwin, &pos, &col, NULL, NULL);
+    getvcol(curwin, &pos, &col, NULL, NULL, 0);
     return (int)col;
 }
 
@@ -1216,9 +1216,9 @@ may_do_si(void)
 {
     return curbuf->b_p_si
 	&& !curbuf->b_p_cin
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 	&& *curbuf->b_p_inde == NUL
-# endif
+#endif
 	&& !p_paste;
 }
 
@@ -1454,7 +1454,7 @@ change_indent(
 	curwin->w_cursor.col = 0;
     else
 	curwin->w_cursor.col = (colnr_T)new_cursor_col;
-    curwin->w_set_curswant = TRUE;
+    curwin->w_set_curswant = true;
     changed_cline_bef_curs();
 
     // May have to adjust the start of the insert.
@@ -1513,7 +1513,10 @@ change_indent(
 	// Save new line
 	new_line = vim_strnsave(ml_get_curline(), ml_get_curline_len());
 	if (new_line == NULL)
+	{
+	    vim_free(orig_line);
 	    return;
+	}
 
 	// We only put back the new line up to the cursor
 	new_line[curwin->w_cursor.col] = NUL;
